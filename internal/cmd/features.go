@@ -238,6 +238,9 @@ Examples:
 		// Validate that required fields are present
 		if updateMap, ok := updateData.(map[string]interface{}); ok {
 			missingFields := []string{}
+			if _, hasName := updateMap["name"]; !hasName {
+				missingFields = append(missingFields, "name")
+			}
 			if _, hasResultType := updateMap["resultType"]; !hasResultType {
 				missingFields = append(missingFields, "resultType")
 			}
