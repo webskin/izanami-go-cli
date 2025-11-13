@@ -164,6 +164,10 @@ Examples:
 				if _, hasDescription := payloadMap["description"]; !hasDescription {
 					payloadMap["description"] = ""
 				}
+				// Ensure metadata is set (default to empty object)
+				if _, hasMetadata := payloadMap["metadata"]; !hasMetadata {
+					payloadMap["metadata"] = map[string]interface{}{}
+				}
 				payload = payloadMap
 			}
 		} else {
@@ -174,6 +178,7 @@ Examples:
 				"enabled":     featureEnabled,
 				"resultType":  "boolean",
 				"conditions":  []interface{}{},
+				"metadata":    map[string]interface{}{},
 			}
 			if len(featureTags) > 0 {
 				payload.(map[string]interface{})["tags"] = featureTags
@@ -228,6 +233,39 @@ Examples:
 		var updateData interface{}
 		if err := parseJSONData(featureData, &updateData); err != nil {
 			return err
+		}
+
+		// Validate that required fields are present
+		if updateMap, ok := updateData.(map[string]interface{}); ok {
+			missingFields := []string{}
+			if _, hasResultType := updateMap["resultType"]; !hasResultType {
+				missingFields = append(missingFields, "resultType")
+			}
+			if _, hasConditions := updateMap["conditions"]; !hasConditions {
+				missingFields = append(missingFields, "conditions")
+			}
+			if _, hasDescription := updateMap["description"]; !hasDescription {
+				missingFields = append(missingFields, "description")
+			}
+			if _, hasMetadata := updateMap["metadata"]; !hasMetadata {
+				missingFields = append(missingFields, "metadata")
+			}
+
+			if len(missingFields) > 0 {
+				// Fetch current feature to show the user
+				ctx := context.Background()
+				currentFeature, err := client.GetFeature(ctx, cfg.Tenant, args[0])
+				if err != nil {
+					return fmt.Errorf("missing required fields (%v) and failed to fetch current feature: %w", missingFields, err)
+				}
+
+				// Print current feature structure
+				fmt.Fprintf(os.Stderr, "❌ Missing required fields: %v\n\n", missingFields)
+				fmt.Fprintf(os.Stderr, "Current feature structure:\n")
+				output.Print(currentFeature, output.JSON)
+				fmt.Fprintf(os.Stderr, "\nPlease include all required fields in your update.\n")
+				return fmt.Errorf("missing required fields: %v", missingFields)
+			}
 		}
 
 		ctx := context.Background()
