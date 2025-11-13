@@ -215,10 +215,17 @@ iz features get my-feature --tenant my-tenant
 
 ```bash
 # Check if a feature is active for a user
-iz features check my-feature --user user123
+iz features check my-feature \
+  --client-id your-client-id \
+  --client-secret your-client-secret \
+  --user user123
 
 # Check with context
-iz features check my-feature --user user123 --context prod/eu
+iz features check my-feature \
+  --client-id your-client-id \
+  --client-secret your-client-secret \
+  --user user123 \
+  --context prod/eu
 
 # Output:
 # {
@@ -525,12 +532,12 @@ export IZ_TENANT="production"
 iz health || exit 1
 
 # Create or update feature
-if iz features get my-new-feature 2>/dev/null; then
+if iz features get my-new-feature --tenant "$IZ_TENANT" 2>/dev/null; then
   echo "Updating existing feature..."
-  iz features update my-new-feature --data @feature.json
+  iz features update my-new-feature --tenant "$IZ_TENANT" --data @feature.json
 else
   echo "Creating new feature..."
-  iz features create my-new-feature --project my-project --data @feature.json
+  iz features create my-new-feature --tenant "$IZ_TENANT" --project my-project --data @feature.json
 fi
 
 echo "Feature deployed successfully!"
