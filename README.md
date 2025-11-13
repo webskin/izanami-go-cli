@@ -279,10 +279,39 @@ Example `feature.json`:
 #### Update Feature
 
 ```bash
-iz features update my-feature \
+# Update from file (feature ID is UUID, not name)
+iz features update e878a149-df86-4f28-b1db-059580304e1e \
   --tenant my-tenant \
+  --project my-project \
   --data @updated-feature.json
+
+# Update from stdin
+cat <<EOF | iz features update e878a149-df86-4f28-b1db-059580304e1e \
+  --tenant my-tenant \
+  --project my-project \
+  --data -
+{
+  "name": "my-feature",
+  "enabled": true,
+  "description": "Updated description",
+  "resultType": "boolean",
+  "conditions": [],
+  "metadata": {},
+  "tags": ["production"]
+}
+EOF
 ```
+
+**Note:** All fields are required for updates:
+- `name` - Feature name (not the UUID)
+- `enabled` - Boolean flag
+- `description` - Feature description
+- `resultType` - Type of value ("boolean", "string", "number")
+- `conditions` - Array of activation conditions (can be empty)
+- `metadata` - Metadata object (can be empty)
+- `tags` - Optional tags array
+
+The feature ID (UUID) and project are provided via command arguments and automatically merged into the request.
 
 #### Delete Feature
 
@@ -532,9 +561,11 @@ export IZ_TENANT="production"
 iz health || exit 1
 
 # Create or update feature
-if iz features get my-new-feature --tenant "$IZ_TENANT" 2>/dev/null; then
+FEATURE_ID="e878a149-df86-4f28-b1db-059580304e1e"  # Feature UUID
+
+if iz features get "$FEATURE_ID" --tenant "$IZ_TENANT" 2>/dev/null; then
   echo "Updating existing feature..."
-  iz features update my-new-feature --tenant "$IZ_TENANT" --data @feature.json
+  iz features update "$FEATURE_ID" --tenant "$IZ_TENANT" --project my-project --data @feature.json
 else
   echo "Creating new feature..."
   iz features create my-new-feature --tenant "$IZ_TENANT" --project my-project --data @feature.json
@@ -549,21 +580,27 @@ echo "Feature deployed successfully!"
 #!/bin/bash
 # gradual-rollout.sh - Gradually roll out a feature
 
-FEATURE="new-ui"
+FEATURE_ID="e878a149-df86-4f28-b1db-059580304e1e"  # Feature UUID
+FEATURE_NAME="new-ui"
 TENANT="production"
 PROJECT="web-app"
 
 # Start at 10%
 echo "Rolling out to 10% of users..."
-cat <<EOF | iz features update $FEATURE --tenant $TENANT --data -
+cat <<EOF | iz features update $FEATURE_ID --tenant $TENANT --project $PROJECT --data -
 {
+  "name": "$FEATURE_NAME",
   "enabled": true,
+  "description": "New UI feature - gradual rollout",
+  "resultType": "boolean",
   "conditions": [{
     "rule": {
       "type": "UserPercentage",
       "percentage": 10
     }
-  }]
+  }],
+  "metadata": {},
+  "tags": ["ui", "rollout"]
 }
 EOF
 
@@ -571,15 +608,20 @@ sleep 300  # Wait 5 minutes
 
 # Increase to 50%
 echo "Rolling out to 50% of users..."
-cat <<EOF | iz features update $FEATURE --tenant $TENANT --data -
+cat <<EOF | iz features update $FEATURE_ID --tenant $TENANT --project $PROJECT --data -
 {
+  "name": "$FEATURE_NAME",
   "enabled": true,
+  "description": "New UI feature - gradual rollout",
+  "resultType": "boolean",
   "conditions": [{
     "rule": {
       "type": "UserPercentage",
       "percentage": 50
     }
-  }]
+  }],
+  "metadata": {},
+  "tags": ["ui", "rollout"]
 }
 EOF
 
@@ -587,14 +629,19 @@ sleep 300  # Wait 5 minutes
 
 # Full rollout
 echo "Full rollout - 100% of users..."
-cat <<EOF | iz features update $FEATURE --tenant $TENANT --data -
+cat <<EOF | iz features update $FEATURE_ID --tenant $TENANT --project $PROJECT --data -
 {
+  "name": "$FEATURE_NAME",
   "enabled": true,
+  "description": "New UI feature - fully rolled out",
+  "resultType": "boolean",
   "conditions": [{
     "rule": {
       "type": "All"
     }
-  }]
+  }],
+  "metadata": {},
+  "tags": ["ui", "production"]
 }
 EOF
 

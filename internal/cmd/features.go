@@ -235,11 +235,37 @@ Examples:
 			return err
 		}
 
+		featureID := args[0]
+
+		// Determine project from flags or config
+		proj := featureProject
+		if proj == "" {
+			proj = cfg.Project
+		}
+
+		// Merge required fields into the payload
+		if updateMap, ok := updateData.(map[string]interface{}); ok {
+			// Set the ID field if not already present
+			if _, hasID := updateMap["id"]; !hasID {
+				updateMap["id"] = featureID
+			}
+			// Set the project field if not already present and we have a project
+			if proj != "" {
+				if _, hasProject := updateMap["project"]; !hasProject {
+					updateMap["project"] = proj
+				}
+			}
+			updateData = updateMap
+		}
+
 		// Validate that required fields are present
 		if updateMap, ok := updateData.(map[string]interface{}); ok {
 			missingFields := []string{}
 			if _, hasName := updateMap["name"]; !hasName {
 				missingFields = append(missingFields, "name")
+			}
+			if _, hasProject := updateMap["project"]; !hasProject {
+				missingFields = append(missingFields, "project")
 			}
 			if _, hasResultType := updateMap["resultType"]; !hasResultType {
 				missingFields = append(missingFields, "resultType")
@@ -257,7 +283,7 @@ Examples:
 			if len(missingFields) > 0 {
 				// Fetch current feature to show the user
 				ctx := context.Background()
-				currentFeature, err := client.GetFeature(ctx, cfg.Tenant, args[0])
+				currentFeature, err := client.GetFeature(ctx, cfg.Tenant, featureID)
 				if err != nil {
 					return fmt.Errorf("missing required fields (%v) and failed to fetch current feature: %w", missingFields, err)
 				}
@@ -272,11 +298,11 @@ Examples:
 		}
 
 		ctx := context.Background()
-		if err := client.UpdateFeature(ctx, cfg.Tenant, args[0], updateData, false); err != nil {
+		if err := client.UpdateFeature(ctx, cfg.Tenant, featureID, updateData, false); err != nil {
 			return err
 		}
 
-		fmt.Fprintf(os.Stderr, "Feature updated successfully: %s\n", args[0])
+		fmt.Fprintf(os.Stderr, "Feature updated successfully: %s\n", featureID)
 		return nil
 	},
 }
