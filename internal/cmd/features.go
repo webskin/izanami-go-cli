@@ -146,12 +146,34 @@ Examples:
 			if err := parseJSONData(featureData, &payload); err != nil {
 				return err
 			}
+			// Merge required fields into the payload
+			if payloadMap, ok := payload.(map[string]interface{}); ok {
+				// Only set name if not already present in the JSON
+				if _, hasName := payloadMap["name"]; !hasName {
+					payloadMap["name"] = featureName
+				}
+				// Ensure resultType is set (default to boolean)
+				if _, hasResultType := payloadMap["resultType"]; !hasResultType {
+					payloadMap["resultType"] = "boolean"
+				}
+				// Ensure conditions is set (default to empty array)
+				if _, hasConditions := payloadMap["conditions"]; !hasConditions {
+					payloadMap["conditions"] = []interface{}{}
+				}
+				// Ensure description is set (default to empty string)
+				if _, hasDescription := payloadMap["description"]; !hasDescription {
+					payloadMap["description"] = ""
+				}
+				payload = payloadMap
+			}
 		} else {
 			// Build simple feature from flags
 			payload = map[string]interface{}{
 				"name":        featureName,
 				"description": featureDesc,
 				"enabled":     featureEnabled,
+				"resultType":  "boolean",
+				"conditions":  []interface{}{},
 			}
 			if len(featureTags) > 0 {
 				payload.(map[string]interface{})["tags"] = featureTags
