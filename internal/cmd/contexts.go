@@ -19,11 +19,14 @@ var (
 	contextData      string
 )
 
-// contextsCmd represents the contexts command
+// contextsCmd represents the admin contexts command
 var contextsCmd = &cobra.Command{
 	Use:   "contexts",
-	Short: "Manage feature contexts",
-	Long: `Manage feature contexts (environments/overrides) in Izanami.
+	Short: "Manage feature contexts (admin)",
+	Long: `Administrative operations for feature contexts (environments/overrides) in Izanami.
+
+These are admin operations that use the /api/admin/... endpoints and require
+admin authentication (username and personal access token).
 
 Contexts allow you to define different behavior for features in different
 environments or scenarios. For example:
@@ -250,7 +253,7 @@ func findContextByName(contexts []izanami.Context, name string) *izanami.Context
 }
 
 func init() {
-	rootCmd.AddCommand(contextsCmd)
+	// Contexts commands are registered under admin in admin.go
 
 	// Add subcommands
 	contextsCmd.AddCommand(contextsListCmd)

@@ -539,6 +539,9 @@ func init() {
 	featuresCmd.AddCommand(featuresUpdateCmd)
 	featuresCmd.AddCommand(featuresDeleteCmd)
 
+	// Contexts (admin operations)
+	adminCmd.AddCommand(contextsCmd)
+
 	// Tenants
 	adminCmd.AddCommand(adminTenantsCmd)
 	adminTenantsCmd.AddCommand(adminTenantsListCmd)
