@@ -13,7 +13,8 @@ import (
 
 var (
 	featureProject    string
-	featureTags       []string
+	featureTag        string // For filtering features list by tag
+	featureTags       []string // For assigning tags to a feature when creating
 	featureUser       string
 	featureContextStr string
 	featureName       string
@@ -44,14 +45,11 @@ var featuresListCmd = &cobra.Command{
 	Short: "List all features",
 	Long: `List all features in a tenant.
 
-Server-side filtering:
-  --tags: Filter by tags (supported by Izanami API)
+The list endpoint supports filtering by a single tag:
+  --tag: Filter by tag (server-side filtering by Izanami API)
 
-Client-side filtering:
-  --project: Filter results by project (filtered locally after fetch)
-
-Note: Izanami's list endpoint does not support project filtering server-side,
-so all features are fetched and filtered locally when --project is specified.`,
+Note: Project filtering is NOT supported by Izanami's features list endpoint.
+To filter by project, use the project-specific endpoint or filter the JSON output.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := cfg.Validate(); err != nil {
 			return err
@@ -66,21 +64,9 @@ so all features are fetched and filtered locally when --project is specified.`,
 		}
 
 		ctx := context.Background()
-		// Fetch features (with optional tag filtering on server)
-		features, err := client.ListFeatures(ctx, cfg.Tenant, featureTags)
+		features, err := client.ListFeatures(ctx, cfg.Tenant, featureTag)
 		if err != nil {
 			return err
-		}
-
-		// Client-side project filtering (if specified)
-		if featureProject != "" {
-			filtered := make([]izanami.Feature, 0)
-			for _, feature := range features {
-				if feature.Project == featureProject {
-					filtered = append(filtered, feature)
-				}
-			}
-			features = filtered
 		}
 
 		return output.Print(features, output.Format(outputFormat))
@@ -442,8 +428,7 @@ func init() {
 	featuresCmd.AddCommand(featuresCheckCmd)
 
 	// List flags
-	featuresListCmd.Flags().StringVar(&featureProject, "project", "", "Filter by project")
-	featuresListCmd.Flags().StringSliceVar(&featureTags, "tags", []string{}, "Filter by tags")
+	featuresListCmd.Flags().StringVar(&featureTag, "tag", "", "Filter by tag (server-side)")
 
 	// Create flags
 	featuresCreateCmd.Flags().StringVar(&featureProject, "project", "", "Project for the feature (required)")

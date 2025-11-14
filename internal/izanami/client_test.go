@@ -147,7 +147,7 @@ func TestClient_ListFeatures(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	features, err := client.ListFeatures(ctx, "test-tenant", nil)
+	features, err := client.ListFeatures(ctx, "test-tenant", "")
 
 	assert.NoError(t, err)
 	assert.Len(t, features, 2)

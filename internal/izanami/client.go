@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -84,56 +84,60 @@ func enableSecureDebugMode(client *resty.Client) {
 		"cookie":                 true,
 		"authorization":          true,
 		"izanami-client-secret":  true,
+		"izanami-client-id":      true,
 		"x-api-key":              true,
 		"authentication":         true,
 	}
 
-	// Log request details (before sending)
-	client.OnBeforeRequest(func(c *resty.Client, req *resty.Request) error {
-		log.Printf("RESTY ==============================================================================")
-		log.Printf("~~~ REQUEST ~~~")
-		log.Printf("%s  %s", req.Method, req.URL)
-		log.Printf("HEADERS:")
+	// Log response details (after receiving)
+	// We log both request and response here because the request details
+	// are only fully available after the request is sent
+	client.OnAfterResponse(func(c *resty.Client, resp *resty.Response) error {
+		req := resp.Request.RawRequest
+
+		// Log request details
+		fmt.Fprintf(os.Stderr, "==============================================================================\n")
+		fmt.Fprintf(os.Stderr, "~~~ REQUEST ~~~\n")
+		fmt.Fprintf(os.Stderr, "%s  %s  %s\n", req.Method, req.URL.Path, req.Proto)
+		fmt.Fprintf(os.Stderr, "HOST   : %s\n", req.Host)
+		fmt.Fprintf(os.Stderr, "HEADERS:\n")
 		for key, values := range req.Header {
 			keyLower := strings.ToLower(key)
 			if sensitiveHeaders[keyLower] {
-				log.Printf("\t%s: [REDACTED]", key)
+				fmt.Fprintf(os.Stderr, "\t%s: [REDACTED]\n", key)
 			} else {
 				for _, value := range values {
-					log.Printf("\t%s: %s", key, value)
+					fmt.Fprintf(os.Stderr, "\t%s: %s\n", key, value)
 				}
 			}
 		}
-		if req.Body != nil {
-			log.Printf("BODY   :")
-			log.Printf("%v", req.Body)
+		fmt.Fprintf(os.Stderr, "BODY   :\n")
+		if resp.Request.Body != nil {
+			fmt.Fprintf(os.Stderr, "%v\n", resp.Request.Body)
 		} else {
-			log.Printf("BODY   :")
-			log.Printf("***** NO CONTENT *****")
+			fmt.Fprintf(os.Stderr, "***** NO CONTENT *****\n")
 		}
-		log.Printf("------------------------------------------------------------------------------")
-		return nil
-	})
+		fmt.Fprintf(os.Stderr, "------------------------------------------------------------------------------\n")
 
-	// Log response details (after receiving)
-	client.OnAfterResponse(func(c *resty.Client, resp *resty.Response) error {
-		log.Printf("~~~ RESPONSE ~~~")
-		log.Printf("STATUS       : %s", resp.Status())
-		log.Printf("PROTO        : %s", resp.Proto())
-		log.Printf("TIME DURATION: %v", resp.Time())
-		log.Printf("HEADERS      :")
+		// Log response details
+		fmt.Fprintf(os.Stderr, "~~~ RESPONSE ~~~\n")
+		fmt.Fprintf(os.Stderr, "STATUS       : %s\n", resp.Status())
+		fmt.Fprintf(os.Stderr, "PROTO        : %s\n", resp.Proto())
+		fmt.Fprintf(os.Stderr, "RECEIVED AT  : %v\n", time.Now().Format(time.RFC3339Nano))
+		fmt.Fprintf(os.Stderr, "TIME DURATION: %v\n", resp.Time())
+		fmt.Fprintf(os.Stderr, "HEADERS      :\n")
 		for key, values := range resp.Header() {
 			for _, value := range values {
-				log.Printf("\t%s: %s", key, value)
+				fmt.Fprintf(os.Stderr, "\t%s: %s\n", key, value)
 			}
 		}
-		log.Printf("BODY         :")
+		fmt.Fprintf(os.Stderr, "BODY         :\n")
 		if len(resp.Body()) > 0 {
-			log.Printf("%s", string(resp.Body()))
+			fmt.Fprintf(os.Stderr, "%s\n", string(resp.Body()))
 		} else {
-			log.Printf("***** NO CONTENT *****")
+			fmt.Fprintf(os.Stderr, "***** NO CONTENT *****\n")
 		}
-		log.Printf("==============================================================================")
+		fmt.Fprintf(os.Stderr, "==============================================================================\n")
 		return nil
 	})
 }
@@ -180,15 +184,15 @@ func (c *Client) Login(ctx context.Context, username, password string) (string, 
 // FEATURE OPERATIONS
 // ============================================================================
 
-// ListFeatures lists all features in a tenant/project
-func (c *Client) ListFeatures(ctx context.Context, tenant string, tags []string) ([]Feature, error) {
+// ListFeatures lists all features in a tenant
+func (c *Client) ListFeatures(ctx context.Context, tenant string, tag string) ([]Feature, error) {
 	path := fmt.Sprintf("/api/admin/tenants/%s/features", tenant)
 
 	req := c.http.R().SetContext(ctx).SetResult(&[]Feature{})
 
 	// Add tag filter if specified (server-side filtering)
-	if len(tags) > 0 {
-		req.SetQueryParam("tag", strings.Join(tags, ","))
+	if tag != "" {
+		req.SetQueryParam("tag", tag)
 	}
 
 	resp, err := req.Get(path)
