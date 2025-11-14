@@ -531,6 +531,14 @@ Examples:
 func init() {
 	rootCmd.AddCommand(adminCmd)
 
+	// Features (admin operations)
+	adminCmd.AddCommand(featuresCmd)
+	featuresCmd.AddCommand(featuresListCmd)
+	featuresCmd.AddCommand(featuresGetCmd)
+	featuresCmd.AddCommand(featuresCreateCmd)
+	featuresCmd.AddCommand(featuresUpdateCmd)
+	featuresCmd.AddCommand(featuresDeleteCmd)
+
 	// Tenants
 	adminCmd.AddCommand(adminTenantsCmd)
 	adminTenantsCmd.AddCommand(adminTenantsListCmd)

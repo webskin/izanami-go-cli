@@ -23,11 +23,14 @@ var (
 	featureData       string
 )
 
-// featuresCmd represents the features command
+// featuresCmd represents the admin features command
 var featuresCmd = &cobra.Command{
 	Use:   "features",
-	Short: "Manage feature flags",
-	Long: `Manage feature flags in Izanami.
+	Short: "Manage feature flags (admin)",
+	Long: `Administrative operations for feature flags in Izanami.
+
+These are admin operations that use the /api/admin/... endpoints and require
+admin authentication (username and personal access token).
 
 Features are the core of Izanami - they represent toggleable functionality
 or configuration values that can be controlled dynamically.
@@ -36,7 +39,10 @@ Features can have:
 - Different activation strategies (all users, percentage, specific users)
 - Time-based activation (specific periods, days, hours)
 - Context-specific overrides (different behavior per environment)
-- Tags for organization`,
+- Tags for organization
+
+For client operations (checking if a feature is active), use:
+  iz features check <feature-id>`,
 }
 
 // featuresListCmd lists features
@@ -427,16 +433,24 @@ func parseJSONData(dataStr string, target interface{}) error {
 	return nil
 }
 
-func init() {
-	rootCmd.AddCommand(featuresCmd)
+// Root-level features command for client operations
+var rootFeaturesCmd = &cobra.Command{
+	Use:   "features",
+	Short: "Client feature operations",
+	Long: `Client-facing feature operations using the /api/v2/features endpoint.
 
-	// Add subcommands
-	featuresCmd.AddCommand(featuresListCmd)
-	featuresCmd.AddCommand(featuresGetCmd)
-	featuresCmd.AddCommand(featuresCreateCmd)
-	featuresCmd.AddCommand(featuresUpdateCmd)
-	featuresCmd.AddCommand(featuresDeleteCmd)
-	featuresCmd.AddCommand(featuresCheckCmd)
+This command provides client operations that don't require admin privileges,
+such as checking if a feature is active for a specific user or context.
+
+For administrative operations (create, update, delete, list), use:
+  iz admin features <command>`,
+}
+
+func init() {
+	// Register admin features commands (added in admin.go init)
+	// Register root-level features command for client operations
+	rootCmd.AddCommand(rootFeaturesCmd)
+	rootFeaturesCmd.AddCommand(featuresCheckCmd)
 
 	// List flags
 	featuresListCmd.Flags().StringVar(&featureTag, "tag", "", "Filter by tag (server-side)")
