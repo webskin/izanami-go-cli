@@ -167,15 +167,30 @@ type SearchResult struct {
 	Data        interface{} `json:"data,omitempty"`
 }
 
+// RightLevel represents user permission levels in Izanami
+type RightLevel string
+
+const (
+	RightLevelRead  RightLevel = "Read"
+	RightLevelWrite RightLevel = "Write"
+	RightLevelAdmin RightLevel = "Admin"
+)
+
+// String returns the string representation of the right level
+func (r RightLevel) String() string {
+	return string(r)
+}
+
 // ImportRequest represents an import operation request
 type ImportRequest struct {
-	Conflict        string `json:"conflict,omitempty"` // FAIL, SKIP, OVERWRITE
-	Timezone        string `json:"timezone,omitempty"`
-	DeduceProject   bool   `json:"deduceProject,omitempty"`
-	CreateProjects  bool   `json:"create,omitempty"`
-	Project         string `json:"project,omitempty"`
-	ProjectPartSize int    `json:"projectPartSize,omitempty"`
-	InlineScript    bool   `json:"inlineScript,omitempty"`
+	Version         int    // Import version (query parameter, not in body)
+	Conflict        string `json:"conflict,omitempty"`        // FAIL, SKIP, OVERWRITE
+	Timezone        string `json:"timezone,omitempty"`        // Timezone for date/time fields
+	DeduceProject   bool   `json:"deduceProject,omitempty"`   // Automatically deduce project from feature IDs
+	CreateProjects  bool   `json:"create,omitempty"`          // Create projects if they don't exist
+	Project         string `json:"project,omitempty"`         // Target project for import
+	ProjectPartSize int    `json:"projectPartSize,omitempty"` // Batch size for project imports
+	InlineScript    bool   `json:"inlineScript,omitempty"`    // Whether to inline WASM scripts
 }
 
 // ImportStatus represents the status of an import operation

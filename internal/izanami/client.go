@@ -525,12 +525,18 @@ func (c *Client) DeleteContext(ctx context.Context, tenant, project, contextPath
 // ============================================================================
 
 // ListTenants lists all tenants
-func (c *Client) ListTenants(ctx context.Context) ([]Tenant, error) {
-	var tenants []Tenant
-	resp, err := c.http.R().
+// The right parameter filters tenants by minimum required permission level (Read, Write, or Admin)
+func (c *Client) ListTenants(ctx context.Context, right *RightLevel) ([]Tenant, error) {
+	req := c.http.R().
 		SetContext(ctx).
-		SetResult(&tenants).
-		Get("/api/admin/tenants")
+		SetResult(&[]Tenant{})
+
+	// Add right filter if specified
+	if right != nil {
+		req.SetQueryParam("right", right.String())
+	}
+
+	resp, err := req.Get("/api/admin/tenants")
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to list tenants: %w", err)
@@ -540,7 +546,8 @@ func (c *Client) ListTenants(ctx context.Context) ([]Tenant, error) {
 		return nil, c.handleError(resp)
 	}
 
-	return tenants, nil
+	tenants := resp.Result().(*[]Tenant)
+	return *tenants, nil
 }
 
 // GetTenant retrieves a specific tenant
@@ -715,25 +722,27 @@ func (c *Client) ListAPIKeys(ctx context.Context, tenant string) ([]APIKey, erro
 	return keys, nil
 }
 
-// GetAPIKey retrieves a specific API key
+// GetAPIKey retrieves a specific API key by clientID
+// Note: The Izanami API doesn't have a dedicated endpoint for getting a single key,
+// so this method lists all keys and filters by clientID
 func (c *Client) GetAPIKey(ctx context.Context, tenant, clientID string) (*APIKey, error) {
-	path := "/api/admin/tenants/" + buildPath(tenant, "keys", clientID)
-
-	var key APIKey
-	resp, err := c.http.R().
-		SetContext(ctx).
-		SetResult(&key).
-		Get(path)
-
+	keys, err := c.ListAPIKeys(ctx, tenant)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get API key: %w", err)
 	}
 
-	if resp.StatusCode() != http.StatusOK {
-		return nil, c.handleError(resp)
+	// Find the key with matching clientID
+	for i := range keys {
+		if keys[i].ClientID == clientID {
+			return &keys[i], nil
+		}
 	}
 
-	return &key, nil
+	return nil, &APIError{
+		StatusCode: http.StatusNotFound,
+		Message:    fmt.Sprintf("API key with clientID '%s' not found", clientID),
+		RawBody:    "",
+	}
 }
 
 // CreateAPIKey creates a new API key
@@ -1115,19 +1124,45 @@ func (c *Client) Export(ctx context.Context, tenant string) (string, error) {
 	return string(resp.Body()), nil
 }
 
-// Import imports tenant data
+// Import imports tenant data from a file
+// All fields from ImportRequest are passed as query parameters to the API
 func (c *Client) Import(ctx context.Context, tenant, filePath string, req ImportRequest) (*ImportStatus, error) {
 	path := "/api/admin/tenants/" + buildPath(tenant, "_import")
 
 	var status ImportStatus
 
-	resp, err := c.http.R().
+	httpReq := c.http.R().
 		SetContext(ctx).
 		SetFile("export", filePath).
-		SetQueryParam("conflict", req.Conflict).
-		SetQueryParam("timezone", req.Timezone).
-		SetResult(&status).
-		Post(path)
+		SetResult(&status)
+
+	// Set all query parameters from ImportRequest
+	if req.Version > 0 {
+		httpReq.SetQueryParam("version", strconv.Itoa(req.Version))
+	}
+	if req.Conflict != "" {
+		httpReq.SetQueryParam("conflict", req.Conflict)
+	}
+	if req.Timezone != "" {
+		httpReq.SetQueryParam("timezone", req.Timezone)
+	}
+	if req.DeduceProject {
+		httpReq.SetQueryParam("deduceProject", "true")
+	}
+	if req.CreateProjects {
+		httpReq.SetQueryParam("create", "true")
+	}
+	if req.Project != "" {
+		httpReq.SetQueryParam("project", req.Project)
+	}
+	if req.ProjectPartSize > 0 {
+		httpReq.SetQueryParam("projectPartSize", strconv.Itoa(req.ProjectPartSize))
+	}
+	if req.InlineScript {
+		httpReq.SetQueryParam("inlineScript", "true")
+	}
+
+	resp, err := httpReq.Post(path)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to import: %w", err)

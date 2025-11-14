@@ -61,7 +61,7 @@ var adminTenantsListCmd = &cobra.Command{
 		}
 
 		ctx := context.Background()
-		tenants, err := client.ListTenants(ctx)
+		tenants, err := client.ListTenants(ctx, nil)
 		if err != nil {
 			return err
 		}
