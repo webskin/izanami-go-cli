@@ -40,9 +40,23 @@ func NewClientNoAuth(config *Config) (*Client, error) {
 
 // newClientInternal creates the actual client (shared logic)
 func newClientInternal(config *Config) (*Client, error) {
+	// Make a defensive copy of the config to prevent external mutations
+	configCopy := &Config{
+		BaseURL:      config.BaseURL,
+		ClientID:     config.ClientID,
+		ClientSecret: config.ClientSecret,
+		Username:     config.Username,
+		Token:        config.Token,
+		Tenant:       config.Tenant,
+		Project:      config.Project,
+		Context:      config.Context,
+		Timeout:      config.Timeout,
+		Verbose:      config.Verbose,
+	}
+
 	client := resty.New().
-		SetBaseURL(config.BaseURL).
-		SetTimeout(time.Duration(config.Timeout) * time.Second).
+		SetBaseURL(configCopy.BaseURL).
+		SetTimeout(time.Duration(configCopy.Timeout) * time.Second).
 		SetRetryCount(3).
 		SetRetryWaitTime(1 * time.Second).
 		SetRetryMaxWaitTime(5 * time.Second).
@@ -51,21 +65,21 @@ func newClientInternal(config *Config) (*Client, error) {
 			return err != nil || r.StatusCode() >= 500
 		})
 
-	if config.Verbose {
+	if configCopy.Verbose {
 		enableSecureDebugMode(client)
 	}
 
 	// Set authentication
-	if config.ClientID != "" && config.ClientSecret != "" {
+	if configCopy.ClientID != "" && configCopy.ClientSecret != "" {
 		// Client API key authentication
-		client.SetHeader("Izanami-Client-Id", config.ClientID)
-		client.SetHeader("Izanami-Client-Secret", config.ClientSecret)
-	} else if config.Username != "" && config.Token != "" {
+		client.SetHeader("Izanami-Client-Id", configCopy.ClientID)
+		client.SetHeader("Izanami-Client-Secret", configCopy.ClientSecret)
+	} else if configCopy.Username != "" && configCopy.Token != "" {
 		// Admin JWT cookie authentication
 		// Izanami expects the JWT token in a cookie named "token"
 		cookie := &http.Cookie{
 			Name:  "token",
-			Value: config.Token,
+			Value: configCopy.Token,
 			Path:  "/",
 		}
 		client.SetCookie(cookie)
@@ -73,7 +87,7 @@ func newClientInternal(config *Config) (*Client, error) {
 
 	return &Client{
 		http:   client,
-		config: config,
+		config: configCopy,
 	}, nil
 }
 
