@@ -4,6 +4,12 @@ A cross-platform command-line client for [Izanami](https://github.com/MAIF/izana
 
 Izanami is an open-source feature flag and configuration management system. This CLI provides a convenient way to interact with Izanami for both administration tasks and standard feature flag operations.
 
+> **⚠️ WARNING: WORK IN PROGRESS**
+>
+> This CLI is currently under active development and **NOT ready for production use**.
+> Features may be incomplete, APIs may change, and bugs are expected.
+> Use at your own risk in development/testing environments only.
+
 ## Features
 
 - ✅ **Cross-platform**: Works on Linux, macOS (Intel & ARM), and Windows
