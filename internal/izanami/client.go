@@ -181,14 +181,12 @@ func (c *Client) Login(ctx context.Context, username, password string) (string, 
 // ============================================================================
 
 // ListFeatures lists all features in a tenant/project
-func (c *Client) ListFeatures(ctx context.Context, tenant, project string, tags []string) ([]Feature, error) {
+func (c *Client) ListFeatures(ctx context.Context, tenant string, tags []string) ([]Feature, error) {
 	path := fmt.Sprintf("/api/admin/tenants/%s/features", tenant)
 
 	req := c.http.R().SetContext(ctx).SetResult(&[]Feature{})
 
-	if project != "" {
-		req.SetQueryParam("project", project)
-	}
+	// Add tag filter if specified (server-side filtering)
 	if len(tags) > 0 {
 		req.SetQueryParam("tag", strings.Join(tags, ","))
 	}

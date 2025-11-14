@@ -128,9 +128,8 @@ func TestClient_ListFeatures(t *testing.T) {
 		assert.Equal(t, "/api/admin/tenants/test-tenant/features", r.URL.Path)
 		assert.Equal(t, "GET", r.Method)
 
-		// Check query params
-		project := r.URL.Query().Get("project")
-		assert.Equal(t, "test-project", project)
+		// Note: project filtering is not supported by Izanami API
+		// Only tag filtering is supported via query params
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(expectedFeatures)
@@ -148,7 +147,7 @@ func TestClient_ListFeatures(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	features, err := client.ListFeatures(ctx, "test-tenant", "test-project", nil)
+	features, err := client.ListFeatures(ctx, "test-tenant", nil)
 
 	assert.NoError(t, err)
 	assert.Len(t, features, 2)

@@ -42,7 +42,16 @@ Features can have:
 var featuresListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all features",
-	Long:  `List all features in a tenant, optionally filtered by project or tags.`,
+	Long: `List all features in a tenant.
+
+Server-side filtering:
+  --tags: Filter by tags (supported by Izanami API)
+
+Client-side filtering:
+  --project: Filter results by project (filtered locally after fetch)
+
+Note: Izanami's list endpoint does not support project filtering server-side,
+so all features are fetched and filtered locally when --project is specified.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := cfg.Validate(); err != nil {
 			return err
@@ -57,9 +66,21 @@ var featuresListCmd = &cobra.Command{
 		}
 
 		ctx := context.Background()
-		features, err := client.ListFeatures(ctx, cfg.Tenant, featureProject, featureTags)
+		// Fetch features (with optional tag filtering on server)
+		features, err := client.ListFeatures(ctx, cfg.Tenant, featureTags)
 		if err != nil {
 			return err
+		}
+
+		// Client-side project filtering (if specified)
+		if featureProject != "" {
+			filtered := make([]izanami.Feature, 0)
+			for _, feature := range features {
+				if feature.Project == featureProject {
+					filtered = append(filtered, feature)
+				}
+			}
+			features = filtered
 		}
 
 		return output.Print(features, output.Format(outputFormat))
