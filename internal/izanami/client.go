@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -51,7 +52,7 @@ func newClientInternal(config *Config) (*Client, error) {
 		})
 
 	if config.Verbose {
-		client.SetDebug(true)
+		enableSecureDebugMode(client)
 	}
 
 	// Set authentication
@@ -74,6 +75,67 @@ func newClientInternal(config *Config) (*Client, error) {
 		http:   client,
 		config: config,
 	}, nil
+}
+
+// enableSecureDebugMode enables verbose logging with sensitive data redaction
+func enableSecureDebugMode(client *resty.Client) {
+	// Sensitive headers that should be redacted
+	sensitiveHeaders := map[string]bool{
+		"cookie":                 true,
+		"authorization":          true,
+		"izanami-client-secret":  true,
+		"x-api-key":              true,
+		"authentication":         true,
+	}
+
+	// Log request details (before sending)
+	client.OnBeforeRequest(func(c *resty.Client, req *resty.Request) error {
+		log.Printf("RESTY ==============================================================================")
+		log.Printf("~~~ REQUEST ~~~")
+		log.Printf("%s  %s", req.Method, req.URL)
+		log.Printf("HEADERS:")
+		for key, values := range req.Header {
+			keyLower := strings.ToLower(key)
+			if sensitiveHeaders[keyLower] {
+				log.Printf("\t%s: [REDACTED]", key)
+			} else {
+				for _, value := range values {
+					log.Printf("\t%s: %s", key, value)
+				}
+			}
+		}
+		if req.Body != nil {
+			log.Printf("BODY   :")
+			log.Printf("%v", req.Body)
+		} else {
+			log.Printf("BODY   :")
+			log.Printf("***** NO CONTENT *****")
+		}
+		log.Printf("------------------------------------------------------------------------------")
+		return nil
+	})
+
+	// Log response details (after receiving)
+	client.OnAfterResponse(func(c *resty.Client, resp *resty.Response) error {
+		log.Printf("~~~ RESPONSE ~~~")
+		log.Printf("STATUS       : %s", resp.Status())
+		log.Printf("PROTO        : %s", resp.Proto())
+		log.Printf("TIME DURATION: %v", resp.Time())
+		log.Printf("HEADERS      :")
+		for key, values := range resp.Header() {
+			for _, value := range values {
+				log.Printf("\t%s: %s", key, value)
+			}
+		}
+		log.Printf("BODY         :")
+		if len(resp.Body()) > 0 {
+			log.Printf("%s", string(resp.Body()))
+		} else {
+			log.Printf("***** NO CONTENT *****")
+		}
+		log.Printf("==============================================================================")
+		return nil
+	})
 }
 
 // handleError parses error responses from the API
