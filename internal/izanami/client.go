@@ -4,10 +4,14 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
+	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,6 +22,18 @@ import (
 type Client struct {
 	http   *resty.Client
 	config *Config
+}
+
+// APIError represents a structured API error with status code and message
+// This allows callers to inspect the status code without parsing error strings
+type APIError struct {
+	StatusCode int    // HTTP status code
+	Message    string // Error message from the API
+	RawBody    string // Raw response body for debugging
+}
+
+func (e *APIError) Error() string {
+	return fmt.Sprintf("API error (%d): %s", e.StatusCode, e.Message)
 }
 
 // NewClient creates a new Izanami client with the given configuration
@@ -61,8 +77,15 @@ func newClientInternal(config *Config) (*Client, error) {
 		SetRetryWaitTime(1 * time.Second).
 		SetRetryMaxWaitTime(5 * time.Second).
 		AddRetryCondition(func(r *resty.Response, err error) bool {
-			// Retry on network errors or 5xx status codes
-			return err != nil || r.StatusCode() >= 500
+			// Only retry on network errors or 5xx for idempotent methods (GET, HEAD)
+			// This prevents duplicate operations from POST/PUT/DELETE retries
+			if r == nil {
+				// Network error, safe to retry
+				return err != nil
+			}
+			method := r.Request.Method
+			isIdempotent := method == http.MethodGet || method == http.MethodHead
+			return isIdempotent && (err != nil || r.StatusCode() >= 500)
 		})
 
 	if configCopy.Verbose {
@@ -91,78 +114,146 @@ func newClientInternal(config *Config) (*Client, error) {
 	}, nil
 }
 
+const maxBodyLogLength = 2048 // Maximum length for logged request/response bodies
+
 // enableSecureDebugMode enables verbose logging with sensitive data redaction
 func enableSecureDebugMode(client *resty.Client) {
-	// Sensitive headers that should be redacted
+	// Sensitive headers that should be redacted in both requests and responses
 	sensitiveHeaders := map[string]bool{
-		"cookie":                 true,
-		"authorization":          true,
-		"izanami-client-secret":  true,
-		"izanami-client-id":      true,
-		"x-api-key":              true,
-		"authentication":         true,
+		"cookie":                true,
+		"set-cookie":            true,
+		"authorization":         true,
+		"izanami-client-secret": true,
+		"izanami-client-id":     true,
+		"x-api-key":             true,
+		"authentication":        true,
+		"www-authenticate":      true,
 	}
 
 	// Log response details (after receiving)
 	// We log both request and response here because the request details
 	// are only fully available after the request is sent
 	client.OnAfterResponse(func(c *resty.Client, resp *resty.Response) error {
-		req := resp.Request.RawRequest
-
-		// Log request details
-		fmt.Fprintf(os.Stderr, "==============================================================================\n")
-		fmt.Fprintf(os.Stderr, "~~~ REQUEST ~~~\n")
-		fmt.Fprintf(os.Stderr, "%s  %s  %s\n", req.Method, req.URL.Path, req.Proto)
-		fmt.Fprintf(os.Stderr, "HOST   : %s\n", req.Host)
-		fmt.Fprintf(os.Stderr, "HEADERS:\n")
-		for key, values := range req.Header {
-			keyLower := strings.ToLower(key)
-			if sensitiveHeaders[keyLower] {
-				fmt.Fprintf(os.Stderr, "\t%s: [REDACTED]\n", key)
-			} else {
-				for _, value := range values {
-					fmt.Fprintf(os.Stderr, "\t%s: %s\n", key, value)
-				}
-			}
-		}
-		fmt.Fprintf(os.Stderr, "BODY   :\n")
-		if resp.Request.Body != nil {
-			fmt.Fprintf(os.Stderr, "%v\n", resp.Request.Body)
-		} else {
-			fmt.Fprintf(os.Stderr, "***** NO CONTENT *****\n")
-		}
-		fmt.Fprintf(os.Stderr, "------------------------------------------------------------------------------\n")
-
-		// Log response details
-		fmt.Fprintf(os.Stderr, "~~~ RESPONSE ~~~\n")
-		fmt.Fprintf(os.Stderr, "STATUS       : %s\n", resp.Status())
-		fmt.Fprintf(os.Stderr, "PROTO        : %s\n", resp.Proto())
-		fmt.Fprintf(os.Stderr, "RECEIVED AT  : %v\n", time.Now().Format(time.RFC3339Nano))
-		fmt.Fprintf(os.Stderr, "TIME DURATION: %v\n", resp.Time())
-		fmt.Fprintf(os.Stderr, "HEADERS      :\n")
-		for key, values := range resp.Header() {
-			for _, value := range values {
-				fmt.Fprintf(os.Stderr, "\t%s: %s\n", key, value)
-			}
-		}
-		fmt.Fprintf(os.Stderr, "BODY         :\n")
-		if len(resp.Body()) > 0 {
-			fmt.Fprintf(os.Stderr, "%s\n", string(resp.Body()))
-		} else {
-			fmt.Fprintf(os.Stderr, "***** NO CONTENT *****\n")
-		}
-		fmt.Fprintf(os.Stderr, "==============================================================================\n")
+		logRequest(resp, sensitiveHeaders)
+		logResponse(resp, sensitiveHeaders)
 		return nil
 	})
 }
 
-// handleError parses error responses from the API
+// logRequest logs HTTP request details with sensitive data redaction
+func logRequest(resp *resty.Response, sensitiveHeaders map[string]bool) {
+	req := resp.Request.RawRequest
+
+	fmt.Fprintf(os.Stderr, "==============================================================================\n")
+	fmt.Fprintf(os.Stderr, "~~~ REQUEST ~~~\n")
+	fmt.Fprintf(os.Stderr, "%s  %s  %s\n", req.Method, req.URL.Path, req.Proto)
+	fmt.Fprintf(os.Stderr, "HOST   : %s\n", req.Host)
+	fmt.Fprintf(os.Stderr, "HEADERS:\n")
+	for key, values := range req.Header {
+		keyLower := strings.ToLower(key)
+		if sensitiveHeaders[keyLower] {
+			fmt.Fprintf(os.Stderr, "\t%s: [REDACTED]\n", key)
+		} else {
+			for _, value := range values {
+				fmt.Fprintf(os.Stderr, "\t%s: %s\n", key, value)
+			}
+		}
+	}
+	fmt.Fprintf(os.Stderr, "BODY   :\n")
+	logBody(os.Stderr, resp.Request.Body)
+	fmt.Fprintf(os.Stderr, "------------------------------------------------------------------------------\n")
+}
+
+// logResponse logs HTTP response details with sensitive data redaction
+func logResponse(resp *resty.Response, sensitiveHeaders map[string]bool) {
+	fmt.Fprintf(os.Stderr, "~~~ RESPONSE ~~~\n")
+	fmt.Fprintf(os.Stderr, "STATUS       : %s\n", resp.Status())
+	fmt.Fprintf(os.Stderr, "PROTO        : %s\n", resp.Proto())
+	fmt.Fprintf(os.Stderr, "RECEIVED AT  : %v\n", time.Now().Format(time.RFC3339Nano))
+	fmt.Fprintf(os.Stderr, "TIME DURATION: %v\n", resp.Time())
+	fmt.Fprintf(os.Stderr, "HEADERS      :\n")
+	for key, values := range resp.Header() {
+		keyLower := strings.ToLower(key)
+		if sensitiveHeaders[keyLower] {
+			fmt.Fprintf(os.Stderr, "\t%s: [REDACTED]\n", key)
+		} else {
+			for _, value := range values {
+				fmt.Fprintf(os.Stderr, "\t%s: %s\n", key, value)
+			}
+		}
+	}
+	fmt.Fprintf(os.Stderr, "BODY         :\n")
+	if len(resp.Body()) > 0 {
+		body := string(resp.Body())
+		if len(body) > maxBodyLogLength {
+			fmt.Fprintf(os.Stderr, "%s... [TRUNCATED: %d more bytes]\n", body[:maxBodyLogLength], len(body)-maxBodyLogLength)
+		} else {
+			fmt.Fprintf(os.Stderr, "%s\n", body)
+		}
+	} else {
+		fmt.Fprintf(os.Stderr, "***** NO CONTENT *****\n")
+	}
+	fmt.Fprintf(os.Stderr, "==============================================================================\n")
+}
+
+// logBody safely logs a request body with truncation and type handling
+func logBody(w io.Writer, body interface{}) {
+	if body == nil {
+		fmt.Fprintf(w, "***** NO CONTENT *****\n")
+		return
+	}
+
+	var bodyStr string
+	switch v := body.(type) {
+	case string:
+		bodyStr = v
+	case []byte:
+		bodyStr = string(v)
+	default:
+		// For other types, marshal as JSON if possible
+		if jsonBytes, err := json.Marshal(v); err == nil {
+			bodyStr = string(jsonBytes)
+		} else {
+			bodyStr = fmt.Sprintf("%v", v)
+		}
+	}
+
+	if len(bodyStr) > maxBodyLogLength {
+		fmt.Fprintf(w, "%s... [TRUNCATED: %d more bytes]\n", bodyStr[:maxBodyLogLength], len(bodyStr)-maxBodyLogLength)
+	} else {
+		fmt.Fprintf(w, "%s\n", bodyStr)
+	}
+}
+
+// handleError parses error responses from the API and returns a structured APIError
 func (c *Client) handleError(resp *resty.Response) error {
+	rawBody := string(resp.Body())
+
 	var errResp ErrorResponse
 	if err := json.Unmarshal(resp.Body(), &errResp); err == nil && errResp.Message != "" {
-		return fmt.Errorf("API error (%d): %s", resp.StatusCode(), errResp.Message)
+		return &APIError{
+			StatusCode: resp.StatusCode(),
+			Message:    errResp.Message,
+			RawBody:    rawBody,
+		}
 	}
-	return fmt.Errorf("API error (%d): %s", resp.StatusCode(), string(resp.Body()))
+
+	return &APIError{
+		StatusCode: resp.StatusCode(),
+		Message:    rawBody,
+		RawBody:    rawBody,
+	}
+}
+
+// buildPath constructs a URL path with properly escaped segments
+func buildPath(segments ...string) string {
+	var escaped []string
+	for _, seg := range segments {
+		if seg != "" {
+			escaped = append(escaped, url.PathEscape(seg))
+		}
+	}
+	return strings.Join(escaped, "/")
 }
 
 // ============================================================================
@@ -200,7 +291,7 @@ func (c *Client) Login(ctx context.Context, username, password string) (string, 
 
 // ListFeatures lists all features in a tenant
 func (c *Client) ListFeatures(ctx context.Context, tenant string, tag string) ([]Feature, error) {
-	path := fmt.Sprintf("/api/admin/tenants/%s/features", tenant)
+	path := "/api/admin/tenants/" + buildPath(tenant, "features")
 
 	req := c.http.R().SetContext(ctx).SetResult(&[]Feature{})
 
@@ -224,7 +315,7 @@ func (c *Client) ListFeatures(ctx context.Context, tenant string, tag string) ([
 
 // GetFeature retrieves a specific feature
 func (c *Client) GetFeature(ctx context.Context, tenant, featureID string) (*FeatureWithOverloads, error) {
-	path := fmt.Sprintf("/api/admin/tenants/%s/features/%s", tenant, featureID)
+	path := "/api/admin/tenants/" + buildPath(tenant, "features", featureID)
 
 	var feature FeatureWithOverloads
 	resp, err := c.http.R().
@@ -244,8 +335,9 @@ func (c *Client) GetFeature(ctx context.Context, tenant, featureID string) (*Fea
 }
 
 // CreateFeature creates a new feature
+// The feature parameter accepts either a *Feature or any compatible struct
 func (c *Client) CreateFeature(ctx context.Context, tenant, project string, feature interface{}) (*Feature, error) {
-	path := fmt.Sprintf("/api/admin/tenants/%s/projects/%s/features", tenant, project)
+	path := "/api/admin/tenants/" + buildPath(tenant, "projects", project, "features")
 
 	var result Feature
 	resp, err := c.http.R().
@@ -267,8 +359,9 @@ func (c *Client) CreateFeature(ctx context.Context, tenant, project string, feat
 }
 
 // UpdateFeature updates an existing feature
+// The feature parameter accepts either a *Feature, *FeatureWithOverloads, or any compatible struct
 func (c *Client) UpdateFeature(ctx context.Context, tenant, featureID string, feature interface{}, preserveProtectedContexts bool) error {
-	path := fmt.Sprintf("/api/admin/tenants/%s/features/%s", tenant, featureID)
+	path := "/api/admin/tenants/" + buildPath(tenant, "features", featureID)
 
 	req := c.http.R().
 		SetContext(ctx).
@@ -293,7 +386,7 @@ func (c *Client) UpdateFeature(ctx context.Context, tenant, featureID string, fe
 
 // DeleteFeature deletes a feature
 func (c *Client) DeleteFeature(ctx context.Context, tenant, featureID string) error {
-	path := fmt.Sprintf("/api/admin/tenants/%s/features/%s", tenant, featureID)
+	path := "/api/admin/tenants/" + buildPath(tenant, "features", featureID)
 
 	resp, err := c.http.R().
 		SetContext(ctx).
@@ -303,7 +396,7 @@ func (c *Client) DeleteFeature(ctx context.Context, tenant, featureID string) er
 		return fmt.Errorf("failed to delete feature: %w", err)
 	}
 
-	if resp.StatusCode() != http.StatusOK && resp.StatusCode() != http.StatusNoContent {
+	if resp.StatusCode() != http.StatusOK && resp.StatusCode() != http.StatusNoContent && resp.StatusCode() != http.StatusNotFound {
 		return c.handleError(resp)
 	}
 
@@ -312,7 +405,7 @@ func (c *Client) DeleteFeature(ctx context.Context, tenant, featureID string) er
 
 // CheckFeature checks if a feature is active (client API)
 func (c *Client) CheckFeature(ctx context.Context, featureID, user, contextPath string) (*FeatureCheckResult, error) {
-	path := fmt.Sprintf("/api/v2/features/%s", featureID)
+	path := "/api/v2/features/" + buildPath(featureID)
 
 	req := c.http.R().SetContext(ctx).SetResult(&FeatureCheckResult{})
 
@@ -344,9 +437,9 @@ func (c *Client) CheckFeature(ctx context.Context, featureID, user, contextPath 
 func (c *Client) ListContexts(ctx context.Context, tenant, project string, all bool) ([]Context, error) {
 	var path string
 	if project != "" {
-		path = fmt.Sprintf("/api/admin/tenants/%s/projects/%s/contexts", tenant, project)
+		path = "/api/admin/tenants/" + buildPath(tenant, "projects", project, "contexts")
 	} else {
-		path = fmt.Sprintf("/api/admin/tenants/%s/contexts", tenant)
+		path = "/api/admin/tenants/" + buildPath(tenant, "contexts")
 	}
 
 	req := c.http.R().SetContext(ctx).SetResult(&[]Context{})
@@ -369,19 +462,20 @@ func (c *Client) ListContexts(ctx context.Context, tenant, project string, all b
 }
 
 // CreateContext creates a new context
+// The contextData parameter accepts a map or any compatible struct with context fields
 func (c *Client) CreateContext(ctx context.Context, tenant, project, name, parentPath string, contextData interface{}) error {
 	var path string
 	if project != "" {
 		if parentPath != "" {
-			path = fmt.Sprintf("/api/admin/tenants/%s/projects/%s/contexts/%s", tenant, project, parentPath)
+			path = "/api/admin/tenants/" + buildPath(tenant, "projects", project, "contexts", parentPath)
 		} else {
-			path = fmt.Sprintf("/api/admin/tenants/%s/projects/%s/contexts", tenant, project)
+			path = "/api/admin/tenants/" + buildPath(tenant, "projects", project, "contexts")
 		}
 	} else {
 		if parentPath != "" {
-			path = fmt.Sprintf("/api/admin/tenants/%s/contexts/%s", tenant, parentPath)
+			path = "/api/admin/tenants/" + buildPath(tenant, "contexts", parentPath)
 		} else {
-			path = fmt.Sprintf("/api/admin/tenants/%s/contexts", tenant)
+			path = "/api/admin/tenants/" + buildPath(tenant, "contexts")
 		}
 	}
 
@@ -406,9 +500,9 @@ func (c *Client) CreateContext(ctx context.Context, tenant, project, name, paren
 func (c *Client) DeleteContext(ctx context.Context, tenant, project, contextPath string) error {
 	var path string
 	if project != "" {
-		path = fmt.Sprintf("/api/admin/tenants/%s/projects/%s/contexts/%s", tenant, project, contextPath)
+		path = "/api/admin/tenants/" + buildPath(tenant, "projects", project, "contexts", contextPath)
 	} else {
-		path = fmt.Sprintf("/api/admin/tenants/%s/contexts/%s", tenant, contextPath)
+		path = "/api/admin/tenants/" + buildPath(tenant, "contexts", contextPath)
 	}
 
 	resp, err := c.http.R().
@@ -451,11 +545,13 @@ func (c *Client) ListTenants(ctx context.Context) ([]Tenant, error) {
 
 // GetTenant retrieves a specific tenant
 func (c *Client) GetTenant(ctx context.Context, name string) (*Tenant, error) {
+	path := "/api/admin/tenants/" + buildPath(name)
+
 	var tenant Tenant
 	resp, err := c.http.R().
 		SetContext(ctx).
 		SetResult(&tenant).
-		Get(fmt.Sprintf("/api/admin/tenants/%s", name))
+		Get(path)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get tenant: %w", err)
@@ -469,6 +565,7 @@ func (c *Client) GetTenant(ctx context.Context, name string) (*Tenant, error) {
 }
 
 // CreateTenant creates a new tenant
+// The tenant parameter accepts either a *Tenant or any compatible struct
 func (c *Client) CreateTenant(ctx context.Context, tenant interface{}) error {
 	resp, err := c.http.R().
 		SetContext(ctx).
@@ -489,9 +586,11 @@ func (c *Client) CreateTenant(ctx context.Context, tenant interface{}) error {
 
 // DeleteTenant deletes a tenant
 func (c *Client) DeleteTenant(ctx context.Context, name string) error {
+	path := "/api/admin/tenants/" + buildPath(name)
+
 	resp, err := c.http.R().
 		SetContext(ctx).
-		Delete(fmt.Sprintf("/api/admin/tenants/%s", name))
+		Delete(path)
 
 	if err != nil {
 		return fmt.Errorf("failed to delete tenant: %w", err)
@@ -510,11 +609,13 @@ func (c *Client) DeleteTenant(ctx context.Context, name string) error {
 
 // ListProjects lists all projects in a tenant
 func (c *Client) ListProjects(ctx context.Context, tenant string) ([]Project, error) {
+	path := "/api/admin/tenants/" + buildPath(tenant, "projects")
+
 	var projects []Project
 	resp, err := c.http.R().
 		SetContext(ctx).
 		SetResult(&projects).
-		Get(fmt.Sprintf("/api/admin/tenants/%s/projects", tenant))
+		Get(path)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to list projects: %w", err)
@@ -529,11 +630,13 @@ func (c *Client) ListProjects(ctx context.Context, tenant string) ([]Project, er
 
 // GetProject retrieves a specific project
 func (c *Client) GetProject(ctx context.Context, tenant, project string) (*Project, error) {
+	path := "/api/admin/tenants/" + buildPath(tenant, "projects", project)
+
 	var proj Project
 	resp, err := c.http.R().
 		SetContext(ctx).
 		SetResult(&proj).
-		Get(fmt.Sprintf("/api/admin/tenants/%s/projects/%s", tenant, project))
+		Get(path)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get project: %w", err)
@@ -547,12 +650,15 @@ func (c *Client) GetProject(ctx context.Context, tenant, project string) (*Proje
 }
 
 // CreateProject creates a new project
+// The project parameter accepts either a *Project or any compatible struct
 func (c *Client) CreateProject(ctx context.Context, tenant string, project interface{}) error {
+	path := "/api/admin/tenants/" + buildPath(tenant, "projects")
+
 	resp, err := c.http.R().
 		SetContext(ctx).
 		SetHeader("Content-Type", "application/json").
 		SetBody(project).
-		Post(fmt.Sprintf("/api/admin/tenants/%s/projects", tenant))
+		Post(path)
 
 	if err != nil {
 		return fmt.Errorf("failed to create project: %w", err)
@@ -567,9 +673,11 @@ func (c *Client) CreateProject(ctx context.Context, tenant string, project inter
 
 // DeleteProject deletes a project
 func (c *Client) DeleteProject(ctx context.Context, tenant, project string) error {
+	path := "/api/admin/tenants/" + buildPath(tenant, "projects", project)
+
 	resp, err := c.http.R().
 		SetContext(ctx).
-		Delete(fmt.Sprintf("/api/admin/tenants/%s/projects/%s", tenant, project))
+		Delete(path)
 
 	if err != nil {
 		return fmt.Errorf("failed to delete project: %w", err)
@@ -588,11 +696,13 @@ func (c *Client) DeleteProject(ctx context.Context, tenant, project string) erro
 
 // ListAPIKeys lists all API keys for a tenant
 func (c *Client) ListAPIKeys(ctx context.Context, tenant string) ([]APIKey, error) {
+	path := "/api/admin/tenants/" + buildPath(tenant, "keys")
+
 	var keys []APIKey
 	resp, err := c.http.R().
 		SetContext(ctx).
 		SetResult(&keys).
-		Get(fmt.Sprintf("/api/admin/tenants/%s/keys", tenant))
+		Get(path)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to list API keys: %w", err)
@@ -607,11 +717,13 @@ func (c *Client) ListAPIKeys(ctx context.Context, tenant string) ([]APIKey, erro
 
 // GetAPIKey retrieves a specific API key
 func (c *Client) GetAPIKey(ctx context.Context, tenant, clientID string) (*APIKey, error) {
+	path := "/api/admin/tenants/" + buildPath(tenant, "keys", clientID)
+
 	var key APIKey
 	resp, err := c.http.R().
 		SetContext(ctx).
 		SetResult(&key).
-		Get(fmt.Sprintf("/api/admin/tenants/%s/keys/%s", tenant, clientID))
+		Get(path)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get API key: %w", err)
@@ -625,14 +737,17 @@ func (c *Client) GetAPIKey(ctx context.Context, tenant, clientID string) (*APIKe
 }
 
 // CreateAPIKey creates a new API key
+// The key parameter accepts either an *APIKey or any compatible struct
 func (c *Client) CreateAPIKey(ctx context.Context, tenant string, key interface{}) (*APIKey, error) {
+	path := "/api/admin/tenants/" + buildPath(tenant, "keys")
+
 	var result APIKey
 	resp, err := c.http.R().
 		SetContext(ctx).
 		SetHeader("Content-Type", "application/json").
 		SetBody(key).
 		SetResult(&result).
-		Post(fmt.Sprintf("/api/admin/tenants/%s/keys", tenant))
+		Post(path)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create API key: %w", err)
@@ -646,12 +761,15 @@ func (c *Client) CreateAPIKey(ctx context.Context, tenant string, key interface{
 }
 
 // UpdateAPIKey updates an existing API key
+// The key parameter accepts either an *APIKey or any compatible struct
 func (c *Client) UpdateAPIKey(ctx context.Context, tenant, clientID string, key interface{}) error {
+	path := "/api/admin/tenants/" + buildPath(tenant, "keys", clientID)
+
 	resp, err := c.http.R().
 		SetContext(ctx).
 		SetHeader("Content-Type", "application/json").
 		SetBody(key).
-		Put(fmt.Sprintf("/api/admin/tenants/%s/keys/%s", tenant, clientID))
+		Put(path)
 
 	if err != nil {
 		return fmt.Errorf("failed to update API key: %w", err)
@@ -666,9 +784,11 @@ func (c *Client) UpdateAPIKey(ctx context.Context, tenant, clientID string, key 
 
 // DeleteAPIKey deletes an API key
 func (c *Client) DeleteAPIKey(ctx context.Context, tenant, clientID string) error {
+	path := "/api/admin/tenants/" + buildPath(tenant, "keys", clientID)
+
 	resp, err := c.http.R().
 		SetContext(ctx).
-		Delete(fmt.Sprintf("/api/admin/tenants/%s/keys/%s", tenant, clientID))
+		Delete(path)
 
 	if err != nil {
 		return fmt.Errorf("failed to delete API key: %w", err)
@@ -687,11 +807,13 @@ func (c *Client) DeleteAPIKey(ctx context.Context, tenant, clientID string) erro
 
 // ListTags lists all tags in a tenant
 func (c *Client) ListTags(ctx context.Context, tenant string) ([]Tag, error) {
+	path := "/api/admin/tenants/" + buildPath(tenant, "tags")
+
 	var tags []Tag
 	resp, err := c.http.R().
 		SetContext(ctx).
 		SetResult(&tags).
-		Get(fmt.Sprintf("/api/admin/tenants/%s/tags", tenant))
+		Get(path)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to list tags: %w", err)
@@ -705,12 +827,15 @@ func (c *Client) ListTags(ctx context.Context, tenant string) ([]Tag, error) {
 }
 
 // CreateTag creates a new tag
+// The tag parameter accepts either a *Tag or any compatible struct
 func (c *Client) CreateTag(ctx context.Context, tenant string, tag interface{}) error {
+	path := "/api/admin/tenants/" + buildPath(tenant, "tags")
+
 	resp, err := c.http.R().
 		SetContext(ctx).
 		SetHeader("Content-Type", "application/json").
 		SetBody(tag).
-		Post(fmt.Sprintf("/api/admin/tenants/%s/tags", tenant))
+		Post(path)
 
 	if err != nil {
 		return fmt.Errorf("failed to create tag: %w", err)
@@ -725,9 +850,11 @@ func (c *Client) CreateTag(ctx context.Context, tenant string, tag interface{}) 
 
 // DeleteTag deletes a tag
 func (c *Client) DeleteTag(ctx context.Context, tenant, tagName string) error {
+	path := "/api/admin/tenants/" + buildPath(tenant, "tags", tagName)
+
 	resp, err := c.http.R().
 		SetContext(ctx).
-		Delete(fmt.Sprintf("/api/admin/tenants/%s/tags/%s", tenant, tagName))
+		Delete(path)
 
 	if err != nil {
 		return fmt.Errorf("failed to delete tag: %w", err)
@@ -754,10 +881,13 @@ type Event struct {
 // EventCallback is called for each received event
 type EventCallback func(event Event) error
 
-// WatchEvents opens a Server-Sent Events stream to watch for feature flag changes
+// WatchEvents opens a Server-Sent Events stream to watch for feature flag changes.
 // The callback is called for each event received. Return an error to stop watching.
+// Implements automatic reconnection with exponential backoff on connection failures.
 func (c *Client) WatchEvents(ctx context.Context, callback EventCallback) error {
 	lastEventID := ""
+	backoff := 1 * time.Second
+	maxBackoff := 60 * time.Second
 
 	for {
 		select {
@@ -766,24 +896,46 @@ func (c *Client) WatchEvents(ctx context.Context, callback EventCallback) error 
 		default:
 		}
 
-		err := c.streamEvents(ctx, lastEventID, func(event Event) error {
+		retryDelay, err := c.streamEvents(ctx, lastEventID, func(event Event) error {
 			lastEventID = event.ID
 			return callback(event)
 		})
 
 		if err != nil {
-			// If context was cancelled, return
+			// If context was cancelled, return immediately without logging
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			// Otherwise, wait a bit and reconnect
-			time.Sleep(2 * time.Second)
+			// For EOF without context cancellation, it's a normal stream end
+			if errors.Is(err, io.EOF) {
+				// Use minimal backoff for clean disconnects
+				backoff = 2 * time.Second
+			} else {
+				// For other errors, use exponential backoff
+				backoff = time.Duration(math.Min(float64(backoff*2), float64(maxBackoff)))
+			}
+		} else {
+			// Stream ended normally, reset backoff
+			backoff = 1 * time.Second
+		}
+
+		// If server sent a retry delay via SSE retry: field, use it
+		if retryDelay > 0 {
+			backoff = retryDelay
+		}
+
+		// Wait before reconnecting
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(backoff):
 		}
 	}
 }
 
-// streamEvents opens a single SSE connection and processes events
-func (c *Client) streamEvents(ctx context.Context, lastEventID string, callback EventCallback) error {
+// streamEvents opens a single SSE connection and processes events.
+// Returns the retry delay suggested by the server (if any) and any error encountered.
+func (c *Client) streamEvents(ctx context.Context, lastEventID string, callback EventCallback) (time.Duration, error) {
 	req := c.http.R().SetContext(ctx).SetDoNotParseResponse(true)
 
 	if lastEventID != "" {
@@ -792,29 +944,54 @@ func (c *Client) streamEvents(ctx context.Context, lastEventID string, callback 
 
 	resp, err := req.Get("/api/v2/events")
 	if err != nil {
-		return fmt.Errorf("failed to connect to event stream: %w", err)
+		// Check if this is a context cancellation
+		if ctx.Err() != nil {
+			return 0, ctx.Err()
+		}
+		return 0, fmt.Errorf("failed to connect to event stream: %w", err)
 	}
 	defer resp.RawBody().Close()
 
 	if resp.StatusCode() != http.StatusOK {
-		return fmt.Errorf("event stream returned status %d", resp.StatusCode())
+		return 0, fmt.Errorf("event stream returned status %d", resp.StatusCode())
 	}
 
-	return c.parseSSE(resp.RawBody(), callback)
+	retryDelay, err := c.parseSSE(ctx, resp.RawBody(), callback)
+
+	// If context was cancelled, return context error instead of parse error
+	if ctx.Err() != nil {
+		return 0, ctx.Err()
+	}
+
+	return retryDelay, err
 }
 
-// parseSSE parses Server-Sent Events from the response body
-func (c *Client) parseSSE(body io.ReadCloser, callback EventCallback) error {
+// parseSSE parses Server-Sent Events from the response body.
+// Returns the retry delay from the server (if specified) and any error encountered.
+// Supports the SSE retry: field for dynamic reconnection timing.
+func (c *Client) parseSSE(ctx context.Context, body io.ReadCloser, callback EventCallback) (time.Duration, error) {
 	reader := bufio.NewReader(body)
 	var event Event
+	var retryDelay time.Duration
 
 	for {
+		// Check for context cancellation
+		select {
+		case <-ctx.Done():
+			return retryDelay, ctx.Err()
+		default:
+		}
+
 		line, err := reader.ReadString('\n')
 		if err != nil {
-			if err == io.EOF {
-				return nil
+			// Don't wrap EOF when context is cancelled
+			if err == io.EOF && ctx.Err() != nil {
+				return retryDelay, ctx.Err()
 			}
-			return fmt.Errorf("error reading event stream: %w", err)
+			if err == io.EOF {
+				return retryDelay, err
+			}
+			return retryDelay, fmt.Errorf("error reading event stream: %w", err)
 		}
 
 		line = strings.TrimSuffix(line, "\n")
@@ -824,7 +1001,7 @@ func (c *Client) parseSSE(body io.ReadCloser, callback EventCallback) error {
 		if line == "" {
 			if event.Data != "" {
 				if err := callback(event); err != nil {
-					return err
+					return retryDelay, err
 				}
 				event = Event{}
 			}
@@ -855,6 +1032,11 @@ func (c *Client) parseSSE(body io.ReadCloser, callback EventCallback) error {
 				event.Data += "\n"
 			}
 			event.Data += value
+		case "retry":
+			// SSE retry field specifies reconnection delay in milliseconds
+			if ms, err := strconv.ParseInt(value, 10, 64); err == nil && ms > 0 {
+				retryDelay = time.Duration(ms) * time.Millisecond
+			}
 		}
 	}
 }
@@ -886,7 +1068,7 @@ func (c *Client) Health(ctx context.Context) (*HealthStatus, error) {
 func (c *Client) Search(ctx context.Context, tenant, query string, filters []string) ([]SearchResult, error) {
 	var path string
 	if tenant != "" {
-		path = fmt.Sprintf("/api/admin/tenants/%s/search", tenant)
+		path = "/api/admin/tenants/" + buildPath(tenant, "search")
 	} else {
 		path = "/api/admin/search"
 	}
@@ -915,10 +1097,12 @@ func (c *Client) Search(ctx context.Context, tenant, query string, filters []str
 
 // Export exports tenant data
 func (c *Client) Export(ctx context.Context, tenant string) (string, error) {
+	path := "/api/admin/tenants/" + buildPath(tenant, "_export")
+
 	resp, err := c.http.R().
 		SetContext(ctx).
 		SetHeader("Accept", "application/x-ndjson").
-		Post(fmt.Sprintf("/api/admin/tenants/%s/_export", tenant))
+		Post(path)
 
 	if err != nil {
 		return "", fmt.Errorf("failed to export: %w", err)
@@ -933,6 +1117,8 @@ func (c *Client) Export(ctx context.Context, tenant string) (string, error) {
 
 // Import imports tenant data
 func (c *Client) Import(ctx context.Context, tenant, filePath string, req ImportRequest) (*ImportStatus, error) {
+	path := "/api/admin/tenants/" + buildPath(tenant, "_import")
+
 	var status ImportStatus
 
 	resp, err := c.http.R().
@@ -941,7 +1127,7 @@ func (c *Client) Import(ctx context.Context, tenant, filePath string, req Import
 		SetQueryParam("conflict", req.Conflict).
 		SetQueryParam("timezone", req.Timezone).
 		SetResult(&status).
-		Post(fmt.Sprintf("/api/admin/tenants/%s/_import", tenant))
+		Post(path)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to import: %w", err)
