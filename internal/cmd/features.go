@@ -440,6 +440,7 @@ func init() {
 
 	// List flags
 	featuresListCmd.Flags().StringVar(&featureTag, "tag", "", "Filter by tag (server-side)")
+	featuresListCmd.Flags().StringVar(&featureProject, "project", "", "Filter by project (client-side)")
 
 	// Create flags
 	featuresCreateCmd.Flags().StringVar(&featureProject, "project", "", "Project for the feature (required)")
