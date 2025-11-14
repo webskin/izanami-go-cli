@@ -82,8 +82,8 @@ func TestPrintJSON(t *testing.T) {
 
 func TestPrintTable(t *testing.T) {
 	tests := []struct {
-		name           string
-		data           interface{}
+		name             string
+		data             interface{}
 		expectedIncludes []string
 	}{
 		{
@@ -104,8 +104,8 @@ func TestPrintTable(t *testing.T) {
 			expectedIncludes: []string{"test-feature", "true", "5"},
 		},
 		{
-			name: "empty slice",
-			data: []testStruct{},
+			name:             "empty slice",
+			data:             []testStruct{},
 			expectedIncludes: []string{"No results found"},
 		},
 	}

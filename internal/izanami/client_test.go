@@ -35,7 +35,7 @@ func TestNewClient(t *testing.T) {
 		{
 			name: "valid user auth",
 			config: &Config{
-				BaseURL: "http://localhost:9000",
+				BaseURL:  "http://localhost:9000",
 				Username: "test-user",
 				Token:    "test-token",
 				Timeout:  30,

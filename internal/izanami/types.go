@@ -15,28 +15,28 @@ type Feature struct {
 
 // FeatureWithOverloads represents a feature with context-specific overloads
 type FeatureWithOverloads struct {
-	ID       string                    `json:"id"`
-	Name     string                    `json:"name"`
-	Project  string                    `json:"project"`
-	Enabled  bool                      `json:"enabled"`
-	Tags     []string                  `json:"tags,omitempty"`
-	Conditions []ActivationCondition   `json:"conditions,omitempty"`
-	Overloads map[string]interface{}   `json:"overloads,omitempty"`
+	ID         string                 `json:"id"`
+	Name       string                 `json:"name"`
+	Project    string                 `json:"project"`
+	Enabled    bool                   `json:"enabled"`
+	Tags       []string               `json:"tags,omitempty"`
+	Conditions []ActivationCondition  `json:"conditions,omitempty"`
+	Overloads  map[string]interface{} `json:"overloads,omitempty"`
 }
 
 // ActivationCondition represents a condition for feature activation
 type ActivationCondition struct {
-	Period *FeaturePeriod   `json:"period,omitempty"`
-	Rule   *ActivationRule  `json:"rule,omitempty"`
+	Period *FeaturePeriod  `json:"period,omitempty"`
+	Rule   *ActivationRule `json:"rule,omitempty"`
 }
 
 // FeaturePeriod represents temporal constraints for a feature
 type FeaturePeriod struct {
-	Begin       *time.Time    `json:"begin,omitempty"`
-	End         *time.Time    `json:"end,omitempty"`
-	HourPeriods []HourPeriod  `json:"hourPeriods,omitempty"`
-	Days        []string      `json:"days,omitempty"`
-	Timezone    string        `json:"timezone,omitempty"`
+	Begin       *time.Time   `json:"begin,omitempty"`
+	End         *time.Time   `json:"end,omitempty"`
+	HourPeriods []HourPeriod `json:"hourPeriods,omitempty"`
+	Days        []string     `json:"days,omitempty"`
+	Timezone    string       `json:"timezone,omitempty"`
 }
 
 // HourPeriod represents a time range within a day
@@ -61,13 +61,13 @@ type FeatureCheckResult struct {
 
 // Context represents a feature context (environment/override)
 type Context struct {
-	Name        string             `json:"name"`
-	Project     string             `json:"project,omitempty"`
-	Path        string             `json:"path,omitempty"`
-	IsProtected bool               `json:"protected"`
-	Global      bool               `json:"global"`
-	Overloads   []FeatureOverload  `json:"overloads,omitempty"`
-	Children    []*Context         `json:"children,omitempty"`
+	Name        string            `json:"name"`
+	Project     string            `json:"project,omitempty"`
+	Path        string            `json:"path,omitempty"`
+	IsProtected bool              `json:"protected"`
+	Global      bool              `json:"global"`
+	Overloads   []FeatureOverload `json:"overloads,omitempty"`
+	Children    []*Context        `json:"children,omitempty"`
 }
 
 // FeatureOverload represents a feature override in a context
@@ -169,13 +169,13 @@ type SearchResult struct {
 
 // ImportRequest represents an import operation request
 type ImportRequest struct {
-	Conflict         string `json:"conflict,omitempty"`         // FAIL, SKIP, OVERWRITE
-	Timezone         string `json:"timezone,omitempty"`
-	DeduceProject    bool   `json:"deduceProject,omitempty"`
-	CreateProjects   bool   `json:"create,omitempty"`
-	Project          string `json:"project,omitempty"`
-	ProjectPartSize  int    `json:"projectPartSize,omitempty"`
-	InlineScript     bool   `json:"inlineScript,omitempty"`
+	Conflict        string `json:"conflict,omitempty"` // FAIL, SKIP, OVERWRITE
+	Timezone        string `json:"timezone,omitempty"`
+	DeduceProject   bool   `json:"deduceProject,omitempty"`
+	CreateProjects  bool   `json:"create,omitempty"`
+	Project         string `json:"project,omitempty"`
+	ProjectPartSize int    `json:"projectPartSize,omitempty"`
+	InlineScript    bool   `json:"inlineScript,omitempty"`
 }
 
 // ImportStatus represents the status of an import operation
@@ -191,7 +191,7 @@ type ImportStatus struct {
 
 // HealthStatus represents the health status of Izanami
 type HealthStatus struct {
-	Database bool   `json:"database"` // true if database is healthy
+	Database bool   `json:"database"`         // true if database is healthy
 	Status   string `json:"status,omitempty"` // Optional status field
 	Version  string `json:"version,omitempty"`
 }

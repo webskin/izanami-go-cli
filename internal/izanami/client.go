@@ -668,9 +668,9 @@ func (c *Client) DeleteTag(ctx context.Context, tenant, tagName string) error {
 
 // Event represents a Server-Sent Event from Izanami
 type Event struct {
-	ID    string
-	Type  string
-	Data  string
+	ID   string
+	Type string
+	Data string
 }
 
 // EventCallback is called for each received event

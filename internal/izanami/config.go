@@ -11,16 +11,16 @@ import (
 
 // Config holds the configuration for the Izanami client
 type Config struct {
-	BaseURL    string
-	ClientID   string
+	BaseURL      string
+	ClientID     string
 	ClientSecret string
-	Username   string
-	Token      string
-	Tenant     string
-	Project    string
-	Context    string
-	Timeout    int
-	Verbose    bool
+	Username     string
+	Token        string
+	Tenant       string
+	Project      string
+	Context      string
+	Timeout      int
+	Verbose      bool
 }
 
 // LoadConfig loads configuration from multiple sources:
