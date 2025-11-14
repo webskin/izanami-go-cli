@@ -45,11 +45,9 @@ var featuresListCmd = &cobra.Command{
 	Short: "List all features",
 	Long: `List all features in a tenant.
 
-The list endpoint supports filtering by a single tag:
+The list endpoint supports filtering by:
   --tag: Filter by tag (server-side filtering by Izanami API)
-
-Note: Project filtering is NOT supported by Izanami's features list endpoint.
-To filter by project, use the project-specific endpoint or filter the JSON output.`,
+  --project: Filter by project (client-side filtering - Izanami API does not support this)`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := cfg.Validate(); err != nil {
 			return err
@@ -67,6 +65,19 @@ To filter by project, use the project-specific endpoint or filter the JSON outpu
 		features, err := client.ListFeatures(ctx, cfg.Tenant, featureTag)
 		if err != nil {
 			return err
+		}
+
+		// Client-side filtering by project
+		// Note: Izanami API does not support project filtering on the list features endpoint,
+		// so we filter the results here on the client side
+		if featureProject != "" {
+			filtered := make([]izanami.Feature, 0, len(features))
+			for _, f := range features {
+				if f.Project == featureProject {
+					filtered = append(filtered, f)
+				}
+			}
+			features = filtered
 		}
 
 		return output.Print(features, output.Format(outputFormat))
