@@ -117,25 +117,62 @@ build-all: clean
 run: build
 	./$(BUILD_DIR)/$(BINARY_NAME)
 
+# GoReleaser targets
+.PHONY: release-test
+release-test:
+	@echo "Testing release build with GoReleaser..."
+	@which goreleaser > /dev/null || (echo "GoReleaser not installed. Run: go install github.com/goreleaser/goreleaser@latest" && exit 1)
+	goreleaser release --snapshot --clean
+	@echo ""
+	@echo "✅ Release artifacts generated in dist/ folder"
+	@echo "   To test binaries:"
+	@echo "   ./dist/iz_linux_amd64_v1/iz version"
+	@echo "   ./dist/iz_darwin_amd64_v1/iz version"
+
+.PHONY: release-build
+release-build:
+	@echo "Building with GoReleaser (single platform)..."
+	@which goreleaser > /dev/null || (echo "GoReleaser not installed. Run: go install github.com/goreleaser/goreleaser@latest" && exit 1)
+	goreleaser build --snapshot --single-target --clean
+
+.PHONY: release-clean
+release-clean:
+	@echo "Cleaning GoReleaser artifacts..."
+	rm -rf dist/
+
 # Show help
 .PHONY: help
 help:
 	@echo "Izanami Go CLI - Make targets:"
 	@echo ""
-	@echo "  make build          - Build binary for current platform"
-	@echo "  make build-all      - Build binaries for all platforms"
+	@echo "Daily Development:"
+	@echo "  make build          - Build binary for current platform (fast)"
 	@echo "  make install        - Install binary to \$$GOPATH/bin"
 	@echo "  make test           - Run tests"
 	@echo "  make test-coverage  - Run tests with coverage report"
 	@echo "  make fmt            - Format code"
 	@echo "  make lint           - Lint code (requires golangci-lint)"
+	@echo "  make run            - Build and run the binary"
+	@echo ""
+	@echo "Multi-platform Builds:"
+	@echo "  make build-all      - Build binaries for all platforms (Make)"
+	@echo "  make release-build  - Build with GoReleaser (single platform)"
+	@echo "  make release-test   - Test full release build (all platforms)"
+	@echo ""
+	@echo "Maintenance:"
 	@echo "  make tidy           - Tidy Go modules"
 	@echo "  make deps           - Download dependencies"
-	@echo "  make clean          - Clean build artifacts"
-	@echo "  make run            - Build and run the binary"
+	@echo "  make clean          - Clean Make build artifacts"
+	@echo "  make release-clean  - Clean GoReleaser artifacts"
 	@echo "  make help           - Show this help message"
 	@echo ""
-	@echo "Cross-compilation targets:"
+	@echo "Release Process:"
+	@echo "  1. Test release:    make release-test"
+	@echo "  2. Tag version:     git tag v1.0.0"
+	@echo "  3. Push tag:        git push origin v1.0.0"
+	@echo "  4. GitHub Actions will automatically build and publish the release"
+	@echo ""
+	@echo "Cross-compilation targets (Make):"
 	@echo "  linux/amd64   - $(BINARY_NAME)-linux-amd64"
 	@echo "  linux/arm64   - $(BINARY_NAME)-linux-arm64"
 	@echo "  darwin/amd64  - $(BINARY_NAME)-darwin-amd64"
