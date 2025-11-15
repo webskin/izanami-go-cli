@@ -81,7 +81,7 @@ Examples:
 		session := &izanami.Session{
 			URL:       baseURL,
 			Username:  username,
-			Token:     token,
+			JwtToken:  token,
 			CreatedAt: time.Now(),
 		}
 

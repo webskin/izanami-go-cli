@@ -16,7 +16,8 @@ type Config struct {
 	ClientID     string
 	ClientSecret string
 	Username     string
-	Token        string
+	JwtToken     string // JWT token from login
+	PatToken     string // Personal Access Token
 	Tenant       string
 	Project      string
 	Context      string
@@ -30,7 +31,8 @@ type FlagValues struct {
 	ClientID     string
 	ClientSecret string
 	Username     string
-	Token        string
+	JwtToken     string
+	PatToken     string
 	Tenant       string
 	Project      string
 	Context      string
@@ -72,7 +74,8 @@ func LoadConfig() (*Config, error) {
 		ClientID:     v.GetString("client_id"),
 		ClientSecret: v.GetString("client_secret"),
 		Username:     v.GetString("username"),
-		Token:        v.GetString("token"),
+		JwtToken:     v.GetString("jwt_token"),
+		PatToken:     v.GetString("pat_token"),
 		Tenant:       v.GetString("tenant"),
 		Project:      v.GetString("project"),
 		Context:      v.GetString("context"),
@@ -97,8 +100,11 @@ func (c *Config) MergeWithFlags(flags FlagValues) {
 	if flags.Username != "" {
 		c.Username = flags.Username
 	}
-	if flags.Token != "" {
-		c.Token = flags.Token
+	if flags.JwtToken != "" {
+		c.JwtToken = flags.JwtToken
+	}
+	if flags.PatToken != "" {
+		c.PatToken = flags.PatToken
 	}
 	if flags.Tenant != "" {
 		c.Tenant = flags.Tenant
@@ -123,12 +129,12 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("base URL is required (set IZ_BASE_URL or --url)")
 	}
 
-	// Check authentication: either client ID/secret or username/token
+	// Check authentication: either client ID/secret, username/jwtToken, or patToken
 	hasClientAuth := c.ClientID != "" && c.ClientSecret != ""
-	hasUserAuth := c.Username != "" && c.Token != ""
+	hasUserAuth := (c.Username != "" && c.JwtToken != "") || c.PatToken != ""
 
 	if !hasClientAuth && !hasUserAuth {
-		return fmt.Errorf("authentication required: either client_id/client_secret or username/token must be set")
+		return fmt.Errorf("authentication required: either client_id/client_secret, username/jwt_token, or pat_token must be set")
 	}
 
 	return nil
@@ -140,8 +146,8 @@ func (c *Config) ValidateAdminAuth() error {
 		return fmt.Errorf("base URL is required (set IZ_BASE_URL or --url)")
 	}
 
-	if c.Username == "" || c.Token == "" {
-		return fmt.Errorf("admin operations require username and token (set IZ_USERNAME and IZ_TOKEN)")
+	if (c.Username == "" || c.JwtToken == "") && c.PatToken == "" {
+		return fmt.Errorf("admin operations require username/jwt_token or pat_token (set IZ_USERNAME and IZ_JWT_TOKEN, or IZ_PAT_TOKEN)")
 	}
 
 	return nil
@@ -199,7 +205,10 @@ base_url: "https://izanami.example.com"
 
 # Admin authentication (for admin operations)
 # username: "your-username"
-# token: "your-personal-access-token"
+# jwt_token: "your-jwt-token"
+
+# Personal Access Token (alternative to username/jwt_token)
+# pat_token: "your-personal-access-token"
 
 # Default tenant
 # tenant: "default"

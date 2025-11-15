@@ -15,7 +15,8 @@ var (
 	clientID     string
 	clientSecret string
 	username     string
-	token        string
+	jwtToken     string
+	patToken     string
 	tenant       string
 	project      string
 	contextPath  string
@@ -80,7 +81,8 @@ For more information, visit: https://github.com/MAIF/izanami`,
 			ClientID:     clientID,
 			ClientSecret: clientSecret,
 			Username:     username,
-			Token:        token,
+			JwtToken:     jwtToken,
+			PatToken:     patToken,
 			Tenant:       tenant,
 			Project:      project,
 			Context:      contextPath,
@@ -105,7 +107,8 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&clientID, "client-id", "", "Client ID for authentication (env: IZ_CLIENT_ID)")
 	rootCmd.PersistentFlags().StringVar(&clientSecret, "client-secret", "", "Client secret for authentication (env: IZ_CLIENT_SECRET)")
 	rootCmd.PersistentFlags().StringVar(&username, "username", "", "Username for admin authentication (env: IZ_USERNAME)")
-	rootCmd.PersistentFlags().StringVar(&token, "token", "", "Personal access token for admin authentication (env: IZ_TOKEN)")
+	rootCmd.PersistentFlags().StringVar(&jwtToken, "jwt-token", "", "JWT token for admin authentication (env: IZ_JWT_TOKEN)")
+	rootCmd.PersistentFlags().StringVar(&patToken, "pat-token", "", "Personal access token for admin authentication (env: IZ_PAT_TOKEN)")
 	rootCmd.PersistentFlags().StringVar(&tenant, "tenant", "", "Default tenant (env: IZ_TENANT)")
 	rootCmd.PersistentFlags().StringVar(&project, "project", "", "Default project (env: IZ_PROJECT)")
 	rootCmd.PersistentFlags().StringVar(&contextPath, "context", "", "Default context path (env: IZ_CONTEXT)")

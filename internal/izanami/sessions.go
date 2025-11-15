@@ -15,7 +15,7 @@ import (
 type Session struct {
 	URL       string    `yaml:"url"`
 	Username  string    `yaml:"username"`
-	Token     string    `yaml:"token"`
+	JwtToken  string    `yaml:"jwtToken"`
 	CreatedAt time.Time `yaml:"created_at"`
 }
 
@@ -174,7 +174,7 @@ func LoadConfigFromSession() (*Config, string, error) {
 	config := &Config{
 		BaseURL:  session.URL,
 		Username: session.Username,
-		Token:    session.Token,
+		JwtToken: session.JwtToken,
 		Timeout:  30,
 	}
 

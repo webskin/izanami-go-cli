@@ -67,7 +67,8 @@ func newClientInternal(config *Config) (*Client, error) {
 		ClientID:     config.ClientID,
 		ClientSecret: config.ClientSecret,
 		Username:     config.Username,
-		Token:        config.Token,
+		JwtToken:     config.JwtToken,
+		PatToken:     config.PatToken,
 		Tenant:       config.Tenant,
 		Project:      config.Project,
 		Context:      config.Context,
@@ -98,16 +99,20 @@ func newClientInternal(config *Config) (*Client, error) {
 	}
 
 	// Set authentication
-	if configCopy.ClientID != "" && configCopy.ClientSecret != "" {
+	// Priority: PAT token > Client API key > JWT cookie
+	if configCopy.PatToken != "" {
+		// Personal Access Token authentication (Bearer token)
+		client.SetAuthToken(configCopy.PatToken)
+	} else if configCopy.ClientID != "" && configCopy.ClientSecret != "" {
 		// Client API key authentication
 		client.SetHeader("Izanami-Client-Id", configCopy.ClientID)
 		client.SetHeader("Izanami-Client-Secret", configCopy.ClientSecret)
-	} else if configCopy.Username != "" && configCopy.Token != "" {
+	} else if configCopy.Username != "" && configCopy.JwtToken != "" {
 		// Admin JWT cookie authentication
 		// Izanami expects the JWT token in a cookie named "token"
 		cookie := &http.Cookie{
 			Name:  "token",
-			Value: configCopy.Token,
+			Value: configCopy.JwtToken,
 			Path:  "/",
 		}
 		client.SetCookie(cookie)
@@ -409,10 +414,21 @@ func (c *Client) DeleteFeature(ctx context.Context, tenant, featureID string) er
 }
 
 // CheckFeature checks if a feature is active (client API)
+// Note: Feature check always uses CLIENT_ID/CLIENT_SECRET, not PAT token
 func (c *Client) CheckFeature(ctx context.Context, featureID, user, contextPath string) (*FeatureCheckResult, error) {
 	path := "/api/v2/features/" + buildPath(featureID)
 
+	// For feature check, we need to use CLIENT_ID/CLIENT_SECRET instead of PAT token
+	// Create a request with the appropriate authentication
 	req := c.http.R().SetContext(ctx).SetResult(&FeatureCheckResult{})
+
+	// Override PAT token authentication with CLIENT_ID/CLIENT_SECRET if available
+	if c.config.ClientID != "" && c.config.ClientSecret != "" {
+		req.SetHeader("Izanami-Client-Id", c.config.ClientID)
+		req.SetHeader("Izanami-Client-Secret", c.config.ClientSecret)
+		// Remove Authorization header if it was set by PAT token
+		req.SetHeader("Authorization", "")
+	}
 
 	if user != "" {
 		req.SetQueryParam("user", user)

@@ -166,7 +166,7 @@ You will need to login again to use this session.`,
 		}
 
 		// Remove the token but keep the session
-		session.Token = ""
+		session.JwtToken = ""
 		session.CreatedAt = time.Time{} // Zero time
 
 		if err := sessions.Save(); err != nil {
