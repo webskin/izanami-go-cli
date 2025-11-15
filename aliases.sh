@@ -104,25 +104,27 @@ alias izgr='git log --oneline -5'
 
 # Create and push tag (usage: iztag v1.0.0)
 iztag() {
-    if [ -z "$1" ]; then
+    local tag_version="$1"
+    if [[ -z "$tag_version" ]]; then
         echo "Usage: iztag v1.0.0"
         return 1
     fi
-    git tag -a "$1" -m "Release $1"
-    git push origin "$1"
-    echo -e "${GREEN}✅ Tag $1 created and pushed!${NC}"
+    git tag -a "$tag_version" -m "Release $tag_version"
+    git push origin "$tag_version"
+    echo -e "${GREEN}✅ Tag $tag_version created and pushed!${NC}"
     echo "Check release at: https://github.com/webskin/izanami-go-cli/actions"
 }
 
 # Delete local and remote tag (usage: izuntag v1.0.0)
 izuntag() {
-    if [ -z "$1" ]; then
+    local tag_version="$1"
+    if [[ -z "$tag_version" ]]; then
         echo "Usage: izuntag v1.0.0"
         return 1
     fi
-    git push --delete origin "$1" 2>/dev/null
-    git tag -d "$1" 2>/dev/null
-    echo -e "${GREEN}✅ Tag $1 deleted${NC}"
+    git push --delete origin "$tag_version" 2>/dev/null
+    git tag -d "$tag_version" 2>/dev/null
+    echo -e "${GREEN}✅ Tag $tag_version deleted${NC}"
 }
 
 # ============================================================================
