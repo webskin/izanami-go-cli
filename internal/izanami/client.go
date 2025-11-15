@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/go-resty/resty/v2"
+	errmsg "github.com/webskin/izanami-go-cli/internal/errors"
 )
 
 const (
@@ -52,7 +53,7 @@ func NewClient(config *Config) (*Client, error) {
 // NewClientNoAuth creates a client without authentication validation (for health checks)
 func NewClientNoAuth(config *Config) (*Client, error) {
 	if config.BaseURL == "" {
-		return nil, fmt.Errorf("base URL is required")
+		return nil, fmt.Errorf(errmsg.MsgBaseURLRequired)
 	}
 
 	return newClientInternal(config)
@@ -272,11 +273,11 @@ func (c *Client) Login(ctx context.Context, username, password string) (string, 
 		Post("/api/admin/login")
 
 	if err != nil {
-		return "", fmt.Errorf("login request failed: %w", err)
+		return "", fmt.Errorf("%s: %w", errmsg.MsgLoginRequestFailed, err)
 	}
 
 	if resp.StatusCode() != http.StatusOK {
-		return "", fmt.Errorf("login failed (status %d): invalid credentials", resp.StatusCode())
+		return "", fmt.Errorf(errmsg.MsgLoginFailed, resp.StatusCode())
 	}
 
 	// Extract JWT token from Set-Cookie header
@@ -286,7 +287,7 @@ func (c *Client) Login(ctx context.Context, username, password string) (string, 
 		}
 	}
 
-	return "", fmt.Errorf("no JWT token in login response")
+	return "", fmt.Errorf(errmsg.MsgNoJWTTokenInResponse)
 }
 
 // ============================================================================
@@ -306,7 +307,7 @@ func (c *Client) ListFeatures(ctx context.Context, tenant string, tag string) ([
 
 	resp, err := req.Get(path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list features: %w", err)
+		return nil, fmt.Errorf("%s: %w", errmsg.MsgFailedToListFeatures, err)
 	}
 
 	if resp.StatusCode() != http.StatusOK {
@@ -328,7 +329,7 @@ func (c *Client) GetFeature(ctx context.Context, tenant, featureID string) (*Fea
 		Get(path)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to get feature: %w", err)
+		return nil, fmt.Errorf("%s: %w", errmsg.MsgFailedToGetFeature, err)
 	}
 
 	if resp.StatusCode() != http.StatusOK {
@@ -352,7 +353,7 @@ func (c *Client) CreateFeature(ctx context.Context, tenant, project string, feat
 		Post(path)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to create feature: %w", err)
+		return nil, fmt.Errorf("%s: %w", errmsg.MsgFailedToCreateFeature, err)
 	}
 
 	if resp.StatusCode() != http.StatusCreated && resp.StatusCode() != http.StatusOK {
@@ -378,7 +379,7 @@ func (c *Client) UpdateFeature(ctx context.Context, tenant, featureID string, fe
 
 	resp, err := req.Put(path)
 	if err != nil {
-		return fmt.Errorf("failed to update feature: %w", err)
+		return fmt.Errorf("%s: %w", errmsg.MsgFailedToUpdateFeature, err)
 	}
 
 	if resp.StatusCode() != http.StatusOK && resp.StatusCode() != http.StatusNoContent {
@@ -397,7 +398,7 @@ func (c *Client) DeleteFeature(ctx context.Context, tenant, featureID string) er
 		Delete(path)
 
 	if err != nil {
-		return fmt.Errorf("failed to delete feature: %w", err)
+		return fmt.Errorf("%s: %w", errmsg.MsgFailedToDeleteFeature, err)
 	}
 
 	if resp.StatusCode() != http.StatusOK && resp.StatusCode() != http.StatusNoContent && resp.StatusCode() != http.StatusNotFound {
@@ -422,7 +423,7 @@ func (c *Client) CheckFeature(ctx context.Context, featureID, user, contextPath 
 
 	resp, err := req.Get(path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to check feature: %w", err)
+		return nil, fmt.Errorf("%s: %w", errmsg.MsgFailedToCheckFeature, err)
 	}
 
 	if resp.StatusCode() != http.StatusOK {
@@ -454,7 +455,7 @@ func (c *Client) ListContexts(ctx context.Context, tenant, project string, all b
 
 	resp, err := req.Get(path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list contexts: %w", err)
+		return nil, fmt.Errorf("%s: %w", errmsg.MsgFailedToListContexts, err)
 	}
 
 	if resp.StatusCode() != http.StatusOK {
@@ -490,7 +491,7 @@ func (c *Client) CreateContext(ctx context.Context, tenant, project, name, paren
 		Post(path)
 
 	if err != nil {
-		return fmt.Errorf("failed to create context: %w", err)
+		return fmt.Errorf("%s: %w", errmsg.MsgFailedToCreateContext, err)
 	}
 
 	if resp.StatusCode() != http.StatusCreated && resp.StatusCode() != http.StatusOK {
@@ -514,7 +515,7 @@ func (c *Client) DeleteContext(ctx context.Context, tenant, project, contextPath
 		Delete(path)
 
 	if err != nil {
-		return fmt.Errorf("failed to delete context: %w", err)
+		return fmt.Errorf("%s: %w", errmsg.MsgFailedToDeleteContext, err)
 	}
 
 	if resp.StatusCode() != http.StatusOK && resp.StatusCode() != http.StatusNoContent {
@@ -543,7 +544,7 @@ func (c *Client) ListTenants(ctx context.Context, right *RightLevel) ([]Tenant, 
 	resp, err := req.Get("/api/admin/tenants")
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to list tenants: %w", err)
+		return nil, fmt.Errorf("%s: %w", errmsg.MsgFailedToListTenants, err)
 	}
 
 	if resp.StatusCode() != http.StatusOK {
@@ -565,7 +566,7 @@ func (c *Client) GetTenant(ctx context.Context, name string) (*Tenant, error) {
 		Get(path)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to get tenant: %w", err)
+		return nil, fmt.Errorf("%s: %w", errmsg.MsgFailedToGetTenant, err)
 	}
 
 	if resp.StatusCode() != http.StatusOK {
@@ -585,7 +586,7 @@ func (c *Client) CreateTenant(ctx context.Context, tenant interface{}) error {
 		Post("/api/admin/tenants")
 
 	if err != nil {
-		return fmt.Errorf("failed to create tenant: %w", err)
+		return fmt.Errorf("%s: %w", errmsg.MsgFailedToCreateTenant, err)
 	}
 
 	if resp.StatusCode() != http.StatusCreated && resp.StatusCode() != http.StatusOK {
@@ -604,7 +605,7 @@ func (c *Client) DeleteTenant(ctx context.Context, name string) error {
 		Delete(path)
 
 	if err != nil {
-		return fmt.Errorf("failed to delete tenant: %w", err)
+		return fmt.Errorf("%s: %w", errmsg.MsgFailedToDeleteTenant, err)
 	}
 
 	if resp.StatusCode() != http.StatusOK && resp.StatusCode() != http.StatusNoContent {
@@ -629,7 +630,7 @@ func (c *Client) ListProjects(ctx context.Context, tenant string) ([]Project, er
 		Get(path)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to list projects: %w", err)
+		return nil, fmt.Errorf("%s: %w", errmsg.MsgFailedToListProjects, err)
 	}
 
 	if resp.StatusCode() != http.StatusOK {
@@ -650,7 +651,7 @@ func (c *Client) GetProject(ctx context.Context, tenant, project string) (*Proje
 		Get(path)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to get project: %w", err)
+		return nil, fmt.Errorf("%s: %w", errmsg.MsgFailedToGetProject, err)
 	}
 
 	if resp.StatusCode() != http.StatusOK {
@@ -672,7 +673,7 @@ func (c *Client) CreateProject(ctx context.Context, tenant string, project inter
 		Post(path)
 
 	if err != nil {
-		return fmt.Errorf("failed to create project: %w", err)
+		return fmt.Errorf("%s: %w", errmsg.MsgFailedToCreateProject, err)
 	}
 
 	if resp.StatusCode() != http.StatusCreated && resp.StatusCode() != http.StatusOK {
@@ -691,7 +692,7 @@ func (c *Client) DeleteProject(ctx context.Context, tenant, project string) erro
 		Delete(path)
 
 	if err != nil {
-		return fmt.Errorf("failed to delete project: %w", err)
+		return fmt.Errorf("%s: %w", errmsg.MsgFailedToDeleteProject, err)
 	}
 
 	if resp.StatusCode() != http.StatusOK && resp.StatusCode() != http.StatusNoContent {
@@ -716,7 +717,7 @@ func (c *Client) ListAPIKeys(ctx context.Context, tenant string) ([]APIKey, erro
 		Get(path)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to list API keys: %w", err)
+		return nil, fmt.Errorf("%s: %w", errmsg.MsgFailedToListAPIKeys, err)
 	}
 
 	if resp.StatusCode() != http.StatusOK {
@@ -732,7 +733,7 @@ func (c *Client) ListAPIKeys(ctx context.Context, tenant string) ([]APIKey, erro
 func (c *Client) GetAPIKey(ctx context.Context, tenant, clientID string) (*APIKey, error) {
 	keys, err := c.ListAPIKeys(ctx, tenant)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get API key: %w", err)
+		return nil, fmt.Errorf("%s: %w", errmsg.MsgFailedToGetAPIKey, err)
 	}
 
 	// Find the key with matching clientID
@@ -763,7 +764,7 @@ func (c *Client) CreateAPIKey(ctx context.Context, tenant string, key interface{
 		Post(path)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to create API key: %w", err)
+		return nil, fmt.Errorf("%s: %w", errmsg.MsgFailedToCreateAPIKey, err)
 	}
 
 	if resp.StatusCode() != http.StatusCreated && resp.StatusCode() != http.StatusOK {
@@ -785,7 +786,7 @@ func (c *Client) UpdateAPIKey(ctx context.Context, tenant, clientID string, key 
 		Put(path)
 
 	if err != nil {
-		return fmt.Errorf("failed to update API key: %w", err)
+		return fmt.Errorf("%s: %w", errmsg.MsgFailedToUpdateAPIKey, err)
 	}
 
 	if resp.StatusCode() != http.StatusOK && resp.StatusCode() != http.StatusNoContent {
@@ -804,7 +805,7 @@ func (c *Client) DeleteAPIKey(ctx context.Context, tenant, clientID string) erro
 		Delete(path)
 
 	if err != nil {
-		return fmt.Errorf("failed to delete API key: %w", err)
+		return fmt.Errorf("%s: %w", errmsg.MsgFailedToDeleteAPIKey, err)
 	}
 
 	if resp.StatusCode() != http.StatusOK && resp.StatusCode() != http.StatusNoContent {
@@ -829,7 +830,7 @@ func (c *Client) ListTags(ctx context.Context, tenant string) ([]Tag, error) {
 		Get(path)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to list tags: %w", err)
+		return nil, fmt.Errorf("%s: %w", errmsg.MsgFailedToListTags, err)
 	}
 
 	if resp.StatusCode() != http.StatusOK {
@@ -851,7 +852,7 @@ func (c *Client) CreateTag(ctx context.Context, tenant string, tag interface{}) 
 		Post(path)
 
 	if err != nil {
-		return fmt.Errorf("failed to create tag: %w", err)
+		return fmt.Errorf("%s: %w", errmsg.MsgFailedToCreateTag, err)
 	}
 
 	if resp.StatusCode() != http.StatusCreated && resp.StatusCode() != http.StatusOK {
@@ -870,7 +871,7 @@ func (c *Client) DeleteTag(ctx context.Context, tenant, tagName string) error {
 		Delete(path)
 
 	if err != nil {
-		return fmt.Errorf("failed to delete tag: %w", err)
+		return fmt.Errorf("%s: %w", errmsg.MsgFailedToDeleteTag, err)
 	}
 
 	if resp.StatusCode() != http.StatusOK && resp.StatusCode() != http.StatusNoContent {
@@ -961,12 +962,12 @@ func (c *Client) streamEvents(ctx context.Context, lastEventID string, callback 
 		if ctx.Err() != nil {
 			return 0, ctx.Err()
 		}
-		return 0, fmt.Errorf("failed to connect to event stream: %w", err)
+		return 0, fmt.Errorf("%s: %w", errmsg.MsgFailedToConnectToEventStream, err)
 	}
 	defer resp.RawBody().Close()
 
 	if resp.StatusCode() != http.StatusOK {
-		return 0, fmt.Errorf("event stream returned status %d", resp.StatusCode())
+		return 0, fmt.Errorf(errmsg.MsgEventStreamReturnedStatus, resp.StatusCode())
 	}
 
 	retryDelay, err := c.parseSSE(ctx, resp.RawBody(), callback)
@@ -1000,7 +1001,7 @@ func readSSELine(ctx context.Context, reader *bufio.Reader) (string, error) {
 		if err == io.EOF {
 			return "", err
 		}
-		return "", fmt.Errorf("error reading event stream: %w", err)
+		return "", fmt.Errorf("%s: %w", errmsg.MsgErrorReadingEventStream, err)
 	}
 
 	line = strings.TrimSuffix(line, "\n")
@@ -1103,7 +1104,7 @@ func (c *Client) Health(ctx context.Context) (*HealthStatus, error) {
 		Get("/api/_health")
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to check health: %w", err)
+		return nil, fmt.Errorf("%s: %w", errmsg.MsgFailedToCheckHealth, err)
 	}
 
 	if resp.StatusCode() != http.StatusOK {
@@ -1133,7 +1134,7 @@ func (c *Client) Search(ctx context.Context, tenant, query string, filters []str
 
 	resp, err := req.Get(path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to search: %w", err)
+		return nil, fmt.Errorf("%s: %w", errmsg.MsgFailedToSearch, err)
 	}
 
 	if resp.StatusCode() != http.StatusOK {
@@ -1154,7 +1155,7 @@ func (c *Client) Export(ctx context.Context, tenant string) (string, error) {
 		Post(path)
 
 	if err != nil {
-		return "", fmt.Errorf("failed to export: %w", err)
+		return "", fmt.Errorf("%s: %w", errmsg.MsgFailedToExport, err)
 	}
 
 	if resp.StatusCode() != http.StatusOK {
@@ -1205,7 +1206,7 @@ func (c *Client) Import(ctx context.Context, tenant, filePath string, req Import
 	resp, err := httpReq.Post(path)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to import: %w", err)
+		return nil, fmt.Errorf("%s: %w", errmsg.MsgFailedToImport, err)
 	}
 
 	if resp.StatusCode() != http.StatusOK && resp.StatusCode() != http.StatusCreated {
