@@ -81,7 +81,7 @@ var keysGetCmd = &cobra.Command{
 		clientID := args[0]
 
 		if cfg.Tenant == "" {
-			return fmt.Errorf("tenant is required (use --tenant flag)")
+			return fmt.Errorf(errMsgTenantRequired)
 		}
 
 		client, err := izanami.NewClient(cfg)
@@ -108,7 +108,7 @@ var keysCreateCmd = &cobra.Command{
 		name := args[0]
 
 		if cfg.Tenant == "" {
-			return fmt.Errorf("tenant is required (use --tenant flag)")
+			return fmt.Errorf(errMsgTenantRequired)
 		}
 
 		client, err := izanami.NewClient(cfg)
@@ -165,7 +165,7 @@ var keysUpdateCmd = &cobra.Command{
 		clientID := args[0]
 
 		if cfg.Tenant == "" {
-			return fmt.Errorf("tenant is required (use --tenant flag)")
+			return fmt.Errorf(errMsgTenantRequired)
 		}
 
 		client, err := izanami.NewClient(cfg)
@@ -215,7 +215,7 @@ var keysDeleteCmd = &cobra.Command{
 		clientID := args[0]
 
 		if cfg.Tenant == "" {
-			return fmt.Errorf("tenant is required (use --tenant flag)")
+			return fmt.Errorf(errMsgTenantRequired)
 		}
 
 		client, err := izanami.NewClient(cfg)
