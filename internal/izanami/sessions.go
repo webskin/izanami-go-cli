@@ -171,6 +171,11 @@ func LoadConfigFromSession() (*Config, string, error) {
 		return nil, "", err
 	}
 
+	// Validate that the session has a valid JWT token
+	if session.JwtToken == "" {
+		return nil, "", fmt.Errorf("active session has no JWT token (session may be invalid)")
+	}
+
 	config := &Config{
 		BaseURL:  session.URL,
 		Username: session.Username,

@@ -90,6 +90,11 @@ For more information, visit: https://github.com/MAIF/izanami`,
 			Verbose:      verbose,
 		})
 
+		// Log authentication mode in verbose mode
+		if cfg.Verbose {
+			logAuthenticationMode(cfg)
+		}
+
 		return nil
 	},
 }
@@ -128,4 +133,27 @@ func GetOutputFormat() izanami.OutputFormat {
 		return izanami.OutputTable
 	}
 	return izanami.OutputJSON
+}
+
+// logAuthenticationMode logs the available authentication modes
+func logAuthenticationMode(cfg *izanami.Config) {
+	var adminAuth, clientAuth string
+
+	// Check admin authentication (for admin operations)
+	if cfg.PatToken != "" {
+		adminAuth = "Personal Access Token (PAT)"
+	} else if cfg.Username != "" && cfg.JwtToken != "" {
+		adminAuth = "JWT Cookie (session)"
+	} else {
+		adminAuth = "none"
+	}
+
+	// Check client authentication (for feature checks)
+	if cfg.ClientID != "" && cfg.ClientSecret != "" {
+		clientAuth = "Client API Key"
+	} else {
+		clientAuth = "none"
+	}
+
+	fmt.Fprintf(os.Stderr, "[verbose] Authentication - Admin operations: %s, Feature checks: %s\n", adminAuth, clientAuth)
 }

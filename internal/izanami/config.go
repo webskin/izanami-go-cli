@@ -129,12 +129,17 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("base URL is required (set IZ_BASE_URL or --url)")
 	}
 
-	// Check authentication: either client ID/secret, username/jwtToken, or patToken
+	// PAT token requires username
+	if c.PatToken != "" && c.Username == "" {
+		return fmt.Errorf("username is required when using PAT token (set IZ_USERNAME or --username)")
+	}
+
+	// Check authentication: either client ID/secret, username/jwtToken, or patToken+username
 	hasClientAuth := c.ClientID != "" && c.ClientSecret != ""
-	hasUserAuth := (c.Username != "" && c.JwtToken != "") || c.PatToken != ""
+	hasUserAuth := (c.Username != "" && c.JwtToken != "") || (c.Username != "" && c.PatToken != "")
 
 	if !hasClientAuth && !hasUserAuth {
-		return fmt.Errorf("authentication required: either client_id/client_secret, username/jwt_token, or pat_token must be set")
+		return fmt.Errorf("authentication required: either client_id/client_secret, username/jwt_token, or username/pat_token must be set")
 	}
 
 	return nil
@@ -204,10 +209,12 @@ base_url: "https://izanami.example.com"
 # client_secret: "your-client-secret"
 
 # Admin authentication (for admin operations)
+# Option 1: Username + JWT token (from login)
 # username: "your-username"
 # jwt_token: "your-jwt-token"
 
-# Personal Access Token (alternative to username/jwt_token)
+# Option 2: Username + Personal Access Token (requires username)
+# username: "your-username"
 # pat_token: "your-personal-access-token"
 
 # Default tenant

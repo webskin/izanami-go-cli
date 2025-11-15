@@ -101,8 +101,9 @@ func newClientInternal(config *Config) (*Client, error) {
 	// Set authentication
 	// Priority: PAT token > Client API key > JWT cookie
 	if configCopy.PatToken != "" {
-		// Personal Access Token authentication (Bearer token)
-		client.SetAuthToken(configCopy.PatToken)
+		// Personal Access Token authentication (Basic auth with username:token)
+		// Izanami expects: Authorization: Basic base64(username:token)
+		client.SetBasicAuth(configCopy.Username, configCopy.PatToken)
 	} else if configCopy.ClientID != "" && configCopy.ClientSecret != "" {
 		// Client API key authentication
 		client.SetHeader("Izanami-Client-Id", configCopy.ClientID)
