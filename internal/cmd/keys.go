@@ -11,6 +11,10 @@ import (
 	"github.com/webskin/izanami-go-cli/internal/output"
 )
 
+const (
+	errMsgTenantRequired = "tenant is required (use --tenant flag)"
+)
+
 var (
 	keyName        string
 	keyDescription string
@@ -45,7 +49,7 @@ var keysListCmd = &cobra.Command{
 	Short: "List all API keys in a tenant",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if cfg.Tenant == "" {
-			return fmt.Errorf("tenant is required (use --tenant flag)")
+			return fmt.Errorf(errMsgTenantRequired)
 		}
 
 		client, err := izanami.NewClient(cfg)
