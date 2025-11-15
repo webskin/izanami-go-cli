@@ -596,6 +596,28 @@ func (c *Client) CreateTenant(ctx context.Context, tenant interface{}) error {
 	return nil
 }
 
+// UpdateTenant updates an existing tenant
+// The tenant parameter accepts either a *Tenant or any compatible struct
+func (c *Client) UpdateTenant(ctx context.Context, name string, tenant interface{}) error {
+	path := apiAdminTenants + buildPath(name)
+
+	resp, err := c.http.R().
+		SetContext(ctx).
+		SetHeader("Content-Type", "application/json").
+		SetBody(tenant).
+		Put(path)
+
+	if err != nil {
+		return fmt.Errorf("%s: %w", errmsg.MsgFailedToUpdateTenant, err)
+	}
+
+	if resp.StatusCode() != http.StatusOK && resp.StatusCode() != http.StatusNoContent {
+		return c.handleError(resp)
+	}
+
+	return nil
+}
+
 // DeleteTenant deletes a tenant
 func (c *Client) DeleteTenant(ctx context.Context, name string) error {
 	path := apiAdminTenants + buildPath(name)

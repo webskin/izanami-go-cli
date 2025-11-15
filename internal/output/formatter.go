@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"reflect"
+	"strings"
 
 	"github.com/olekukonko/tablewriter"
 )
@@ -17,6 +18,11 @@ const (
 	JSON  Format = "json"
 	Table Format = "table"
 )
+
+// TableFormatter is an interface for types that want custom table formatting
+type TableFormatter interface {
+	FormatForTable() string
+}
 
 // Print outputs data in the specified format
 func Print(data interface{}, format Format) error {
@@ -262,16 +268,21 @@ func formatSliceValue(val reflect.Value) string {
 		return formatStructSlice(val)
 	}
 
-	// Format as comma-separated list for simple types
-	if val.Len() <= 5 {
+	// Format as comma-separated list for simple types (≤3 items)
+	if val.Len() <= 3 {
 		return formatShortSlice(val)
 	}
 
 	return fmt.Sprintf("[%d items]", val.Len())
 }
 
-// formatStructSlice formats a slice of structs in a compact, readable way
+// formatStructSlice formats a slice of structs in a compact, single-line way
 func formatStructSlice(val reflect.Value) string {
+	// Show count only for lists > 3 items
+	if val.Len() > 3 {
+		return fmt.Sprintf("[%d items]", val.Len())
+	}
+
 	var items []string
 
 	for i := 0; i < val.Len(); i++ {
@@ -287,9 +298,18 @@ func formatStructSlice(val reflect.Value) string {
 			continue
 		}
 
-		// Try to extract key identifying fields (name, id, etc.)
+		// Check if the element implements TableFormatter interface
+		if elem.CanInterface() {
+			if formatter, ok := elem.Interface().(TableFormatter); ok {
+				items = append(items, formatter.FormatForTable())
+				continue
+			}
+		}
+
+		// Fallback: extract key identifying fields (name, enabled, etc.)
 		typ := elem.Type()
 		fields := make(map[string]string)
+		var enabled string
 
 		for j := 0; j < elem.NumField(); j++ {
 			field := typ.Field(j)
@@ -302,10 +322,19 @@ func formatStructSlice(val reflect.Value) string {
 
 			// Capture key fields for compact display
 			switch fieldName {
-			case "id", "name", "description":
+			case "name":
 				val := formatValue(fieldVal)
 				if val != "" {
 					fields[fieldName] = val
+				}
+			case "enabled":
+				// Track enabled status
+				if fieldVal.Kind() == reflect.Bool {
+					if fieldVal.Bool() {
+						enabled = "enabled"
+					} else {
+						enabled = "disabled"
+					}
 				}
 			}
 		}
@@ -314,15 +343,10 @@ func formatStructSlice(val reflect.Value) string {
 		var itemStr string
 		if name, ok := fields["name"]; ok && name != "" {
 			itemStr = name
-			if id, ok := fields["id"]; ok && id != "" {
-				itemStr += " (" + id + ")"
+			// Add enabled/disabled status if present
+			if enabled != "" {
+				itemStr += " (" + enabled + ")"
 			}
-		} else if id, ok := fields["id"]; ok && id != "" {
-			itemStr = id
-		}
-
-		if desc, ok := fields["description"]; ok && desc != "" && itemStr != "" {
-			itemStr += " - " + desc
 		}
 
 		if itemStr != "" {
@@ -334,15 +358,8 @@ func formatStructSlice(val reflect.Value) string {
 		return "[]"
 	}
 
-	// Format as newline-separated list for better readability
-	result := ""
-	for i, item := range items {
-		if i > 0 {
-			result += "\n  "
-		}
-		result += "- " + item
-	}
-	return "\n  " + result
+	// Format as comma-separated list (single line)
+	return strings.Join(items, ", ")
 }
 
 // formatShortSlice formats a small slice as a comma-separated list

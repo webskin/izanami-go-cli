@@ -1,6 +1,9 @@
 package izanami
 
-import "time"
+import (
+	"sort"
+	"time"
+)
 
 // Feature represents a feature flag in Izanami
 type Feature struct {
@@ -70,6 +73,83 @@ type Context struct {
 	Children    []*Context        `json:"children,omitempty"`
 }
 
+// ContextTableView represents a context for table display with reordered columns
+type ContextTableView struct {
+	Path        string            `json:"path"`
+	Name        string            `json:"name"`
+	Project     string            `json:"project,omitempty"`
+	IsProtected bool              `json:"protected"`
+	Global      bool              `json:"global"`
+	Overloads   []FeatureOverload `json:"overloads,omitempty"`
+}
+
+// ToTableView converts a Context to ContextTableView for table display
+func (c *Context) ToTableView(parentPath string) ContextTableView {
+	// Build the full path
+	path := c.Name
+	if parentPath != "" {
+		path = parentPath + "/" + c.Name
+	}
+
+	// Override with the context's Path field if it's set
+	if c.Path != "" {
+		path = c.Path
+	}
+
+	return ContextTableView{
+		Path:        path,
+		Name:        c.Name,
+		Project:     c.Project,
+		IsProtected: c.IsProtected,
+		Global:      c.Global,
+		Overloads:   c.Overloads,
+	}
+}
+
+// FlattenContextsForTable converts a hierarchical context list to a flat list
+// of ContextTableView with proper paths, sorted by Global (false first) then Path
+func FlattenContextsForTable(contexts []Context) []ContextTableView {
+	var result []ContextTableView
+
+	var flatten func(ctx Context, parentPath string)
+	flatten = func(ctx Context, parentPath string) {
+		// Add this context
+		result = append(result, ctx.ToTableView(parentPath))
+
+		// Build the path for children
+		childPath := ctx.Name
+		if parentPath != "" {
+			childPath = parentPath + "/" + ctx.Name
+		}
+		if ctx.Path != "" {
+			childPath = ctx.Path
+		}
+
+		// Recursively add children
+		for _, child := range ctx.Children {
+			if child != nil {
+				flatten(*child, childPath)
+			}
+		}
+	}
+
+	for _, ctx := range contexts {
+		flatten(ctx, "")
+	}
+
+	// Sort results: Global false first, then by Path
+	sort.Slice(result, func(i, j int) bool {
+		// If Global values differ, false comes first
+		if result[i].Global != result[j].Global {
+			return !result[i].Global
+		}
+		// If Global values are the same, sort by Path
+		return result[i].Path < result[j].Path
+	})
+
+	return result
+}
+
 // FeatureOverload represents a feature override in a context
 type FeatureOverload struct {
 	ID          string                 `json:"id"`
@@ -82,6 +162,16 @@ type FeatureOverload struct {
 	Tags        []string               `json:"tags,omitempty"`
 	Metadata    map[string]interface{} `json:"metadata,omitempty"`
 	Conditions  []ActivationCondition  `json:"conditions,omitempty"`
+}
+
+// FormatForTable implements custom table formatting for FeatureOverload
+// Shows only name and enabled status (not ID or description)
+func (f FeatureOverload) FormatForTable() string {
+	status := "disabled"
+	if f.Enabled {
+		status = "enabled"
+	}
+	return f.Name + " (" + status + ")"
 }
 
 // Tenant represents an Izanami tenant

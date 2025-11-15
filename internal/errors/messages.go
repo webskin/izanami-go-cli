@@ -40,6 +40,7 @@ const (
 	MsgFailedToListTenants   = "failed to list tenants"
 	MsgFailedToGetTenant     = "failed to get tenant"
 	MsgFailedToCreateTenant  = "failed to create tenant"
+	MsgFailedToUpdateTenant  = "failed to update tenant"
 	MsgFailedToDeleteTenant  = "failed to delete tenant"
 
 	// Project error messages

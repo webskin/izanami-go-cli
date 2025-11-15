@@ -138,6 +138,75 @@ var adminTenantsCreateCmd = &cobra.Command{
 	},
 }
 
+var adminTenantsUpdateCmd = &cobra.Command{
+	Use:   "update <tenant-name>",
+	Short: "Update a tenant",
+	Long: `Update a tenant's properties.
+
+You can provide the updated data via:
+  - --description flag (merged with existing data)
+  - --data flag with JSON data
+  - Both flags (--description takes precedence)
+
+Examples:
+  # Update description only
+  iz admin tenants update my-tenant --description "New description"
+
+  # Update with JSON data
+  iz admin tenants update my-tenant --data '{"name":"my-tenant","description":"Updated"}'
+
+  # Update with both (description flag takes precedence)
+  iz admin tenants update my-tenant --data @tenant.json --description "Override desc"`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		client, err := izanami.NewClient(cfg)
+		if err != nil {
+			return err
+		}
+
+		tenantName := args[0]
+		var data map[string]interface{}
+
+		// Parse JSON data if provided
+		if cmd.Flags().Changed("data") {
+			var jsonData interface{}
+			if err := parseJSONData(tenantData, &jsonData); err != nil {
+				return err
+			}
+			// Convert to map
+			if dataMap, ok := jsonData.(map[string]interface{}); ok {
+				data = dataMap
+			} else {
+				return fmt.Errorf("invalid data format: expected JSON object")
+			}
+		} else {
+			// Start with empty map if no data provided
+			data = make(map[string]interface{})
+		}
+
+		// Always set the name field
+		data["name"] = tenantName
+
+		// Merge description flag if provided
+		if cmd.Flags().Changed("description") {
+			data["description"] = tenantDesc
+		}
+
+		// Validate that we have at least name and description
+		if _, hasDesc := data["description"]; !hasDesc {
+			return fmt.Errorf("description is required (use --description flag or --data)")
+		}
+
+		ctx := context.Background()
+		if err := client.UpdateTenant(ctx, tenantName, data); err != nil {
+			return err
+		}
+
+		fmt.Fprintf(os.Stderr, "Tenant updated successfully: %s\n", tenantName)
+		return nil
+	},
+}
+
 var adminTenantsDeleteCmd = &cobra.Command{
 	Use:   "delete <tenant-name>",
 	Short: "Delete a tenant",
@@ -556,10 +625,13 @@ func init() {
 	adminTenantsCmd.AddCommand(adminTenantsListCmd)
 	adminTenantsCmd.AddCommand(adminTenantsGetCmd)
 	adminTenantsCmd.AddCommand(adminTenantsCreateCmd)
+	adminTenantsCmd.AddCommand(adminTenantsUpdateCmd)
 	adminTenantsCmd.AddCommand(adminTenantsDeleteCmd)
 
 	adminTenantsCreateCmd.Flags().StringVar(&tenantDesc, "description", "", "Tenant description")
 	adminTenantsCreateCmd.Flags().StringVar(&tenantData, "data", "", "JSON tenant data")
+	adminTenantsUpdateCmd.Flags().StringVar(&tenantDesc, "description", "", "Tenant description")
+	adminTenantsUpdateCmd.Flags().StringVar(&tenantData, "data", "", "JSON tenant data")
 
 	// Projects
 	adminCmd.AddCommand(adminProjectsCmd)
