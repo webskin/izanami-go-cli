@@ -66,7 +66,16 @@ var adminTenantsListCmd = &cobra.Command{
 			return err
 		}
 
-		return output.Print(tenants, output.Format(outputFormat))
+		// Convert to summaries (list endpoint doesn't include projects/tags)
+		summaries := make([]izanami.TenantSummary, len(tenants))
+		for i, t := range tenants {
+			summaries[i] = izanami.TenantSummary{
+				Name:        t.Name,
+				Description: t.Description,
+			}
+		}
+
+		return output.Print(summaries, output.Format(outputFormat))
 	},
 }
 

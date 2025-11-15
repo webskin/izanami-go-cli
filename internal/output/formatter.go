@@ -156,11 +156,8 @@ func printStructTable(w io.Writer, val reflect.Value) error {
 			continue
 		}
 
-		// Get JSON tag name if available
-		fieldName := field.Name
-		if jsonTag := field.Tag.Get("json"); jsonTag != "" && jsonTag != "-" {
-			fieldName = jsonTag
-		}
+		// Get field name (properly parsed from JSON tag)
+		fieldName := getFieldName(field)
 
 		// Format field value
 		fieldValue := formatValue(fieldVal)
@@ -254,12 +251,98 @@ func formatSliceValue(val reflect.Value) string {
 		return "[]"
 	}
 
+	// Check the element type
+	elemType := val.Type().Elem()
+	if elemType.Kind() == reflect.Ptr {
+		elemType = elemType.Elem()
+	}
+
+	// For struct slices, format each item with key fields
+	if elemType.Kind() == reflect.Struct {
+		return formatStructSlice(val)
+	}
+
 	// Format as comma-separated list for simple types
 	if val.Len() <= 5 {
 		return formatShortSlice(val)
 	}
 
 	return fmt.Sprintf("[%d items]", val.Len())
+}
+
+// formatStructSlice formats a slice of structs in a compact, readable way
+func formatStructSlice(val reflect.Value) string {
+	var items []string
+
+	for i := 0; i < val.Len(); i++ {
+		elem := val.Index(i)
+		if elem.Kind() == reflect.Ptr {
+			if elem.IsNil() {
+				continue
+			}
+			elem = elem.Elem()
+		}
+
+		if elem.Kind() != reflect.Struct {
+			continue
+		}
+
+		// Try to extract key identifying fields (name, id, etc.)
+		typ := elem.Type()
+		fields := make(map[string]string)
+
+		for j := 0; j < elem.NumField(); j++ {
+			field := typ.Field(j)
+			if !field.IsExported() {
+				continue
+			}
+
+			fieldName := getFieldName(field)
+			fieldVal := elem.Field(j)
+
+			// Capture key fields for compact display
+			switch fieldName {
+			case "id", "name", "description":
+				val := formatValue(fieldVal)
+				if val != "" {
+					fields[fieldName] = val
+				}
+			}
+		}
+
+		// Build compact representation
+		var itemStr string
+		if name, ok := fields["name"]; ok && name != "" {
+			itemStr = name
+			if id, ok := fields["id"]; ok && id != "" {
+				itemStr += " (" + id + ")"
+			}
+		} else if id, ok := fields["id"]; ok && id != "" {
+			itemStr = id
+		}
+
+		if desc, ok := fields["description"]; ok && desc != "" && itemStr != "" {
+			itemStr += " - " + desc
+		}
+
+		if itemStr != "" {
+			items = append(items, itemStr)
+		}
+	}
+
+	if len(items) == 0 {
+		return "[]"
+	}
+
+	// Format as newline-separated list for better readability
+	result := ""
+	for i, item := range items {
+		if i > 0 {
+			result += "\n  "
+		}
+		result += "- " + item
+	}
+	return "\n  " + result
 }
 
 // formatShortSlice formats a small slice as a comma-separated list

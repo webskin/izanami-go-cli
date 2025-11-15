@@ -92,6 +92,13 @@ type Tenant struct {
 	Tags        []Tag     `json:"tags,omitempty"`
 }
 
+// TenantSummary represents a tenant summary for list operations
+// The list endpoint doesn't return projects and tags
+type TenantSummary struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
 // Project represents an Izanami project
 type Project struct {
 	ID          string    `json:"id"`
