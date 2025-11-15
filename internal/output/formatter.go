@@ -277,6 +277,71 @@ func formatSliceValue(val reflect.Value) string {
 	return fmt.Sprintf("[%d items]", val.Len())
 }
 
+// structKeyFields holds key identifying fields extracted from a struct
+type structKeyFields struct {
+	name    string
+	enabled string
+}
+
+// extractStructKeyFields extracts key identifying fields (name, enabled) from a struct element
+func extractStructKeyFields(elem reflect.Value) structKeyFields {
+	typ := elem.Type()
+	fields := structKeyFields{}
+
+	for j := 0; j < elem.NumField(); j++ {
+		field := typ.Field(j)
+		if !field.IsExported() {
+			continue
+		}
+
+		fieldName := getFieldName(field)
+		fieldVal := elem.Field(j)
+
+		switch fieldName {
+		case "name":
+			val := formatValue(fieldVal)
+			if val != "" {
+				fields.name = val
+			}
+		case "enabled":
+			if fieldVal.Kind() == reflect.Bool {
+				if fieldVal.Bool() {
+					fields.enabled = color.GreenString("enabled")
+				} else {
+					fields.enabled = color.RedString("disabled")
+				}
+			}
+		}
+	}
+
+	return fields
+}
+
+// formatSingleStructItem formats a single struct element for table display
+func formatSingleStructItem(elem reflect.Value) string {
+	// Check if the element implements TableFormatter interface
+	if elem.CanInterface() {
+		if formatter, ok := elem.Interface().(TableFormatter); ok {
+			return formatter.FormatForTable()
+		}
+	}
+
+	// Extract key fields for compact display
+	fields := extractStructKeyFields(elem)
+
+	// Build compact representation
+	if fields.name == "" {
+		return ""
+	}
+
+	itemStr := fields.name
+	if fields.enabled != "" {
+		itemStr += " (" + fields.enabled + ")"
+	}
+
+	return itemStr
+}
+
 // formatStructSlice formats a slice of structs in a compact, single-line way
 func formatStructSlice(val reflect.Value) string {
 	// Show count only for lists > 3 items
@@ -288,6 +353,8 @@ func formatStructSlice(val reflect.Value) string {
 
 	for i := 0; i < val.Len(); i++ {
 		elem := val.Index(i)
+
+		// Dereference pointer and skip nil values
 		if elem.Kind() == reflect.Ptr {
 			if elem.IsNil() {
 				continue
@@ -295,61 +362,13 @@ func formatStructSlice(val reflect.Value) string {
 			elem = elem.Elem()
 		}
 
+		// Skip non-struct elements
 		if elem.Kind() != reflect.Struct {
 			continue
 		}
 
-		// Check if the element implements TableFormatter interface
-		if elem.CanInterface() {
-			if formatter, ok := elem.Interface().(TableFormatter); ok {
-				items = append(items, formatter.FormatForTable())
-				continue
-			}
-		}
-
-		// Fallback: extract key identifying fields (name, enabled, etc.)
-		typ := elem.Type()
-		fields := make(map[string]string)
-		var enabled string
-
-		for j := 0; j < elem.NumField(); j++ {
-			field := typ.Field(j)
-			if !field.IsExported() {
-				continue
-			}
-
-			fieldName := getFieldName(field)
-			fieldVal := elem.Field(j)
-
-			// Capture key fields for compact display
-			switch fieldName {
-			case "name":
-				val := formatValue(fieldVal)
-				if val != "" {
-					fields[fieldName] = val
-				}
-			case "enabled":
-				// Track enabled status with color
-				if fieldVal.Kind() == reflect.Bool {
-					if fieldVal.Bool() {
-						enabled = color.GreenString("enabled")
-					} else {
-						enabled = color.RedString("disabled")
-					}
-				}
-			}
-		}
-
-		// Build compact representation
-		var itemStr string
-		if name, ok := fields["name"]; ok && name != "" {
-			itemStr = name
-			// Add enabled/disabled status if present
-			if enabled != "" {
-				itemStr += " (" + enabled + ")"
-			}
-		}
-
+		// Format the struct item
+		itemStr := formatSingleStructItem(elem)
 		if itemStr != "" {
 			items = append(items, itemStr)
 		}
