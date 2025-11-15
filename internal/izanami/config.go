@@ -17,7 +17,7 @@ type Config struct {
 	ClientSecret string `yaml:"client-secret"`
 	Username     string `yaml:"username"`
 	JwtToken     string `yaml:"jwt-token"`  // JWT token from login
-	PatToken     string `yaml:"pat-token"`  // Personal Access Token
+	PatToken     string `yaml:"personal-access-token"` // Personal Access Token
 	Tenant       string `yaml:"tenant"`
 	Project      string `yaml:"project"`
 	Context      string `yaml:"context"`
@@ -81,7 +81,7 @@ func LoadConfig() (*Config, error) {
 		ClientSecret: v.GetString("client-secret"),
 		Username:     v.GetString("username"),
 		JwtToken:     v.GetString("jwt-token"),
-		PatToken:     v.GetString("pat-token"),
+		PatToken:     v.GetString("personal-access-token"),
 		Tenant:       v.GetString("tenant"),
 		Project:      v.GetString("project"),
 		Context:      v.GetString("context"),
@@ -143,9 +143,9 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("base URL is required (set IZ_BASE_URL or --url)")
 	}
 
-	// PAT token requires username
+	// Personal access token requires username
 	if c.PatToken != "" && c.Username == "" {
-		return fmt.Errorf("username is required when using PAT token (set IZ_USERNAME or --username)")
+		return fmt.Errorf("username is required when using personal access token (set IZ_USERNAME or --username)")
 	}
 
 	// Check authentication: either client ID/secret, username/jwtToken, or patToken+username
@@ -153,7 +153,7 @@ func (c *Config) Validate() error {
 	hasUserAuth := (c.Username != "" && c.JwtToken != "") || (c.Username != "" && c.PatToken != "")
 
 	if !hasClientAuth && !hasUserAuth {
-		return fmt.Errorf("authentication required: either client_id/client_secret, username/jwt_token, or username/pat_token must be set")
+		return fmt.Errorf("authentication required: either client-id/client-secret, username/jwt-token, or username/personal-access-token must be set")
 	}
 
 	return nil
@@ -166,7 +166,7 @@ func (c *Config) ValidateAdminAuth() error {
 	}
 
 	if (c.Username == "" || c.JwtToken == "") && c.PatToken == "" {
-		return fmt.Errorf("admin operations require login (iz login), username/jwt_token or pat_token (set IZ_USERNAME and IZ_JWT_TOKEN, or IZ_PAT_TOKEN)")
+		return fmt.Errorf("admin operations require login (iz login), username/jwt-token or personal-access-token (set IZ_USERNAME and IZ_JWT_TOKEN, or IZ_PERSONAL_ACCESS_TOKEN)")
 	}
 
 	return nil
@@ -229,7 +229,7 @@ func InitConfigFile() error {
 
 # Option 2: Username + Personal Access Token (requires username)
 # username: "your-username"
-# pat-token: "your-personal-access-token"
+# personal-access-token: "your-personal-access-token"
 
 # Default tenant
 # tenant: "default"
@@ -268,26 +268,26 @@ type ConfigValue struct {
 
 // ValidConfigKeys defines all valid configuration keys
 var ValidConfigKeys = map[string]bool{
-	"base-url":      true,
-	"client-id":     true,
-	"client-secret": true,
-	"username":      true,
-	"jwt-token":     true,
-	"pat-token":     true,
-	"tenant":        true,
-	"project":       true,
-	"context":       true,
-	"timeout":       true,
-	"verbose":       true,
-	"output-format": true,
-	"color":         true,
+	"base-url":              true,
+	"client-id":             true,
+	"client-secret":         true,
+	"username":              true,
+	"jwt-token":             true,
+	"personal-access-token": true,
+	"tenant":                true,
+	"project":               true,
+	"context":               true,
+	"timeout":               true,
+	"verbose":               true,
+	"output-format":         true,
+	"color":                 true,
 }
 
 // SensitiveKeys defines which keys contain sensitive information
 var SensitiveKeys = map[string]bool{
-	"client-secret": true,
-	"jwt-token":     true,
-	"pat-token":     true,
+	"client-secret":         true,
+	"jwt-token":             true,
+	"personal-access-token": true,
 }
 
 // GetConfigPath returns the path to the config file
@@ -521,15 +521,15 @@ func ValidateConfigFile() []ValidationError {
 	if !hasClientAuth && !hasUserAuth {
 		errs = append(errs, ValidationError{
 			Field:   "auth",
-			Message: "Authentication required: either client-id/client-secret, username/jwt-token, or username/pat-token must be set",
+			Message: "Authentication required: either client-id/client-secret, username/jwt-token, or username/personal-access-token must be set",
 		})
 	}
 
-	// PAT token requires username
+	// Personal access token requires username
 	if config.PatToken != "" && config.Username == "" {
 		errs = append(errs, ValidationError{
 			Field:   "username",
-			Message: "Username is required when using pat-token",
+			Message: "Username is required when using personal-access-token",
 		})
 	}
 

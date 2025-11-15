@@ -34,17 +34,17 @@ var configSetCmd = &cobra.Command{
 	Long: `Set a configuration value and persist it to the config file.
 
 Valid configuration keys:
-  base-url       - Izanami server URL
-  tenant         - Default tenant name
-  project        - Default project name
-  context        - Default context path
-  client-id      - Client ID for authentication
-  client-secret  - Client secret for authentication
-  username       - Username for authentication
-  pat-token      - Personal access token
-  timeout        - Request timeout in seconds
-  output-format  - Default output format (table/json)
-  color          - Color output (auto/always/never)
+  base-url              - Izanami server URL
+  tenant                - Default tenant name
+  project               - Default project name
+  context               - Default context path
+  client-id             - Client ID for authentication
+  client-secret         - Client secret for authentication
+  username              - Username for authentication
+  personal-access-token - Personal access token
+  timeout               - Request timeout in seconds
+  output-format         - Default output format (table/json)
+  color                 - Color output (auto/always/never)
 
 Examples:
   iz config set base-url http://localhost:9000
