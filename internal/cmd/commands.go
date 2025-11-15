@@ -22,18 +22,43 @@ This shows the complete command tree in an easy-to-read format.`,
 	},
 }
 
-// printCommandTree recursively prints all commands in a tree structure
-func printCommandTree(cmd *cobra.Command, prefix string, isRoot bool) {
-	// Get all subcommands
-	commands := cmd.Commands()
-
-	// Filter out help and completion commands for cleaner output
-	var visibleCommands []*cobra.Command
+// filterVisibleCommands returns commands excluding help and completion
+func filterVisibleCommands(commands []*cobra.Command) []*cobra.Command {
+	var visible []*cobra.Command
 	for _, c := range commands {
 		if c.Name() != "help" && c.Name() != "completion" {
-			visibleCommands = append(visibleCommands, c)
+			visible = append(visible, c)
 		}
 	}
+	return visible
+}
+
+// getBranchPrefix returns the tree branch character based on position
+func getBranchPrefix(isRoot, isLast bool) string {
+	if isRoot {
+		return ""
+	}
+	if isLast {
+		return "└── "
+	}
+	return "├── "
+}
+
+// getChildPrefix returns the prefix for child commands
+func getChildPrefix(prefix string, isRoot, isLast bool) string {
+	if isRoot {
+		return "  "
+	}
+	if isLast {
+		return prefix + "    "
+	}
+	return prefix + "│   "
+}
+
+// printCommandTree recursively prints all commands in a tree structure
+func printCommandTree(cmd *cobra.Command, prefix string, isRoot bool) {
+	commands := cmd.Commands()
+	visibleCommands := filterVisibleCommands(commands)
 
 	// Sort commands alphabetically
 	sort.Slice(visibleCommands, func(i, j int) bool {
@@ -44,36 +69,19 @@ func printCommandTree(cmd *cobra.Command, prefix string, isRoot bool) {
 	for i, c := range visibleCommands {
 		isLast := i == len(visibleCommands)-1
 
-		// Build the tree characters
-		var branch string
-		if isRoot {
-			branch = ""
-		} else if isLast {
-			branch = "└── "
-		} else {
-			branch = "├── "
-		}
-
-		// Print command name and short description
+		// Print command with tree structure
+		branch := getBranchPrefix(isRoot, isLast)
 		fullCommand := getFullCommandPath(c)
 		fmt.Printf("%s%s%s", prefix, branch, fullCommand)
 
-		// Add short description if available
 		if c.Short != "" {
 			fmt.Printf(" - %s", c.Short)
 		}
 		fmt.Println()
 
-		// Print subcommands with appropriate indentation
+		// Print subcommands recursively
 		if c.HasSubCommands() {
-			var newPrefix string
-			if isRoot {
-				newPrefix = "  "
-			} else if isLast {
-				newPrefix = prefix + "    "
-			} else {
-				newPrefix = prefix + "│   "
-			}
+			newPrefix := getChildPrefix(prefix, isRoot, isLast)
 			printCommandTree(c, newPrefix, false)
 		}
 	}
