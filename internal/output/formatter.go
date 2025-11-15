@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/fatih/color"
 	"github.com/olekukonko/tablewriter"
 )
 
@@ -328,12 +329,12 @@ func formatStructSlice(val reflect.Value) string {
 					fields[fieldName] = val
 				}
 			case "enabled":
-				// Track enabled status
+				// Track enabled status with color
 				if fieldVal.Kind() == reflect.Bool {
 					if fieldVal.Bool() {
-						enabled = "enabled"
+						enabled = color.GreenString("enabled")
 					} else {
-						enabled = "disabled"
+						enabled = color.RedString("disabled")
 					}
 				}
 			}
@@ -384,12 +385,12 @@ func formatStructValue(val reflect.Value) string {
 	return fmt.Sprintf("%v", val.Interface())
 }
 
-// formatBoolValue formats a boolean value
+// formatBoolValue formats a boolean value with color
 func formatBoolValue(val reflect.Value) string {
 	if val.Bool() {
-		return "true"
+		return color.GreenString("true")
 	}
-	return "false"
+	return color.RedString("false")
 }
 
 // formatValue formats a reflect.Value as a string

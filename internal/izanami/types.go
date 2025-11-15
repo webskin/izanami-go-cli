@@ -3,6 +3,8 @@ package izanami
 import (
 	"sort"
 	"time"
+
+	"github.com/fatih/color"
 )
 
 // Feature represents a feature flag in Izanami
@@ -165,11 +167,13 @@ type FeatureOverload struct {
 }
 
 // FormatForTable implements custom table formatting for FeatureOverload
-// Shows only name and enabled status (not ID or description)
+// Shows only name and enabled status with color (green=enabled, red=disabled)
 func (f FeatureOverload) FormatForTable() string {
-	status := "disabled"
+	var status string
 	if f.Enabled {
-		status = "enabled"
+		status = color.GreenString("enabled")
+	} else {
+		status = color.RedString("disabled")
 	}
 	return f.Name + " (" + status + ")"
 }
