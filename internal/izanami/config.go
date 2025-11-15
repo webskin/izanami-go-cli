@@ -10,6 +10,23 @@ import (
 	"github.com/webskin/izanami-go-cli/internal/errors"
 )
 
+// Config key constants
+const (
+	ConfigKeyBaseURL              = "base-url"
+	ConfigKeyClientID             = "client-id"
+	ConfigKeyClientSecret         = "client-secret"
+	ConfigKeyUsername             = "username"
+	ConfigKeyJwtToken             = "jwt-token"
+	ConfigKeyPersonalAccessToken  = "personal-access-token"
+	ConfigKeyTenant               = "tenant"
+	ConfigKeyProject              = "project"
+	ConfigKeyContext              = "context"
+	ConfigKeyTimeout              = "timeout"
+	ConfigKeyVerbose              = "verbose"
+	ConfigKeyOutputFormat         = "output-format"
+	ConfigKeyColor                = "color"
+)
+
 // Config holds the configuration for the Izanami client
 type Config struct {
 	BaseURL      string `yaml:"base-url"`
@@ -66,10 +83,10 @@ func LoadConfig() (*Config, error) {
 	v.AutomaticEnv()
 
 	// Set defaults
-	v.SetDefault("timeout", 30)
-	v.SetDefault("verbose", false)
-	v.SetDefault("output-format", "table")
-	v.SetDefault("color", "auto")
+	v.SetDefault(ConfigKeyTimeout, 30)
+	v.SetDefault(ConfigKeyVerbose, false)
+	v.SetDefault(ConfigKeyOutputFormat, "table")
+	v.SetDefault(ConfigKeyColor, "auto")
 
 	// Read config file if it exists (ignore if not found)
 	if err := v.ReadInConfig(); err != nil {
@@ -79,19 +96,19 @@ func LoadConfig() (*Config, error) {
 	}
 
 	config := &Config{
-		BaseURL:      v.GetString("base-url"),
-		ClientID:     v.GetString("client-id"),
-		ClientSecret: v.GetString("client-secret"),
-		Username:     v.GetString("username"),
-		JwtToken:     v.GetString("jwt-token"),
-		PatToken:     v.GetString("personal-access-token"),
-		Tenant:       v.GetString("tenant"),
-		Project:      v.GetString("project"),
-		Context:      v.GetString("context"),
-		Timeout:      v.GetInt("timeout"),
-		Verbose:      v.GetBool("verbose"),
-		OutputFormat: v.GetString("output-format"),
-		Color:        v.GetString("color"),
+		BaseURL:      v.GetString(ConfigKeyBaseURL),
+		ClientID:     v.GetString(ConfigKeyClientID),
+		ClientSecret: v.GetString(ConfigKeyClientSecret),
+		Username:     v.GetString(ConfigKeyUsername),
+		JwtToken:     v.GetString(ConfigKeyJwtToken),
+		PatToken:     v.GetString(ConfigKeyPersonalAccessToken),
+		Tenant:       v.GetString(ConfigKeyTenant),
+		Project:      v.GetString(ConfigKeyProject),
+		Context:      v.GetString(ConfigKeyContext),
+		Timeout:      v.GetInt(ConfigKeyTimeout),
+		Verbose:      v.GetBool(ConfigKeyVerbose),
+		OutputFormat: v.GetString(ConfigKeyOutputFormat),
+		Color:        v.GetString(ConfigKeyColor),
 	}
 
 	return config, nil
@@ -280,26 +297,26 @@ type ConfigValue struct {
 
 // ValidConfigKeys defines all valid configuration keys
 var ValidConfigKeys = map[string]bool{
-	"base-url":              true,
-	"client-id":             true,
-	"client-secret":         true,
-	"username":              true,
-	"jwt-token":             true,
-	"personal-access-token": true,
-	"tenant":                true,
-	"project":               true,
-	"context":               true,
-	"timeout":               true,
-	"verbose":               true,
-	"output-format":         true,
-	"color":                 true,
+	ConfigKeyBaseURL:             true,
+	ConfigKeyClientID:            true,
+	ConfigKeyClientSecret:        true,
+	ConfigKeyUsername:            true,
+	ConfigKeyJwtToken:            true,
+	ConfigKeyPersonalAccessToken: true,
+	ConfigKeyTenant:              true,
+	ConfigKeyProject:             true,
+	ConfigKeyContext:             true,
+	ConfigKeyTimeout:             true,
+	ConfigKeyVerbose:             true,
+	ConfigKeyOutputFormat:        true,
+	ConfigKeyColor:               true,
 }
 
 // SensitiveKeys defines which keys contain sensitive information
 var SensitiveKeys = map[string]bool{
-	"client-secret":         true,
-	"jwt-token":             true,
-	"personal-access-token": true,
+	ConfigKeyClientSecret:        true,
+	ConfigKeyJwtToken:            true,
+	ConfigKeyPersonalAccessToken: true,
 }
 
 // GetConfigPath returns the path to the config file
@@ -344,7 +361,7 @@ func repairConfigPermissions() {
 // GetConfigValue gets a single configuration value with its source
 func GetConfigValue(key string) (*ConfigValue, error) {
 	if !ValidConfigKeys[key] {
-		return nil, fmt.Errorf("invalid config key: %s", key)
+		return nil, fmt.Errorf(errors.MsgInvalidConfigKey, key)
 	}
 
 	// Repair permissions before reading
@@ -359,10 +376,10 @@ func GetConfigValue(key string) (*ConfigValue, error) {
 	v.AutomaticEnv()
 
 	// Set defaults
-	v.SetDefault("timeout", 30)
-	v.SetDefault("verbose", false)
-	v.SetDefault("output-format", "table")
-	v.SetDefault("color", "auto")
+	v.SetDefault(ConfigKeyTimeout, 30)
+	v.SetDefault(ConfigKeyVerbose, false)
+	v.SetDefault(ConfigKeyOutputFormat, "table")
+	v.SetDefault(ConfigKeyColor, "auto")
 
 	// Read config file if it exists
 	fileExists := false
@@ -414,7 +431,7 @@ func convertToEnvKey(key string) string {
 // SetConfigValue sets a configuration value and persists it to the config file
 func SetConfigValue(key, value string) error {
 	if !ValidConfigKeys[key] {
-		return fmt.Errorf("invalid config key: %s", key)
+		return fmt.Errorf(errors.MsgInvalidConfigKey, key)
 	}
 
 	configPath := GetConfigPath()
@@ -443,7 +460,7 @@ func SetConfigValue(key, value string) error {
 	if err := v.WriteConfig(); err != nil {
 		// If config doesn't exist, create it
 		if err := v.SafeWriteConfig(); err != nil {
-			return fmt.Errorf("failed to write config file: %w", err)
+			return fmt.Errorf(errors.MsgFailedToWriteConfigFile, err)
 		}
 	}
 
@@ -458,7 +475,7 @@ func SetConfigValue(key, value string) error {
 // UnsetConfigValue removes a configuration value from the config file
 func UnsetConfigValue(key string) error {
 	if !ValidConfigKeys[key] {
-		return fmt.Errorf("invalid config key: %s", key)
+		return fmt.Errorf(errors.MsgInvalidConfigKey, key)
 	}
 
 	configPath := GetConfigPath()

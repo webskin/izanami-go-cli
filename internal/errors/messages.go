@@ -71,4 +71,8 @@ const (
 	MsgFailedToSearch      = "failed to search"
 	MsgFailedToExport      = "failed to export"
 	MsgFailedToImport      = "failed to import"
+
+	// Config error messages
+	MsgFailedToWriteConfigFile = "failed to write config file: %w"
+	MsgInvalidConfigKey        = "invalid config key: %s"
 )
