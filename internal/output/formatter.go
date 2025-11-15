@@ -197,6 +197,26 @@ func printMapTable(w io.Writer, val reflect.Value) error {
 	return nil
 }
 
+// parseJSONTag extracts the field name from a JSON tag, removing options like omitempty
+func parseJSONTag(jsonTag string) string {
+	// Remove omitempty and other options
+	for idx := 0; idx < len(jsonTag); idx++ {
+		if jsonTag[idx] == ',' {
+			return jsonTag[:idx]
+		}
+	}
+	return jsonTag
+}
+
+// getFieldName returns the field name to use, preferring JSON tag over struct field name
+func getFieldName(field reflect.StructField) string {
+	jsonTag := field.Tag.Get("json")
+	if jsonTag != "" && jsonTag != "-" {
+		return parseJSONTag(jsonTag)
+	}
+	return field.Name
+}
+
 // extractHeaders extracts field names from a struct type
 func extractHeaders(typ reflect.Type) []string {
 	var headers []string
@@ -205,23 +225,7 @@ func extractHeaders(typ reflect.Type) []string {
 		if !field.IsExported() {
 			continue
 		}
-
-		// Use JSON tag if available
-		fieldName := field.Name
-		if jsonTag := field.Tag.Get("json"); jsonTag != "" && jsonTag != "-" {
-			// Remove omitempty and other options
-			for idx := 0; idx < len(jsonTag); idx++ {
-				if jsonTag[idx] == ',' {
-					fieldName = jsonTag[:idx]
-					break
-				}
-			}
-			if fieldName == "" || fieldName == jsonTag {
-				fieldName = jsonTag
-			}
-		}
-
-		headers = append(headers, fieldName)
+		headers = append(headers, getFieldName(field))
 	}
 	return headers
 }
