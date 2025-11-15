@@ -18,6 +18,10 @@ import (
 	"github.com/go-resty/resty/v2"
 )
 
+const (
+	apiAdminTenants = "/api/admin/tenants/"
+)
+
 // Client represents an Izanami HTTP client
 type Client struct {
 	http   *resty.Client
@@ -291,7 +295,7 @@ func (c *Client) Login(ctx context.Context, username, password string) (string, 
 
 // ListFeatures lists all features in a tenant
 func (c *Client) ListFeatures(ctx context.Context, tenant string, tag string) ([]Feature, error) {
-	path := "/api/admin/tenants/" + buildPath(tenant, "features")
+	path := apiAdminTenants + buildPath(tenant, "features")
 
 	req := c.http.R().SetContext(ctx).SetResult(&[]Feature{})
 
@@ -315,7 +319,7 @@ func (c *Client) ListFeatures(ctx context.Context, tenant string, tag string) ([
 
 // GetFeature retrieves a specific feature
 func (c *Client) GetFeature(ctx context.Context, tenant, featureID string) (*FeatureWithOverloads, error) {
-	path := "/api/admin/tenants/" + buildPath(tenant, "features", featureID)
+	path := apiAdminTenants + buildPath(tenant, "features", featureID)
 
 	var feature FeatureWithOverloads
 	resp, err := c.http.R().
@@ -337,7 +341,7 @@ func (c *Client) GetFeature(ctx context.Context, tenant, featureID string) (*Fea
 // CreateFeature creates a new feature
 // The feature parameter accepts either a *Feature or any compatible struct
 func (c *Client) CreateFeature(ctx context.Context, tenant, project string, feature interface{}) (*Feature, error) {
-	path := "/api/admin/tenants/" + buildPath(tenant, "projects", project, "features")
+	path := apiAdminTenants + buildPath(tenant, "projects", project, "features")
 
 	var result Feature
 	resp, err := c.http.R().
@@ -361,7 +365,7 @@ func (c *Client) CreateFeature(ctx context.Context, tenant, project string, feat
 // UpdateFeature updates an existing feature
 // The feature parameter accepts either a *Feature, *FeatureWithOverloads, or any compatible struct
 func (c *Client) UpdateFeature(ctx context.Context, tenant, featureID string, feature interface{}, preserveProtectedContexts bool) error {
-	path := "/api/admin/tenants/" + buildPath(tenant, "features", featureID)
+	path := apiAdminTenants + buildPath(tenant, "features", featureID)
 
 	req := c.http.R().
 		SetContext(ctx).
@@ -386,7 +390,7 @@ func (c *Client) UpdateFeature(ctx context.Context, tenant, featureID string, fe
 
 // DeleteFeature deletes a feature
 func (c *Client) DeleteFeature(ctx context.Context, tenant, featureID string) error {
-	path := "/api/admin/tenants/" + buildPath(tenant, "features", featureID)
+	path := apiAdminTenants + buildPath(tenant, "features", featureID)
 
 	resp, err := c.http.R().
 		SetContext(ctx).
@@ -437,9 +441,9 @@ func (c *Client) CheckFeature(ctx context.Context, featureID, user, contextPath 
 func (c *Client) ListContexts(ctx context.Context, tenant, project string, all bool) ([]Context, error) {
 	var path string
 	if project != "" {
-		path = "/api/admin/tenants/" + buildPath(tenant, "projects", project, "contexts")
+		path = apiAdminTenants + buildPath(tenant, "projects", project, "contexts")
 	} else {
-		path = "/api/admin/tenants/" + buildPath(tenant, "contexts")
+		path = apiAdminTenants + buildPath(tenant, "contexts")
 	}
 
 	req := c.http.R().SetContext(ctx).SetResult(&[]Context{})
@@ -467,15 +471,15 @@ func (c *Client) CreateContext(ctx context.Context, tenant, project, name, paren
 	var path string
 	if project != "" {
 		if parentPath != "" {
-			path = "/api/admin/tenants/" + buildPath(tenant, "projects", project, "contexts", parentPath)
+			path = apiAdminTenants + buildPath(tenant, "projects", project, "contexts", parentPath)
 		} else {
-			path = "/api/admin/tenants/" + buildPath(tenant, "projects", project, "contexts")
+			path = apiAdminTenants + buildPath(tenant, "projects", project, "contexts")
 		}
 	} else {
 		if parentPath != "" {
-			path = "/api/admin/tenants/" + buildPath(tenant, "contexts", parentPath)
+			path = apiAdminTenants + buildPath(tenant, "contexts", parentPath)
 		} else {
-			path = "/api/admin/tenants/" + buildPath(tenant, "contexts")
+			path = apiAdminTenants + buildPath(tenant, "contexts")
 		}
 	}
 
@@ -500,9 +504,9 @@ func (c *Client) CreateContext(ctx context.Context, tenant, project, name, paren
 func (c *Client) DeleteContext(ctx context.Context, tenant, project, contextPath string) error {
 	var path string
 	if project != "" {
-		path = "/api/admin/tenants/" + buildPath(tenant, "projects", project, "contexts", contextPath)
+		path = apiAdminTenants + buildPath(tenant, "projects", project, "contexts", contextPath)
 	} else {
-		path = "/api/admin/tenants/" + buildPath(tenant, "contexts", contextPath)
+		path = apiAdminTenants + buildPath(tenant, "contexts", contextPath)
 	}
 
 	resp, err := c.http.R().
@@ -552,7 +556,7 @@ func (c *Client) ListTenants(ctx context.Context, right *RightLevel) ([]Tenant, 
 
 // GetTenant retrieves a specific tenant
 func (c *Client) GetTenant(ctx context.Context, name string) (*Tenant, error) {
-	path := "/api/admin/tenants/" + buildPath(name)
+	path := apiAdminTenants + buildPath(name)
 
 	var tenant Tenant
 	resp, err := c.http.R().
@@ -593,7 +597,7 @@ func (c *Client) CreateTenant(ctx context.Context, tenant interface{}) error {
 
 // DeleteTenant deletes a tenant
 func (c *Client) DeleteTenant(ctx context.Context, name string) error {
-	path := "/api/admin/tenants/" + buildPath(name)
+	path := apiAdminTenants + buildPath(name)
 
 	resp, err := c.http.R().
 		SetContext(ctx).
@@ -616,7 +620,7 @@ func (c *Client) DeleteTenant(ctx context.Context, name string) error {
 
 // ListProjects lists all projects in a tenant
 func (c *Client) ListProjects(ctx context.Context, tenant string) ([]Project, error) {
-	path := "/api/admin/tenants/" + buildPath(tenant, "projects")
+	path := apiAdminTenants + buildPath(tenant, "projects")
 
 	var projects []Project
 	resp, err := c.http.R().
@@ -637,7 +641,7 @@ func (c *Client) ListProjects(ctx context.Context, tenant string) ([]Project, er
 
 // GetProject retrieves a specific project
 func (c *Client) GetProject(ctx context.Context, tenant, project string) (*Project, error) {
-	path := "/api/admin/tenants/" + buildPath(tenant, "projects", project)
+	path := apiAdminTenants + buildPath(tenant, "projects", project)
 
 	var proj Project
 	resp, err := c.http.R().
@@ -659,7 +663,7 @@ func (c *Client) GetProject(ctx context.Context, tenant, project string) (*Proje
 // CreateProject creates a new project
 // The project parameter accepts either a *Project or any compatible struct
 func (c *Client) CreateProject(ctx context.Context, tenant string, project interface{}) error {
-	path := "/api/admin/tenants/" + buildPath(tenant, "projects")
+	path := apiAdminTenants + buildPath(tenant, "projects")
 
 	resp, err := c.http.R().
 		SetContext(ctx).
@@ -680,7 +684,7 @@ func (c *Client) CreateProject(ctx context.Context, tenant string, project inter
 
 // DeleteProject deletes a project
 func (c *Client) DeleteProject(ctx context.Context, tenant, project string) error {
-	path := "/api/admin/tenants/" + buildPath(tenant, "projects", project)
+	path := apiAdminTenants + buildPath(tenant, "projects", project)
 
 	resp, err := c.http.R().
 		SetContext(ctx).
@@ -703,7 +707,7 @@ func (c *Client) DeleteProject(ctx context.Context, tenant, project string) erro
 
 // ListAPIKeys lists all API keys for a tenant
 func (c *Client) ListAPIKeys(ctx context.Context, tenant string) ([]APIKey, error) {
-	path := "/api/admin/tenants/" + buildPath(tenant, "keys")
+	path := apiAdminTenants + buildPath(tenant, "keys")
 
 	var keys []APIKey
 	resp, err := c.http.R().
@@ -748,7 +752,7 @@ func (c *Client) GetAPIKey(ctx context.Context, tenant, clientID string) (*APIKe
 // CreateAPIKey creates a new API key
 // The key parameter accepts either an *APIKey or any compatible struct
 func (c *Client) CreateAPIKey(ctx context.Context, tenant string, key interface{}) (*APIKey, error) {
-	path := "/api/admin/tenants/" + buildPath(tenant, "keys")
+	path := apiAdminTenants + buildPath(tenant, "keys")
 
 	var result APIKey
 	resp, err := c.http.R().
@@ -772,7 +776,7 @@ func (c *Client) CreateAPIKey(ctx context.Context, tenant string, key interface{
 // UpdateAPIKey updates an existing API key
 // The key parameter accepts either an *APIKey or any compatible struct
 func (c *Client) UpdateAPIKey(ctx context.Context, tenant, clientID string, key interface{}) error {
-	path := "/api/admin/tenants/" + buildPath(tenant, "keys", clientID)
+	path := apiAdminTenants + buildPath(tenant, "keys", clientID)
 
 	resp, err := c.http.R().
 		SetContext(ctx).
@@ -793,7 +797,7 @@ func (c *Client) UpdateAPIKey(ctx context.Context, tenant, clientID string, key 
 
 // DeleteAPIKey deletes an API key
 func (c *Client) DeleteAPIKey(ctx context.Context, tenant, clientID string) error {
-	path := "/api/admin/tenants/" + buildPath(tenant, "keys", clientID)
+	path := apiAdminTenants + buildPath(tenant, "keys", clientID)
 
 	resp, err := c.http.R().
 		SetContext(ctx).
@@ -816,7 +820,7 @@ func (c *Client) DeleteAPIKey(ctx context.Context, tenant, clientID string) erro
 
 // ListTags lists all tags in a tenant
 func (c *Client) ListTags(ctx context.Context, tenant string) ([]Tag, error) {
-	path := "/api/admin/tenants/" + buildPath(tenant, "tags")
+	path := apiAdminTenants + buildPath(tenant, "tags")
 
 	var tags []Tag
 	resp, err := c.http.R().
@@ -838,7 +842,7 @@ func (c *Client) ListTags(ctx context.Context, tenant string) ([]Tag, error) {
 // CreateTag creates a new tag
 // The tag parameter accepts either a *Tag or any compatible struct
 func (c *Client) CreateTag(ctx context.Context, tenant string, tag interface{}) error {
-	path := "/api/admin/tenants/" + buildPath(tenant, "tags")
+	path := apiAdminTenants + buildPath(tenant, "tags")
 
 	resp, err := c.http.R().
 		SetContext(ctx).
@@ -859,7 +863,7 @@ func (c *Client) CreateTag(ctx context.Context, tenant string, tag interface{}) 
 
 // DeleteTag deletes a tag
 func (c *Client) DeleteTag(ctx context.Context, tenant, tagName string) error {
-	path := "/api/admin/tenants/" + buildPath(tenant, "tags", tagName)
+	path := apiAdminTenants + buildPath(tenant, "tags", tagName)
 
 	resp, err := c.http.R().
 		SetContext(ctx).
@@ -1077,7 +1081,7 @@ func (c *Client) Health(ctx context.Context) (*HealthStatus, error) {
 func (c *Client) Search(ctx context.Context, tenant, query string, filters []string) ([]SearchResult, error) {
 	var path string
 	if tenant != "" {
-		path = "/api/admin/tenants/" + buildPath(tenant, "search")
+		path = apiAdminTenants + buildPath(tenant, "search")
 	} else {
 		path = "/api/admin/search"
 	}
@@ -1106,7 +1110,7 @@ func (c *Client) Search(ctx context.Context, tenant, query string, filters []str
 
 // Export exports tenant data
 func (c *Client) Export(ctx context.Context, tenant string) (string, error) {
-	path := "/api/admin/tenants/" + buildPath(tenant, "_export")
+	path := apiAdminTenants + buildPath(tenant, "_export")
 
 	resp, err := c.http.R().
 		SetContext(ctx).
@@ -1127,7 +1131,7 @@ func (c *Client) Export(ctx context.Context, tenant string) (string, error) {
 // Import imports tenant data from a file
 // All fields from ImportRequest are passed as query parameters to the API
 func (c *Client) Import(ctx context.Context, tenant, filePath string, req ImportRequest) (*ImportStatus, error) {
-	path := "/api/admin/tenants/" + buildPath(tenant, "_import")
+	path := apiAdminTenants + buildPath(tenant, "_import")
 
 	var status ImportStatus
 
