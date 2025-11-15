@@ -244,6 +244,50 @@ func extractRow(val reflect.Value, headers []string) []string {
 	return row
 }
 
+// formatSliceValue formats a slice or array value
+func formatSliceValue(val reflect.Value) string {
+	if val.Len() == 0 {
+		return "[]"
+	}
+
+	// Format as comma-separated list for simple types
+	if val.Len() <= 5 {
+		return formatShortSlice(val)
+	}
+
+	return fmt.Sprintf("[%d items]", val.Len())
+}
+
+// formatShortSlice formats a small slice as a comma-separated list
+func formatShortSlice(val reflect.Value) string {
+	result := "["
+	for i := 0; i < val.Len(); i++ {
+		if i > 0 {
+			result += ", "
+		}
+		result += formatValue(val.Index(i))
+	}
+	result += "]"
+	return result
+}
+
+// formatStructValue formats a struct value
+func formatStructValue(val reflect.Value) string {
+	// For time.Time and similar, use String() method
+	if stringer, ok := val.Interface().(fmt.Stringer); ok {
+		return stringer.String()
+	}
+	return fmt.Sprintf("%v", val.Interface())
+}
+
+// formatBoolValue formats a boolean value
+func formatBoolValue(val reflect.Value) string {
+	if val.Bool() {
+		return "true"
+	}
+	return "false"
+}
+
 // formatValue formats a reflect.Value as a string
 func formatValue(val reflect.Value) string {
 	if !val.IsValid() {
@@ -257,38 +301,16 @@ func formatValue(val reflect.Value) string {
 		}
 		return formatValue(val.Elem())
 	case reflect.Slice, reflect.Array:
-		if val.Len() == 0 {
-			return "[]"
-		}
-		// Format as comma-separated list for simple types
-		if val.Len() <= 5 {
-			result := "["
-			for i := 0; i < val.Len(); i++ {
-				if i > 0 {
-					result += ", "
-				}
-				result += formatValue(val.Index(i))
-			}
-			result += "]"
-			return result
-		}
-		return fmt.Sprintf("[%d items]", val.Len())
+		return formatSliceValue(val)
 	case reflect.Map:
 		if val.Len() == 0 {
 			return "{}"
 		}
 		return fmt.Sprintf("{%d entries}", val.Len())
 	case reflect.Struct:
-		// For time.Time and similar, use String() method
-		if stringer, ok := val.Interface().(fmt.Stringer); ok {
-			return stringer.String()
-		}
-		return fmt.Sprintf("%v", val.Interface())
+		return formatStructValue(val)
 	case reflect.Bool:
-		if val.Bool() {
-			return "true"
-		}
-		return "false"
+		return formatBoolValue(val)
 	default:
 		return fmt.Sprint(val.Interface())
 	}
