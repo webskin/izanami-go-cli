@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/webskin/izanami-go-cli/internal/errors"
 	"github.com/webskin/izanami-go-cli/internal/izanami"
 	"github.com/webskin/izanami-go-cli/internal/output"
 )
@@ -42,7 +43,7 @@ var sessionsListCmd = &cobra.Command{
 		}
 
 		if len(sessions.Sessions) == 0 {
-			fmt.Fprintln(os.Stderr, "No saved sessions. Use 'iz login' to create one.")
+			fmt.Fprintln(os.Stderr, errors.MsgNoSavedSessions)
 			return nil
 		}
 
@@ -97,7 +98,7 @@ var sessionsUseCmd = &cobra.Command{
 		}
 
 		if err := sessions.Save(); err != nil {
-			return fmt.Errorf("failed to save sessions: %w", err)
+			return fmt.Errorf("%s: %w", errors.MsgFailedToSaveSessions, err)
 		}
 
 		session, _ := sessions.GetSession(sessionName)
@@ -127,7 +128,7 @@ var sessionsDeleteCmd = &cobra.Command{
 		}
 
 		if err := sessions.Save(); err != nil {
-			return fmt.Errorf("failed to save sessions: %w", err)
+			return fmt.Errorf("%s: %w", errors.MsgFailedToSaveSessions, err)
 		}
 
 		fmt.Fprintf(os.Stderr, "✅ Deleted session: %s\n", sessionName)
@@ -156,7 +157,7 @@ You will need to login again to use this session.`,
 		}
 
 		if sessions.Active == "" {
-			return fmt.Errorf("no active session")
+			return fmt.Errorf(errors.MsgNoActiveSession)
 		}
 
 		session, err := sessions.GetSession(sessions.Active)
@@ -169,7 +170,7 @@ You will need to login again to use this session.`,
 		session.CreatedAt = time.Time{} // Zero time
 
 		if err := sessions.Save(); err != nil {
-			return fmt.Errorf("failed to save sessions: %w", err)
+			return fmt.Errorf("%s: %w", errors.MsgFailedToSaveSessions, err)
 		}
 
 		fmt.Fprintf(os.Stderr, "✅ Logged out from session: %s\n", sessions.Active)

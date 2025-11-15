@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/webskin/izanami-go-cli/internal/errors"
 	"gopkg.in/yaml.v3"
 )
 
@@ -51,12 +52,12 @@ func LoadSessions() (*Sessions, error) {
 				Sessions: make(map[string]*Session),
 			}, nil
 		}
-		return nil, fmt.Errorf("failed to read sessions file: %w", err)
+		return nil, fmt.Errorf("%s: %w", errors.MsgFailedToReadSessionsFile, err)
 	}
 
 	var sessions Sessions
 	if err := yaml.Unmarshal(data, &sessions); err != nil {
-		return nil, fmt.Errorf("failed to parse sessions file: %w", err)
+		return nil, fmt.Errorf("%s: %w", errors.MsgFailedToParseSessionsFile, err)
 	}
 
 	if sessions.Sessions == nil {
@@ -72,12 +73,12 @@ func (s *Sessions) Save() error {
 
 	data, err := yaml.Marshal(s)
 	if err != nil {
-		return fmt.Errorf("failed to marshal sessions: %w", err)
+		return fmt.Errorf("%s: %w", errors.MsgFailedToMarshalSessions, err)
 	}
 
 	// Create with restricted permissions (600)
 	if err := os.WriteFile(sessionsPath, data, 0600); err != nil {
-		return fmt.Errorf("failed to write sessions file: %w", err)
+		return fmt.Errorf("%s: %w", errors.MsgFailedToWriteSessionsFile, err)
 	}
 
 	return nil
@@ -99,12 +100,12 @@ func (s *Sessions) AddSession(name string, session *Session) {
 // GetActiveSession returns the currently active session
 func (s *Sessions) GetActiveSession() (*Session, string, error) {
 	if s.Active == "" {
-		return nil, "", fmt.Errorf("no active session (use 'iz login' to authenticate)")
+		return nil, "", fmt.Errorf(errors.MsgNoActiveSessionWithLogin)
 	}
 
 	session, ok := s.Sessions[s.Active]
 	if !ok {
-		return nil, "", fmt.Errorf("active session '%s' not found", s.Active)
+		return nil, "", fmt.Errorf(errors.MsgActiveSessionNotFound, s.Active)
 	}
 
 	return session, s.Active, nil
@@ -114,7 +115,7 @@ func (s *Sessions) GetActiveSession() (*Session, string, error) {
 func (s *Sessions) GetSession(name string) (*Session, error) {
 	session, ok := s.Sessions[name]
 	if !ok {
-		return nil, fmt.Errorf("session '%s' not found", name)
+		return nil, fmt.Errorf(errors.MsgSessionNotFound, name)
 	}
 	return session, nil
 }
@@ -122,7 +123,7 @@ func (s *Sessions) GetSession(name string) (*Session, error) {
 // DeleteSession removes a session
 func (s *Sessions) DeleteSession(name string) error {
 	if _, ok := s.Sessions[name]; !ok {
-		return fmt.Errorf("session '%s' not found", name)
+		return fmt.Errorf(errors.MsgSessionNotFound, name)
 	}
 
 	delete(s.Sessions, name)
@@ -143,7 +144,7 @@ func (s *Sessions) DeleteSession(name string) error {
 // SetActiveSession sets the active session
 func (s *Sessions) SetActiveSession(name string) error {
 	if _, ok := s.Sessions[name]; !ok {
-		return fmt.Errorf("session '%s' not found", name)
+		return fmt.Errorf(errors.MsgSessionNotFound, name)
 	}
 	s.Active = name
 	return nil
