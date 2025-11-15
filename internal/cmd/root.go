@@ -75,7 +75,18 @@ For more information, visit: https://github.com/MAIF/izanami`,
 		}
 
 		// Priority 3: Command-line flags override everything
-		cfg.MergeWithFlags(baseURL, clientID, clientSecret, username, token, tenant, project, contextPath, timeout, verbose)
+		cfg.MergeWithFlags(izanami.FlagValues{
+			BaseURL:      baseURL,
+			ClientID:     clientID,
+			ClientSecret: clientSecret,
+			Username:     username,
+			Token:        token,
+			Tenant:       tenant,
+			Project:      project,
+			Context:      contextPath,
+			Timeout:      timeout,
+			Verbose:      verbose,
+		})
 
 		return nil
 	},

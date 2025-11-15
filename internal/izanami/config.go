@@ -23,6 +23,20 @@ type Config struct {
 	Verbose      bool
 }
 
+// FlagValues holds command-line flag values for merging with config
+type FlagValues struct {
+	BaseURL      string
+	ClientID     string
+	ClientSecret string
+	Username     string
+	Token        string
+	Tenant       string
+	Project      string
+	Context      string
+	Timeout      int
+	Verbose      bool
+}
+
 // LoadConfig loads configuration from multiple sources:
 // 1. Config file (~/.config/iz/config.yaml or platform-equivalent)
 // 2. Environment variables (IZ_*)
@@ -69,36 +83,36 @@ func LoadConfig() (*Config, error) {
 }
 
 // MergeWithFlags merges configuration with command-line flags
-func (c *Config) MergeWithFlags(baseURL, clientID, clientSecret, username, token, tenant, project, context string, timeout int, verbose bool) {
-	if baseURL != "" {
-		c.BaseURL = baseURL
+func (c *Config) MergeWithFlags(flags FlagValues) {
+	if flags.BaseURL != "" {
+		c.BaseURL = flags.BaseURL
 	}
-	if clientID != "" {
-		c.ClientID = clientID
+	if flags.ClientID != "" {
+		c.ClientID = flags.ClientID
 	}
-	if clientSecret != "" {
-		c.ClientSecret = clientSecret
+	if flags.ClientSecret != "" {
+		c.ClientSecret = flags.ClientSecret
 	}
-	if username != "" {
-		c.Username = username
+	if flags.Username != "" {
+		c.Username = flags.Username
 	}
-	if token != "" {
-		c.Token = token
+	if flags.Token != "" {
+		c.Token = flags.Token
 	}
-	if tenant != "" {
-		c.Tenant = tenant
+	if flags.Tenant != "" {
+		c.Tenant = flags.Tenant
 	}
-	if project != "" {
-		c.Project = project
+	if flags.Project != "" {
+		c.Project = flags.Project
 	}
-	if context != "" {
-		c.Context = context
+	if flags.Context != "" {
+		c.Context = flags.Context
 	}
-	if timeout > 0 {
-		c.Timeout = timeout
+	if flags.Timeout > 0 {
+		c.Timeout = flags.Timeout
 	}
-	if verbose {
-		c.Verbose = verbose
+	if flags.Verbose {
+		c.Verbose = flags.Verbose
 	}
 }
 
