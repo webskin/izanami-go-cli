@@ -60,6 +60,15 @@ Examples:
 		}
 
 		fmt.Printf("✓ Set %s = %s\n", key, value)
+
+		// Warn about sensitive data storage
+		if izanami.SensitiveKeys[key] {
+			fmt.Println("\n⚠️  SECURITY WARNING:")
+			fmt.Println("   Tokens are stored in plaintext in the config file.")
+			fmt.Println("   File permissions are set to 0600 (owner read/write only).")
+			fmt.Println("   Never commit config.yaml to version control.")
+		}
+
 		return nil
 	},
 }
@@ -254,6 +263,11 @@ Use --defaults to create a config file with only default values (non-interactive
 		fmt.Println("  1. Edit the config file and uncomment/set your values")
 		fmt.Println("  2. Or use environment variables (IZ_BASE_URL, IZ_CLIENT_ID, etc.)")
 		fmt.Println("  3. Or use command-line flags (--url, --client-id, etc.)")
+
+		fmt.Println("\n⚠️  SECURITY NOTICE:")
+		fmt.Println("   - File permissions set to 0600 (owner read/write only)")
+		fmt.Println("   - Tokens stored in plaintext - never commit to version control")
+		fmt.Println("   - Add config.yaml to .gitignore if using git")
 
 		return nil
 	},

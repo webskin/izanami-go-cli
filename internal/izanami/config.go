@@ -49,6 +49,9 @@ type FlagValues struct {
 // 2. Environment variables (IZ_*)
 // 3. Command-line flags (set by cobra, highest priority)
 func LoadConfig() (*Config, error) {
+	// Repair file permissions on every load (protects users upgrading from older versions)
+	repairConfigPermissions()
+
 	v := viper.New()
 
 	// Set config file location
@@ -203,7 +206,7 @@ func getConfigDir() string {
 // InitConfigFile creates a sample config file at the default location
 func InitConfigFile() error {
 	configDir := getConfigDir()
-	if err := os.MkdirAll(configDir, 0755); err != nil {
+	if err := os.MkdirAll(configDir, 0700); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
@@ -253,9 +256,18 @@ output-format: table
 color: auto
 `
 
-	if err := os.WriteFile(configPath, []byte(sampleConfig), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte(sampleConfig), 0600); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)
 	}
+
+	// Create .gitignore to prevent accidental commits
+	gitignorePath := filepath.Join(configDir, ".gitignore")
+	gitignoreContent := `# Izanami CLI - Do not commit credentials
+config.yaml
+*.yaml
+`
+	// Ignore error - .gitignore is optional
+	os.WriteFile(gitignorePath, []byte(gitignoreContent), 0644)
 
 	return nil
 }
@@ -306,11 +318,37 @@ func ConfigExists() bool {
 	return err == nil
 }
 
+// repairConfigPermissions ensures config files have secure permissions
+// This is called on every config load to protect users who upgrade from older versions
+func repairConfigPermissions() {
+	configDir := getConfigDir()
+	configPath := GetConfigPath()
+
+	// Fix directory permissions (should be 0700 - owner only)
+	if info, err := os.Stat(configDir); err == nil {
+		currentPerms := info.Mode().Perm()
+		if currentPerms != 0700 {
+			os.Chmod(configDir, 0700)
+		}
+	}
+
+	// Fix config file permissions (should be 0600 - owner read/write only)
+	if info, err := os.Stat(configPath); err == nil {
+		currentPerms := info.Mode().Perm()
+		if currentPerms != 0600 {
+			os.Chmod(configPath, 0600)
+		}
+	}
+}
+
 // GetConfigValue gets a single configuration value with its source
 func GetConfigValue(key string) (*ConfigValue, error) {
 	if !ValidConfigKeys[key] {
 		return nil, fmt.Errorf("invalid config key: %s", key)
 	}
+
+	// Repair permissions before reading
+	repairConfigPermissions()
 
 	v := viper.New()
 	configDir := getConfigDir()
@@ -383,7 +421,7 @@ func SetConfigValue(key, value string) error {
 	configDir := getConfigDir()
 
 	// Create config directory if it doesn't exist
-	if err := os.MkdirAll(configDir, 0755); err != nil {
+	if err := os.MkdirAll(configDir, 0700); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
@@ -407,6 +445,11 @@ func SetConfigValue(key, value string) error {
 		if err := v.SafeWriteConfig(); err != nil {
 			return fmt.Errorf("failed to write config file: %w", err)
 		}
+	}
+
+	// Ensure secure file permissions (in case viper created with default perms)
+	if err := os.Chmod(configPath, 0600); err != nil {
+		return fmt.Errorf("failed to set config file permissions: %w", err)
 	}
 
 	return nil
