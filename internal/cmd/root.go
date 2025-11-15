@@ -111,7 +111,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&contextPath, "context", "", "Default context path (env: IZ_CONTEXT)")
 	rootCmd.PersistentFlags().IntVar(&timeout, "timeout", 0, "Request timeout in seconds (default: 30)")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Verbose output")
-	rootCmd.PersistentFlags().StringVarP(&outputFormat, "output", "o", "json", "Output format: json or table")
+	rootCmd.PersistentFlags().StringVarP(&outputFormat, "output", "o", "table", "Output format: json or table")
 }
 
 // GetConfig returns the global configuration

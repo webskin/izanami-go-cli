@@ -1,5 +1,14 @@
 # TODO
 
+## Feature Management
+
+### Add Confirmation Prompts
+- Add confirmation when asking for feature enabling/disabling
+- Prevents accidental changes to critical features
+- Should prompt "Are you sure you want to enable/disable feature X? [y/N]"
+
+---
+
 ## Personal Access Token (PAT) Authentication
 
 ### Current Issue
