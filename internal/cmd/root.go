@@ -56,7 +56,7 @@ Examples:
 For more information, visit: https://github.com/MAIF/izanami`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		// Skip config loading for commands that don't need it
-		skipCommands := []string{"completion", "version", "help", "login", "logout", "sessions"}
+		skipCommands := []string{"completion", "version", "help", "login", "logout", "sessions", "init"}
 		for _, skip := range skipCommands {
 			if cmd.Name() == skip || cmd.Parent() != nil && cmd.Parent().Name() == skip {
 				return nil

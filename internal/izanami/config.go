@@ -147,7 +147,7 @@ func (c *Config) ValidateAdminAuth() error {
 	}
 
 	if (c.Username == "" || c.JwtToken == "") && c.PatToken == "" {
-		return fmt.Errorf("admin operations require username/jwt_token or pat_token (set IZ_USERNAME and IZ_JWT_TOKEN, or IZ_PAT_TOKEN)")
+		return fmt.Errorf("admin operations require login (iz login), username/jwt_token or pat_token (set IZ_USERNAME and IZ_JWT_TOKEN, or IZ_PAT_TOKEN)")
 	}
 
 	return nil
