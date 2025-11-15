@@ -113,6 +113,7 @@ iztag() {
     git push origin "$tag_version"
     echo -e "${GREEN}✅ Tag $tag_version created and pushed!${NC}"
     echo "Check release at: https://github.com/webskin/izanami-go-cli/actions"
+    return 0
 }
 
 # Delete local and remote tag (usage: izuntag v1.0.0)
@@ -125,6 +126,7 @@ izuntag() {
     git push --delete origin "$tag_version" 2>/dev/null
     git tag -d "$tag_version" 2>/dev/null
     echo -e "${GREEN}✅ Tag $tag_version deleted${NC}"
+    return 0
 }
 
 # ============================================================================
@@ -183,6 +185,7 @@ izenv() {
     echo "IZ_TOKEN:         ${IZ_TOKEN:+***set***}"
     echo "IZ_CLIENT_ID:     ${IZ_CLIENT_ID:-not set}"
     echo "IZ_CLIENT_SECRET: ${IZ_CLIENT_SECRET:+***set***}"
+    return 0
 }
 
 # ============================================================================
@@ -204,6 +207,7 @@ alias cdiziz='cd $IZ_PROJECT_DIR/internal/izanami'
 # Build and test a specific feature (usage: iztest-feature features list)
 iztest-feature() {
     make build && ./build/iz "$@"
+    return 0
 }
 
 # Watch for changes and rebuild (requires entr or inotifywait)
@@ -214,6 +218,7 @@ izwatch() {
     else
         echo "Install 'entr' for file watching: sudo apt install entr"
     fi
+    return 0
 }
 
 # Quick feature test against local server
@@ -222,6 +227,7 @@ iztest-local() {
     export IZ_TENANT=test-tenant
     export IZ_PROJECT=test-project
     make build && ./build/iz "$@"
+    return 0
 }
 
 # Show all available aliases
@@ -289,6 +295,7 @@ izaliases() {
 
     echo -e "\n${BLUE}Tip: Source this file in your ~/.bashrc or ~/.zshrc${NC}"
     echo "  echo 'source $IZ_PROJECT_DIR/aliases.sh' >> ~/.bashrc"
+    return 0
 }
 
 echo -e "${GREEN}✅ Aliases loaded! Type 'izaliases' to see all available commands.${NC}"
