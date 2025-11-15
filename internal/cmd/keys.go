@@ -7,12 +7,9 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/webskin/izanami-go-cli/internal/errors"
 	"github.com/webskin/izanami-go-cli/internal/izanami"
 	"github.com/webskin/izanami-go-cli/internal/output"
-)
-
-const (
-	errMsgTenantRequired = "tenant is required (use --tenant flag)"
 )
 
 var (
@@ -49,7 +46,7 @@ var keysListCmd = &cobra.Command{
 	Short: "List all API keys in a tenant",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if cfg.Tenant == "" {
-			return fmt.Errorf(errMsgTenantRequired)
+			return fmt.Errorf(errors.MsgTenantRequired)
 		}
 
 		client, err := izanami.NewClient(cfg)
@@ -81,7 +78,7 @@ var keysGetCmd = &cobra.Command{
 		clientID := args[0]
 
 		if cfg.Tenant == "" {
-			return fmt.Errorf(errMsgTenantRequired)
+			return fmt.Errorf(errors.MsgTenantRequired)
 		}
 
 		client, err := izanami.NewClient(cfg)
@@ -108,7 +105,7 @@ var keysCreateCmd = &cobra.Command{
 		name := args[0]
 
 		if cfg.Tenant == "" {
-			return fmt.Errorf(errMsgTenantRequired)
+			return fmt.Errorf(errors.MsgTenantRequired)
 		}
 
 		client, err := izanami.NewClient(cfg)
@@ -165,7 +162,7 @@ var keysUpdateCmd = &cobra.Command{
 		clientID := args[0]
 
 		if cfg.Tenant == "" {
-			return fmt.Errorf(errMsgTenantRequired)
+			return fmt.Errorf(errors.MsgTenantRequired)
 		}
 
 		client, err := izanami.NewClient(cfg)
@@ -215,7 +212,7 @@ var keysDeleteCmd = &cobra.Command{
 		clientID := args[0]
 
 		if cfg.Tenant == "" {
-			return fmt.Errorf(errMsgTenantRequired)
+			return fmt.Errorf(errors.MsgTenantRequired)
 		}
 
 		client, err := izanami.NewClient(cfg)

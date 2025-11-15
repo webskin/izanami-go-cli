@@ -7,6 +7,7 @@ import (
 	"runtime"
 
 	"github.com/spf13/viper"
+	"github.com/webskin/izanami-go-cli/internal/errors"
 )
 
 // Config holds the configuration for the Izanami client
@@ -149,7 +150,7 @@ func (c *Config) ValidateAdminAuth() error {
 // ValidateTenant checks if a tenant is configured (required for most operations)
 func (c *Config) ValidateTenant() error {
 	if c.Tenant == "" {
-		return fmt.Errorf("tenant is required (set IZ_TENANT or --tenant)")
+		return fmt.Errorf(errors.MsgTenantRequired)
 	}
 	return nil
 }
