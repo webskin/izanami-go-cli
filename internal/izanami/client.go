@@ -98,22 +98,10 @@ func newClientInternal(config *Config) (*Client, error) {
 		enableSecureDebugMode(client)
 	}
 
-	// Set authentication
-	// Priority: PAT token > Client API key > JWT cookie
-	if configCopy.PatToken != "" {
-		// Personal Access Token authentication (Basic auth with username:token)
-		// Izanami expects: Authorization: Basic base64(username:token)
-		client.SetBasicAuth(configCopy.Username, configCopy.PatToken)
-	} else if configCopy.Username != "" && configCopy.JwtToken != "" {
-		// Admin JWT cookie authentication
-		// Izanami expects the JWT token in a cookie named "token"
-		cookie := &http.Cookie{
-			Name:  "token",
-			Value: configCopy.JwtToken,
-			Path:  "/",
-		}
-		client.SetCookie(cookie)
-	}
+	// Note: Authentication is NOT set at client level
+	// Each API method will set appropriate authentication at the request level:
+	// - Admin APIs: Use setAdminAuth() to set PAT or JWT
+	// - Client APIs: Use setClientAuth() to set client-id/secret headers
 
 	return &Client{
 		http:   client,
@@ -122,6 +110,29 @@ func newClientInternal(config *Config) (*Client, error) {
 }
 
 const maxBodyLogLength = 2048 // Maximum length for logged request/response bodies
+
+// setAdminAuth sets authentication for admin API requests (PAT or JWT)
+func (c *Client) setAdminAuth(req *resty.Request) {
+	// Priority: PAT token > JWT cookie
+	if c.config.PatToken != "" {
+		// Personal Access Token authentication (Basic auth with username:token)
+		req.SetBasicAuth(c.config.Username, c.config.PatToken)
+	} else if c.config.Username != "" && c.config.JwtToken != "" {
+		// JWT cookie authentication
+		req.SetHeader("Cookie", "token="+c.config.JwtToken)
+	}
+}
+
+// setClientAuth sets authentication for client API requests (client-id/secret)
+// Returns error if client credentials are not configured
+func (c *Client) setClientAuth(req *resty.Request) error {
+	if c.config.ClientID == "" || c.config.ClientSecret == "" {
+		return fmt.Errorf("client credentials required (client-id and client-secret)")
+	}
+	req.SetHeader("Izanami-Client-Id", c.config.ClientID)
+	req.SetHeader("Izanami-Client-Secret", c.config.ClientSecret)
+	return nil
+}
 
 // enableSecureDebugMode enables verbose logging with sensitive data redaction
 func enableSecureDebugMode(client *resty.Client) {
@@ -301,6 +312,7 @@ func (c *Client) ListFeatures(ctx context.Context, tenant string, tag string) ([
 	path := apiAdminTenants + buildPath(tenant, "features")
 
 	req := c.http.R().SetContext(ctx).SetResult(&[]Feature{})
+	c.setAdminAuth(req)
 
 	// Add tag filter if specified (server-side filtering)
 	if tag != "" {
@@ -325,10 +337,9 @@ func (c *Client) GetFeature(ctx context.Context, tenant, featureID string) (*Fea
 	path := apiAdminTenants + buildPath(tenant, "features", featureID)
 
 	var feature FeatureWithOverloads
-	resp, err := c.http.R().
-		SetContext(ctx).
-		SetResult(&feature).
-		Get(path)
+	req := c.http.R().SetContext(ctx).SetResult(&feature)
+	c.setAdminAuth(req)
+	resp, err := req.Get(path)
 
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", errmsg.MsgFailedToGetFeature, err)
@@ -347,12 +358,13 @@ func (c *Client) CreateFeature(ctx context.Context, tenant, project string, feat
 	path := apiAdminTenants + buildPath(tenant, "projects", project, "features")
 
 	var result Feature
-	resp, err := c.http.R().
+	req := c.http.R().
 		SetContext(ctx).
 		SetHeader("Content-Type", "application/json").
 		SetBody(feature).
-		SetResult(&result).
-		Post(path)
+		SetResult(&result)
+	c.setAdminAuth(req)
+	resp, err := req.Post(path)
 
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", errmsg.MsgFailedToCreateFeature, err)
@@ -374,6 +386,7 @@ func (c *Client) UpdateFeature(ctx context.Context, tenant, featureID string, fe
 		SetContext(ctx).
 		SetHeader("Content-Type", "application/json").
 		SetBody(feature)
+	c.setAdminAuth(req)
 
 	if preserveProtectedContexts {
 		req.SetQueryParam("preserveProtectedContexts", "true")
@@ -395,9 +408,9 @@ func (c *Client) UpdateFeature(ctx context.Context, tenant, featureID string, fe
 func (c *Client) DeleteFeature(ctx context.Context, tenant, featureID string) error {
 	path := apiAdminTenants + buildPath(tenant, "features", featureID)
 
-	resp, err := c.http.R().
-		SetContext(ctx).
-		Delete(path)
+	req := c.http.R().SetContext(ctx)
+	c.setAdminAuth(req)
+	resp, err := req.Delete(path)
 
 	if err != nil {
 		return fmt.Errorf("%s: %w", errmsg.MsgFailedToDeleteFeature, err)
@@ -415,16 +428,11 @@ func (c *Client) DeleteFeature(ctx context.Context, tenant, featureID string) er
 func (c *Client) CheckFeature(ctx context.Context, featureID, user, contextPath string) (*FeatureCheckResult, error) {
 	path := "/api/v2/features/" + buildPath(featureID)
 
-	// For feature check, we need to use CLIENT_ID/CLIENT_SECRET instead of PAT token
-	// Create a request with the appropriate authentication
 	req := c.http.R().SetContext(ctx).SetResult(&FeatureCheckResult{})
 
-	// Override PAT token authentication with CLIENT_ID/CLIENT_SECRET if available
-	if c.config.ClientID != "" && c.config.ClientSecret != "" {
-		req.SetHeader("Izanami-Client-Id", c.config.ClientID)
-		req.SetHeader("Izanami-Client-Secret", c.config.ClientSecret)
-		// Remove Authorization header if it was set by PAT token
-		req.SetHeader("Authorization", "")
+	// Set client authentication (client-id/secret headers only)
+	if err := c.setClientAuth(req); err != nil {
+		return nil, err
 	}
 
 	if user != "" {
@@ -461,6 +469,7 @@ func (c *Client) ListContexts(ctx context.Context, tenant, project string, all b
 	}
 
 	req := c.http.R().SetContext(ctx).SetResult(&[]Context{})
+	c.setAdminAuth(req)
 
 	if all {
 		req.SetQueryParam("all", "true")
@@ -497,11 +506,12 @@ func (c *Client) CreateContext(ctx context.Context, tenant, project, name, paren
 		}
 	}
 
-	resp, err := c.http.R().
+	req := c.http.R().
 		SetContext(ctx).
 		SetHeader("Content-Type", "application/json").
-		SetBody(contextData).
-		Post(path)
+		SetBody(contextData)
+	c.setAdminAuth(req)
+	resp, err := req.Post(path)
 
 	if err != nil {
 		return fmt.Errorf("%s: %w", errmsg.MsgFailedToCreateContext, err)
@@ -523,9 +533,9 @@ func (c *Client) DeleteContext(ctx context.Context, tenant, project, contextPath
 		path = apiAdminTenants + buildPath(tenant, "contexts", contextPath)
 	}
 
-	resp, err := c.http.R().
-		SetContext(ctx).
-		Delete(path)
+	req := c.http.R().SetContext(ctx)
+	c.setAdminAuth(req)
+	resp, err := req.Delete(path)
 
 	if err != nil {
 		return fmt.Errorf("%s: %w", errmsg.MsgFailedToDeleteContext, err)
@@ -548,6 +558,7 @@ func (c *Client) ListTenants(ctx context.Context, right *RightLevel) ([]Tenant, 
 	req := c.http.R().
 		SetContext(ctx).
 		SetResult(&[]Tenant{})
+	c.setAdminAuth(req)
 
 	// Add right filter if specified
 	if right != nil {
@@ -573,10 +584,9 @@ func (c *Client) GetTenant(ctx context.Context, name string) (*Tenant, error) {
 	path := apiAdminTenants + buildPath(name)
 
 	var tenant Tenant
-	resp, err := c.http.R().
-		SetContext(ctx).
-		SetResult(&tenant).
-		Get(path)
+	req := c.http.R().SetContext(ctx).SetResult(&tenant)
+	c.setAdminAuth(req)
+	resp, err := req.Get(path)
 
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", errmsg.MsgFailedToGetTenant, err)
@@ -592,11 +602,12 @@ func (c *Client) GetTenant(ctx context.Context, name string) (*Tenant, error) {
 // CreateTenant creates a new tenant
 // The tenant parameter accepts either a *Tenant or any compatible struct
 func (c *Client) CreateTenant(ctx context.Context, tenant interface{}) error {
-	resp, err := c.http.R().
+	req := c.http.R().
 		SetContext(ctx).
 		SetHeader("Content-Type", "application/json").
-		SetBody(tenant).
-		Post("/api/admin/tenants")
+		SetBody(tenant)
+	c.setAdminAuth(req)
+	resp, err := req.Post("/api/admin/tenants")
 
 	if err != nil {
 		return fmt.Errorf("%s: %w", errmsg.MsgFailedToCreateTenant, err)
@@ -614,11 +625,12 @@ func (c *Client) CreateTenant(ctx context.Context, tenant interface{}) error {
 func (c *Client) UpdateTenant(ctx context.Context, name string, tenant interface{}) error {
 	path := apiAdminTenants + buildPath(name)
 
-	resp, err := c.http.R().
+	req := c.http.R().
 		SetContext(ctx).
 		SetHeader("Content-Type", "application/json").
-		SetBody(tenant).
-		Put(path)
+		SetBody(tenant)
+	c.setAdminAuth(req)
+	resp, err := req.Put(path)
 
 	if err != nil {
 		return fmt.Errorf("%s: %w", errmsg.MsgFailedToUpdateTenant, err)
@@ -635,9 +647,9 @@ func (c *Client) UpdateTenant(ctx context.Context, name string, tenant interface
 func (c *Client) DeleteTenant(ctx context.Context, name string) error {
 	path := apiAdminTenants + buildPath(name)
 
-	resp, err := c.http.R().
-		SetContext(ctx).
-		Delete(path)
+	req := c.http.R().SetContext(ctx)
+	c.setAdminAuth(req)
+	resp, err := req.Delete(path)
 
 	if err != nil {
 		return fmt.Errorf("%s: %w", errmsg.MsgFailedToDeleteTenant, err)
@@ -659,10 +671,9 @@ func (c *Client) ListProjects(ctx context.Context, tenant string) ([]Project, er
 	path := apiAdminTenants + buildPath(tenant, "projects")
 
 	var projects []Project
-	resp, err := c.http.R().
-		SetContext(ctx).
-		SetResult(&projects).
-		Get(path)
+	req := c.http.R().SetContext(ctx).SetResult(&projects)
+	c.setAdminAuth(req)
+	resp, err := req.Get(path)
 
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", errmsg.MsgFailedToListProjects, err)
@@ -680,10 +691,9 @@ func (c *Client) GetProject(ctx context.Context, tenant, project string) (*Proje
 	path := apiAdminTenants + buildPath(tenant, "projects", project)
 
 	var proj Project
-	resp, err := c.http.R().
-		SetContext(ctx).
-		SetResult(&proj).
-		Get(path)
+	req := c.http.R().SetContext(ctx).SetResult(&proj)
+	c.setAdminAuth(req)
+	resp, err := req.Get(path)
 
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", errmsg.MsgFailedToGetProject, err)
@@ -701,11 +711,12 @@ func (c *Client) GetProject(ctx context.Context, tenant, project string) (*Proje
 func (c *Client) CreateProject(ctx context.Context, tenant string, project interface{}) error {
 	path := apiAdminTenants + buildPath(tenant, "projects")
 
-	resp, err := c.http.R().
+	req := c.http.R().
 		SetContext(ctx).
 		SetHeader("Content-Type", "application/json").
-		SetBody(project).
-		Post(path)
+		SetBody(project)
+	c.setAdminAuth(req)
+	resp, err := req.Post(path)
 
 	if err != nil {
 		return fmt.Errorf("%s: %w", errmsg.MsgFailedToCreateProject, err)
@@ -722,9 +733,9 @@ func (c *Client) CreateProject(ctx context.Context, tenant string, project inter
 func (c *Client) DeleteProject(ctx context.Context, tenant, project string) error {
 	path := apiAdminTenants + buildPath(tenant, "projects", project)
 
-	resp, err := c.http.R().
-		SetContext(ctx).
-		Delete(path)
+	req := c.http.R().SetContext(ctx)
+	c.setAdminAuth(req)
+	resp, err := req.Delete(path)
 
 	if err != nil {
 		return fmt.Errorf("%s: %w", errmsg.MsgFailedToDeleteProject, err)
@@ -746,10 +757,9 @@ func (c *Client) ListAPIKeys(ctx context.Context, tenant string) ([]APIKey, erro
 	path := apiAdminTenants + buildPath(tenant, "keys")
 
 	var keys []APIKey
-	resp, err := c.http.R().
-		SetContext(ctx).
-		SetResult(&keys).
-		Get(path)
+	req := c.http.R().SetContext(ctx).SetResult(&keys)
+	c.setAdminAuth(req)
+	resp, err := req.Get(path)
 
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", errmsg.MsgFailedToListAPIKeys, err)
@@ -791,12 +801,13 @@ func (c *Client) CreateAPIKey(ctx context.Context, tenant string, key interface{
 	path := apiAdminTenants + buildPath(tenant, "keys")
 
 	var result APIKey
-	resp, err := c.http.R().
+	req := c.http.R().
 		SetContext(ctx).
 		SetHeader("Content-Type", "application/json").
 		SetBody(key).
-		SetResult(&result).
-		Post(path)
+		SetResult(&result)
+	c.setAdminAuth(req)
+	resp, err := req.Post(path)
 
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", errmsg.MsgFailedToCreateAPIKey, err)
@@ -814,11 +825,12 @@ func (c *Client) CreateAPIKey(ctx context.Context, tenant string, key interface{
 func (c *Client) UpdateAPIKey(ctx context.Context, tenant, clientID string, key interface{}) error {
 	path := apiAdminTenants + buildPath(tenant, "keys", clientID)
 
-	resp, err := c.http.R().
+	req := c.http.R().
 		SetContext(ctx).
 		SetHeader("Content-Type", "application/json").
-		SetBody(key).
-		Put(path)
+		SetBody(key)
+	c.setAdminAuth(req)
+	resp, err := req.Put(path)
 
 	if err != nil {
 		return fmt.Errorf("%s: %w", errmsg.MsgFailedToUpdateAPIKey, err)
@@ -835,9 +847,9 @@ func (c *Client) UpdateAPIKey(ctx context.Context, tenant, clientID string, key 
 func (c *Client) DeleteAPIKey(ctx context.Context, tenant, clientID string) error {
 	path := apiAdminTenants + buildPath(tenant, "keys", clientID)
 
-	resp, err := c.http.R().
-		SetContext(ctx).
-		Delete(path)
+	req := c.http.R().SetContext(ctx)
+	c.setAdminAuth(req)
+	resp, err := req.Delete(path)
 
 	if err != nil {
 		return fmt.Errorf("%s: %w", errmsg.MsgFailedToDeleteAPIKey, err)
@@ -859,10 +871,9 @@ func (c *Client) ListTags(ctx context.Context, tenant string) ([]Tag, error) {
 	path := apiAdminTenants + buildPath(tenant, "tags")
 
 	var tags []Tag
-	resp, err := c.http.R().
-		SetContext(ctx).
-		SetResult(&tags).
-		Get(path)
+	req := c.http.R().SetContext(ctx).SetResult(&tags)
+	c.setAdminAuth(req)
+	resp, err := req.Get(path)
 
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", errmsg.MsgFailedToListTags, err)
@@ -880,11 +891,12 @@ func (c *Client) ListTags(ctx context.Context, tenant string) ([]Tag, error) {
 func (c *Client) CreateTag(ctx context.Context, tenant string, tag interface{}) error {
 	path := apiAdminTenants + buildPath(tenant, "tags")
 
-	resp, err := c.http.R().
+	req := c.http.R().
 		SetContext(ctx).
 		SetHeader("Content-Type", "application/json").
-		SetBody(tag).
-		Post(path)
+		SetBody(tag)
+	c.setAdminAuth(req)
+	resp, err := req.Post(path)
 
 	if err != nil {
 		return fmt.Errorf("%s: %w", errmsg.MsgFailedToCreateTag, err)
@@ -901,9 +913,9 @@ func (c *Client) CreateTag(ctx context.Context, tenant string, tag interface{}) 
 func (c *Client) DeleteTag(ctx context.Context, tenant, tagName string) error {
 	path := apiAdminTenants + buildPath(tenant, "tags", tagName)
 
-	resp, err := c.http.R().
-		SetContext(ctx).
-		Delete(path)
+	req := c.http.R().SetContext(ctx)
+	c.setAdminAuth(req)
+	resp, err := req.Delete(path)
 
 	if err != nil {
 		return fmt.Errorf("%s: %w", errmsg.MsgFailedToDeleteTag, err)
@@ -1162,6 +1174,7 @@ func (c *Client) Search(ctx context.Context, tenant, query string, filters []str
 		SetContext(ctx).
 		SetResult(&[]SearchResult{}).
 		SetQueryParam("query", query)
+	c.setAdminAuth(req)
 
 	if len(filters) > 0 {
 		req.SetQueryParam("filter", strings.Join(filters, ","))
@@ -1184,10 +1197,11 @@ func (c *Client) Search(ctx context.Context, tenant, query string, filters []str
 func (c *Client) Export(ctx context.Context, tenant string) (string, error) {
 	path := apiAdminTenants + buildPath(tenant, "_export")
 
-	resp, err := c.http.R().
+	req := c.http.R().
 		SetContext(ctx).
-		SetHeader("Accept", "application/x-ndjson").
-		Post(path)
+		SetHeader("Accept", "application/x-ndjson")
+	c.setAdminAuth(req)
+	resp, err := req.Post(path)
 
 	if err != nil {
 		return "", fmt.Errorf("%s: %w", errmsg.MsgFailedToExport, err)
@@ -1211,6 +1225,7 @@ func (c *Client) Import(ctx context.Context, tenant, filePath string, req Import
 		SetContext(ctx).
 		SetFile("export", filePath).
 		SetResult(&status)
+	c.setAdminAuth(httpReq)
 
 	// Set all query parameters from ImportRequest
 	if req.Version > 0 {

@@ -12,36 +12,51 @@ import (
 
 // Config key constants
 const (
-	ConfigKeyBaseURL              = "base-url"
-	ConfigKeyClientID             = "client-id"
-	ConfigKeyClientSecret         = "client-secret"
-	ConfigKeyUsername             = "username"
-	ConfigKeyJwtToken             = "jwt-token"
-	ConfigKeyPersonalAccessToken  = "personal-access-token"
-	ConfigKeyTenant               = "tenant"
-	ConfigKeyProject              = "project"
-	ConfigKeyContext              = "context"
-	ConfigKeyTimeout              = "timeout"
-	ConfigKeyVerbose              = "verbose"
-	ConfigKeyOutputFormat         = "output-format"
-	ConfigKeyColor                = "color"
+	ConfigKeyBaseURL             = "base-url"
+	ConfigKeyClientID            = "client-id"
+	ConfigKeyClientSecret        = "client-secret"
+	ConfigKeyUsername            = "username"
+	ConfigKeyJwtToken            = "jwt-token"
+	ConfigKeyPersonalAccessToken = "personal-access-token"
+	ConfigKeyTenant              = "tenant"
+	ConfigKeyProject             = "project"
+	ConfigKeyContext             = "context"
+	ConfigKeyTimeout             = "timeout"
+	ConfigKeyVerbose             = "verbose"
+	ConfigKeyOutputFormat        = "output-format"
+	ConfigKeyColor               = "color"
+	ConfigKeyClientKeys          = "client-keys"
 )
 
 // Config holds the configuration for the Izanami client
 type Config struct {
-	BaseURL      string `yaml:"base-url"`
-	ClientID     string `yaml:"client-id"`
-	ClientSecret string `yaml:"client-secret"`
-	Username     string `yaml:"username"`
-	JwtToken     string `yaml:"jwt-token"`  // JWT token from login
-	PatToken     string `yaml:"personal-access-token"` // Personal Access Token
-	Tenant       string `yaml:"tenant"`
-	Project      string `yaml:"project"`
-	Context      string `yaml:"context"`
-	Timeout      int    `yaml:"timeout"`
-	Verbose      bool   `yaml:"verbose"`
-	OutputFormat string `yaml:"output-format"` // Default output format (table/json)
-	Color        string `yaml:"color"`         // Color output (auto/always/never)
+	BaseURL      string                            `yaml:"base-url" mapstructure:"base-url"`
+	ClientID     string                            `yaml:"client-id" mapstructure:"client-id"`
+	ClientSecret string                            `yaml:"client-secret" mapstructure:"client-secret"`
+	Username     string                            `yaml:"username" mapstructure:"username"`
+	JwtToken     string                            `yaml:"jwt-token" mapstructure:"jwt-token"`                         // JWT token from login
+	PatToken     string                            `yaml:"personal-access-token" mapstructure:"personal-access-token"` // Personal Access Token
+	Tenant       string                            `yaml:"tenant" mapstructure:"tenant"`
+	Project      string                            `yaml:"project" mapstructure:"project"`
+	Context      string                            `yaml:"context" mapstructure:"context"`
+	Timeout      int                               `yaml:"timeout" mapstructure:"timeout"`
+	Verbose      bool                              `yaml:"verbose" mapstructure:"verbose"`
+	OutputFormat string                            `yaml:"output-format" mapstructure:"output-format"`       // Default output format (table/json)
+	Color        string                            `yaml:"color" mapstructure:"color"`                       // Color output (auto/always/never)
+	ClientKeys   map[string]TenantClientKeysConfig `yaml:"client-keys,omitempty" mapstructure:"client-keys"` // Tenant-specific client credentials
+}
+
+// TenantClientKeysConfig holds client credentials for a specific tenant
+type TenantClientKeysConfig struct {
+	ClientID     string                             `yaml:"client-id,omitempty" mapstructure:"client-id"`
+	ClientSecret string                             `yaml:"client-secret,omitempty" mapstructure:"client-secret"`
+	Projects     map[string]ProjectClientKeysConfig `yaml:"projects,omitempty" mapstructure:"projects"` // Project-specific overrides
+}
+
+// ProjectClientKeysConfig holds client credentials for a specific project within a tenant
+type ProjectClientKeysConfig struct {
+	ClientID     string `yaml:"client-id,omitempty" mapstructure:"client-id"`
+	ClientSecret string `yaml:"client-secret,omitempty" mapstructure:"client-secret"`
 }
 
 // FlagValues holds command-line flag values for merging with config
@@ -95,20 +110,10 @@ func LoadConfig() (*Config, error) {
 		}
 	}
 
-	config := &Config{
-		BaseURL:      v.GetString(ConfigKeyBaseURL),
-		ClientID:     v.GetString(ConfigKeyClientID),
-		ClientSecret: v.GetString(ConfigKeyClientSecret),
-		Username:     v.GetString(ConfigKeyUsername),
-		JwtToken:     v.GetString(ConfigKeyJwtToken),
-		PatToken:     v.GetString(ConfigKeyPersonalAccessToken),
-		Tenant:       v.GetString(ConfigKeyTenant),
-		Project:      v.GetString(ConfigKeyProject),
-		Context:      v.GetString(ConfigKeyContext),
-		Timeout:      v.GetInt(ConfigKeyTimeout),
-		Verbose:      v.GetBool(ConfigKeyVerbose),
-		OutputFormat: v.GetString(ConfigKeyOutputFormat),
-		Color:        v.GetString(ConfigKeyColor),
+	// Unmarshal the entire config to properly handle nested structures
+	config := &Config{}
+	if err := v.Unmarshal(config); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
 	return config, nil
@@ -200,8 +205,9 @@ func (c *Config) ValidateTenant() error {
 	return nil
 }
 
-// getConfigDir returns the platform-specific config directory
-func getConfigDir() string {
+// getConfigDir is a variable that returns the platform-specific config directory
+// It's a variable (not a function) to allow tests to override it
+var getConfigDir = func() string {
 	var configDir string
 
 	switch runtime.GOOS {
@@ -310,6 +316,7 @@ var ValidConfigKeys = map[string]bool{
 	ConfigKeyVerbose:             true,
 	ConfigKeyOutputFormat:        true,
 	ConfigKeyColor:               true,
+	ConfigKeyClientKeys:          true,
 }
 
 // SensitiveKeys defines which keys contain sensitive information
@@ -317,6 +324,7 @@ var SensitiveKeys = map[string]bool{
 	ConfigKeyClientSecret:        true,
 	ConfigKeyJwtToken:            true,
 	ConfigKeyPersonalAccessToken: true,
+	ConfigKeyClientKeys:          true, // Contains client secrets
 }
 
 // GetConfigPath returns the path to the config file
@@ -618,4 +626,131 @@ func ValidateConfigFile() []ValidationError {
 	}
 
 	return errs
+}
+
+// ResolveClientCredentials looks up client credentials from the config's ClientKeys
+// based on the provided tenant and projects. It searches with the following precedence:
+// 1. Project-specific credentials (for each project in the list)
+// 2. Tenant-wide credentials
+// Returns empty strings if no credentials are found for the given tenant/projects.
+func (c *Config) ResolveClientCredentials(tenant string, projects []string) (clientID, clientSecret string) {
+	if c.ClientKeys == nil || tenant == "" {
+		return "", ""
+	}
+
+	tenantConfig, ok := c.ClientKeys[tenant]
+	if !ok {
+		return "", ""
+	}
+
+	// First, try project-specific credentials
+	if len(projects) > 0 && tenantConfig.Projects != nil {
+		for _, project := range projects {
+			if projectConfig, exists := tenantConfig.Projects[project]; exists {
+				// Only use project credentials if both ID and secret are present
+				if projectConfig.ClientID != "" && projectConfig.ClientSecret != "" {
+					return projectConfig.ClientID, projectConfig.ClientSecret
+				}
+			}
+		}
+	}
+
+	// Fall back to tenant-wide credentials
+	if tenantConfig.ClientID != "" && tenantConfig.ClientSecret != "" {
+		return tenantConfig.ClientID, tenantConfig.ClientSecret
+	}
+
+	return "", ""
+}
+
+// AddClientKeys adds or updates client credentials in the config file.
+// If projects is empty, credentials are stored at the tenant level.
+// If projects are specified, credentials are stored for each project.
+func AddClientKeys(tenant string, projects []string, clientID, clientSecret string) error {
+	if tenant == "" {
+		return fmt.Errorf("tenant is required")
+	}
+	if clientID == "" || clientSecret == "" {
+		return fmt.Errorf("both client-id and client-secret are required")
+	}
+
+	configPath := GetConfigPath()
+	configDir := getConfigDir()
+
+	// Create config directory if it doesn't exist
+	if err := os.MkdirAll(configDir, 0700); err != nil {
+		return fmt.Errorf("failed to create config directory: %w", err)
+	}
+
+	v := viper.New()
+	v.SetConfigFile(configPath)
+	v.SetConfigType("yaml")
+
+	// Read existing config if it exists
+	if _, err := os.Stat(configPath); err == nil {
+		if err := v.ReadInConfig(); err != nil {
+			return fmt.Errorf("failed to read config file: %w", err)
+		}
+	}
+
+	// Load existing client-keys structure or create new one
+	clientKeysMap := make(map[string]interface{})
+	if v.IsSet(ConfigKeyClientKeys) {
+		clientKeysMap = v.GetStringMap(ConfigKeyClientKeys)
+	}
+
+	// Get or create tenant entry
+	var tenantData map[string]interface{}
+	if tenantRaw, exists := clientKeysMap[tenant]; exists {
+		if tenantMap, ok := tenantRaw.(map[string]interface{}); ok {
+			tenantData = tenantMap
+		} else {
+			tenantData = make(map[string]interface{})
+		}
+	} else {
+		tenantData = make(map[string]interface{})
+	}
+
+	if len(projects) == 0 {
+		// Store at tenant level
+		tenantData["client-id"] = clientID
+		tenantData["client-secret"] = clientSecret
+	} else {
+		// Store at project level
+		var projectsData map[string]interface{}
+		if projectsRaw, exists := tenantData["projects"]; exists {
+			if projectsMap, ok := projectsRaw.(map[string]interface{}); ok {
+				projectsData = projectsMap
+			} else {
+				projectsData = make(map[string]interface{})
+			}
+		} else {
+			projectsData = make(map[string]interface{})
+		}
+
+		// Add credentials for each project
+		for _, project := range projects {
+			projectsData[project] = map[string]interface{}{
+				"client-id":     clientID,
+				"client-secret": clientSecret,
+			}
+		}
+
+		tenantData["projects"] = projectsData
+	}
+
+	clientKeysMap[tenant] = tenantData
+	v.Set(ConfigKeyClientKeys, clientKeysMap)
+
+	// Write back to file
+	if err := v.WriteConfigAs(configPath); err != nil {
+		return fmt.Errorf(errors.MsgFailedToWriteConfigFile, err)
+	}
+
+	// Ensure secure file permissions
+	if err := os.Chmod(configPath, 0600); err != nil {
+		return fmt.Errorf("failed to set config file permissions: %w", err)
+	}
+
+	return nil
 }

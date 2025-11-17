@@ -37,7 +37,7 @@ func TestNewClient(t *testing.T) {
 			config: &Config{
 				BaseURL:  "http://localhost:9000",
 				Username: "test-user",
-				Token:    "test-token",
+				JwtToken: "test-token",
 				Timeout:  30,
 			},
 			wantErr: false,

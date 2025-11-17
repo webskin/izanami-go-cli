@@ -396,6 +396,36 @@ Examples:
   iz features check my-feature --tenant my-tenant --project my-project --user user123`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Resolve client credentials with 3-tier precedence:
+		// 1. Flags (--client-id/--client-secret) - already merged into cfg
+		// 2. Environment variables (IZ_CLIENT_ID/IZ_CLIENT_SECRET) - already in cfg via viper
+		// 3. Config file (client-keys section) - fallback if both are empty
+		if cfg.ClientID == "" && cfg.ClientSecret == "" {
+			// Try to resolve from client-keys in config
+			tenant := cfg.Tenant
+			var projects []string
+			// Use cfg.Project (set by global --project flag) and featureProject (command-specific)
+			if cfg.Project != "" {
+				projects = append(projects, cfg.Project)
+			}
+			if featureProject != "" && featureProject != cfg.Project {
+				projects = append(projects, featureProject)
+			}
+
+			clientID, clientSecret := cfg.ResolveClientCredentials(tenant, projects)
+			if clientID != "" && clientSecret != "" {
+				cfg.ClientID = clientID
+				cfg.ClientSecret = clientSecret
+				if cfg.Verbose {
+					if len(projects) > 0 {
+						fmt.Fprintf(os.Stderr, "Using client credentials from config (tenant: %s, projects: %v)\n", tenant, projects)
+					} else {
+						fmt.Fprintf(os.Stderr, "Using client credentials from config (tenant: %s)\n", tenant)
+					}
+				}
+			}
+		}
+
 		if err := cfg.Validate(); err != nil {
 			return err
 		}

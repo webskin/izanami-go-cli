@@ -7,10 +7,12 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"syscall"
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
 	"github.com/webskin/izanami-go-cli/internal/izanami"
+	"golang.org/x/term"
 )
 
 // configCmd represents the config command
@@ -156,12 +158,11 @@ Use --show-secrets to display sensitive values.`,
 			return err
 		}
 
-		// Create sorted list of keys
-		keys := make([]string, 0, len(allValues))
-		for key := range allValues {
-			keys = append(keys, key)
+		// Load full config to get client-keys
+		config, err := izanami.LoadConfig()
+		if err != nil {
+			return err
 		}
-		sort.Strings(keys)
 
 		// Create table
 		table := tablewriter.NewWriter(os.Stdout)
@@ -176,6 +177,18 @@ Use --show-secrets to display sensitive values.`,
 		table.SetTablePadding("\t")
 		table.SetNoWhiteSpace(true)
 
+		// Create sorted list of keys (excluding client-keys, client-id, client-secret which we'll handle specially)
+		keys := make([]string, 0, len(allValues))
+		for key := range allValues {
+			// Skip client-keys (shown in expanded format below)
+			// Skip client-id and client-secret (now part of client-keys hierarchy)
+			if key != "client-keys" && key != "client-id" && key != "client-secret" {
+				keys = append(keys, key)
+			}
+		}
+		sort.Strings(keys)
+
+		// Add regular config values
 		for _, key := range keys {
 			configValue := allValues[key]
 			value := configValue.Value
@@ -191,6 +204,80 @@ Use --show-secrets to display sensitive values.`,
 			}
 
 			table.Append([]string{key, value, configValue.Source})
+		}
+
+		// Add client-keys in expanded format
+		if config.ClientKeys != nil && len(config.ClientKeys) > 0 {
+			// Sort tenant names
+			tenants := make([]string, 0, len(config.ClientKeys))
+			for tenant := range config.ClientKeys {
+				tenants = append(tenants, tenant)
+			}
+			sort.Strings(tenants)
+
+			for _, tenant := range tenants {
+				tenantConfig := config.ClientKeys[tenant]
+
+				// Show tenant-level credentials
+				if tenantConfig.ClientID != "" {
+					clientID := tenantConfig.ClientID
+					clientSecret := tenantConfig.ClientSecret
+					if !showSecrets {
+						if clientID != "" {
+							clientID = "<redacted>"
+						}
+						if clientSecret != "" {
+							clientSecret = "<redacted>"
+						}
+					}
+					table.Append([]string{
+						fmt.Sprintf("client-keys/%s/client-id", tenant),
+						clientID,
+						"file",
+					})
+					table.Append([]string{
+						fmt.Sprintf("client-keys/%s/client-secret", tenant),
+						clientSecret,
+						"file",
+					})
+				}
+
+				// Show project-level credentials
+				if tenantConfig.Projects != nil && len(tenantConfig.Projects) > 0 {
+					projectNames := make([]string, 0, len(tenantConfig.Projects))
+					for project := range tenantConfig.Projects {
+						projectNames = append(projectNames, project)
+					}
+					sort.Strings(projectNames)
+
+					for _, project := range projectNames {
+						projectConfig := tenantConfig.Projects[project]
+						clientID := projectConfig.ClientID
+						clientSecret := projectConfig.ClientSecret
+						if !showSecrets {
+							if clientID != "" {
+								clientID = "<redacted>"
+							}
+							if clientSecret != "" {
+								clientSecret = "<redacted>"
+							}
+						}
+						table.Append([]string{
+							fmt.Sprintf("client-keys/%s/%s/client-id", tenant, project),
+							clientID,
+							"file",
+						})
+						table.Append([]string{
+							fmt.Sprintf("client-keys/%s/%s/client-secret", tenant, project),
+							clientSecret,
+							"file",
+						})
+					}
+				}
+			}
+		} else {
+			// No client-keys configured
+			table.Append([]string{"client-keys", "(not set)", "file"})
 		}
 
 		table.Render()
@@ -354,6 +441,136 @@ Note: This does not affect environment variables or command-line flags.`,
 	},
 }
 
+// configClientKeysCmd represents the config client-keys command
+var configClientKeysCmd = &cobra.Command{
+	Use:   "client-keys",
+	Short: "Manage client API keys",
+	Long: `Manage client API keys (client-id/client-secret) for feature evaluation.
+
+Client keys can be stored at the tenant level or per-project level in your
+config file for convenient reuse across commands.`,
+}
+
+// configClientKeysAddCmd represents the config client-keys add command
+var configClientKeysAddCmd = &cobra.Command{
+	Use:   "add",
+	Short: "Add client credentials for a tenant or project",
+	Long: `Add client API credentials (client-id and client-secret) to the config file.
+
+Credentials can be stored:
+  - At the tenant level (for all projects in that tenant)
+  - At the project level (for specific projects only)
+
+The 'iz features check' command will automatically use these credentials with
+the following precedence:
+  1. --client-id/--client-secret flags (highest priority)
+  2. IZ_CLIENT_ID/IZ_CLIENT_SECRET environment variables
+  3. Stored credentials from config file (this command)
+
+Examples:
+  # Add tenant-wide credentials
+  iz config client-keys add --tenant my-tenant
+
+  # Add project-specific credentials
+  iz config client-keys add --tenant my-tenant --project proj1 --project proj2
+
+Security:
+  Credentials are stored in plaintext in ~/.config/iz/config.yaml
+  File permissions are automatically set to 0600 (owner read/write only)
+  Never commit config.yaml to version control`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		tenant, _ := cmd.Flags().GetString("tenant")
+		projects, _ := cmd.Flags().GetStringSlice("project")
+
+		// Validate tenant is provided
+		if tenant == "" {
+			return fmt.Errorf("--tenant is required")
+		}
+
+		// Prompt for client-id
+		fmt.Fprintf(os.Stderr, "Client ID: ")
+		var clientID string
+		if _, err := fmt.Scanln(&clientID); err != nil {
+			return fmt.Errorf("failed to read client ID: %w", err)
+		}
+		clientID = strings.TrimSpace(clientID)
+		if clientID == "" {
+			return fmt.Errorf("client ID cannot be empty")
+		}
+
+		// Prompt for client-secret (hidden)
+		fmt.Fprintf(os.Stderr, "Client Secret: ")
+		secretBytes, err := term.ReadPassword(int(syscall.Stdin))
+		fmt.Fprintln(os.Stderr) // New line after password input
+		if err != nil {
+			return fmt.Errorf("failed to read client secret: %w", err)
+		}
+		clientSecret := strings.TrimSpace(string(secretBytes))
+		if clientSecret == "" {
+			return fmt.Errorf("client secret cannot be empty")
+		}
+
+		// Check if credentials already exist and prompt for confirmation
+		config, err := izanami.LoadConfig()
+		if err == nil && config.ClientKeys != nil {
+			if tenantConfig, exists := config.ClientKeys[tenant]; exists {
+				if len(projects) == 0 {
+					// Check tenant-level credentials
+					if tenantConfig.ClientID != "" {
+						fmt.Fprintf(os.Stderr, "\n⚠️  Tenant '%s' already has credentials configured.\n", tenant)
+						fmt.Fprintf(os.Stderr, "Overwrite existing credentials? (y/N): ")
+						var response string
+						fmt.Scanln(&response)
+						if strings.ToLower(strings.TrimSpace(response)) != "y" {
+							fmt.Fprintln(os.Stderr, "Aborted.")
+							return nil
+						}
+					}
+				} else {
+					// Check project-level credentials
+					if tenantConfig.Projects != nil {
+						for _, project := range projects {
+							if projConfig, projExists := tenantConfig.Projects[project]; projExists && projConfig.ClientID != "" {
+								fmt.Fprintf(os.Stderr, "\n⚠️  Project '%s/%s' already has credentials configured.\n", tenant, project)
+								fmt.Fprintf(os.Stderr, "Overwrite existing credentials? (y/N): ")
+								var response string
+								fmt.Scanln(&response)
+								if strings.ToLower(strings.TrimSpace(response)) != "y" {
+									fmt.Fprintln(os.Stderr, "Aborted.")
+									return nil
+								}
+								break
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// Save credentials
+		if err := izanami.AddClientKeys(tenant, projects, clientID, clientSecret); err != nil {
+			return fmt.Errorf("failed to save credentials: %w", err)
+		}
+
+		// Success message
+		if len(projects) == 0 {
+			fmt.Fprintf(os.Stderr, "\n✓ Client credentials saved for tenant '%s'\n", tenant)
+		} else {
+			fmt.Fprintf(os.Stderr, "\n✓ Client credentials saved for tenant '%s', projects: %s\n", tenant, strings.Join(projects, ", "))
+		}
+
+		fmt.Fprintln(os.Stderr, "\n⚠️  SECURITY WARNING:")
+		fmt.Fprintln(os.Stderr, "   Credentials are stored in plaintext in the config file.")
+		fmt.Fprintln(os.Stderr, "   File permissions are set to 0600 (owner read/write only).")
+		fmt.Fprintln(os.Stderr, "   Never commit config.yaml to version control.")
+
+		fmt.Fprintf(os.Stderr, "\nYou can now use these credentials with:\n")
+		fmt.Fprintf(os.Stderr, "  iz features check --tenant %s <feature-id>\n", tenant)
+
+		return nil
+	},
+}
+
 func init() {
 	rootCmd.AddCommand(configCmd)
 
@@ -366,10 +583,19 @@ func init() {
 	configCmd.AddCommand(configInitCmd)
 	configCmd.AddCommand(configValidateCmd)
 	configCmd.AddCommand(configResetCmd)
+	configCmd.AddCommand(configClientKeysCmd)
+
+	// Add client-keys subcommands
+	configClientKeysCmd.AddCommand(configClientKeysAddCmd)
 
 	// Add flags
 	configListCmd.Flags().Bool("show-secrets", false, "Show sensitive values (tokens, secrets)")
 	configInitCmd.Flags().Bool("defaults", false, "Create config with defaults only (non-interactive)")
+
+	// Add flags for client-keys add
+	configClientKeysAddCmd.Flags().String("tenant", "", "Tenant name (required)")
+	configClientKeysAddCmd.Flags().StringSlice("project", []string{}, "Project name(s) - can be specified multiple times")
+	configClientKeysAddCmd.MarkFlagRequired("tenant")
 }
 
 // getConfigDirForDisplay returns a user-friendly display of the config directory

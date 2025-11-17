@@ -176,12 +176,17 @@ func LoadConfigFromSession() (*Config, string, error) {
 		return nil, "", fmt.Errorf("active session has no JWT token (session may be invalid)")
 	}
 
-	config := &Config{
-		BaseURL:  session.URL,
-		Username: session.Username,
-		JwtToken: session.JwtToken,
-		Timeout:  30,
+	// Load config from file first (to get client-keys and other settings)
+	config, err := LoadConfig()
+	if err != nil {
+		// If config file doesn't exist, create a minimal config
+		config = &Config{Timeout: 30}
 	}
+
+	// Override with session data (session takes precedence for auth)
+	config.BaseURL = session.URL
+	config.Username = session.Username
+	config.JwtToken = session.JwtToken
 
 	return config, name, nil
 }
