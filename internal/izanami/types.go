@@ -62,6 +62,8 @@ type FeatureCheckResult struct {
 	Active  interface{} `json:"active"` // bool, string, or number
 	Name    string      `json:"name"`
 	Project string      `json:"project"`
+	Tenant  string      `json:"tenant,omitempty"` // Tenant (populated by CLI, not from API)
+	ID      string      `json:"id,omitempty"`     // Feature ID (populated by CLI, not from API)
 }
 
 // Context represents a feature context (environment/override)

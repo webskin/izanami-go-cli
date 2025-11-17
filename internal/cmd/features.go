@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"regexp"
 
 	"github.com/spf13/cobra"
 	"github.com/webskin/izanami-go-cli/internal/izanami"
@@ -13,7 +14,7 @@ import (
 
 var (
 	featureProject    string
-	featureTag        string // For filtering features list by tag
+	featureTag        string   // For filtering features list by tag
 	featureTags       []string // For assigning tags to a feature when creating
 	featureUser       string
 	featureContextStr string
@@ -362,9 +363,21 @@ var featuresDeleteCmd = &cobra.Command{
 
 // featuresCheckCmd checks if a feature is active
 var featuresCheckCmd = &cobra.Command{
-	Use:   "check <feature-id>",
+	Use:   "check <uuid-or-name>",
 	Short: "Check if a feature is active",
 	Long: `Check if a feature is active for a specific user and context.
+
+This command accepts either a feature UUID or feature name:
+
+  UUID mode:
+    - Provide a UUID (e.g., e878a149-df86-4f28-b1db-059580304e1e)
+    - --tenant and --project flags are optional (UUID is globally unique)
+
+  Name mode:
+    - Provide a feature name (e.g., my-feature)
+    - --tenant flag is REQUIRED
+    - --project flag is optional (helps disambiguate if multiple features have same name)
+    - If multiple features match, an error is returned
 
 This uses the client API (v2) to evaluate the feature, taking into account:
 - Feature enabled status
@@ -373,11 +386,14 @@ This uses the client API (v2) to evaluate the feature, taking into account:
 - Context-specific overrides
 
 Examples:
-  # Check feature for a specific user
-  iz features check my-feature --user user123
+  # Check feature by UUID
+  iz features check e878a149-df86-4f28-b1db-059580304e1e --user user123
 
-  # Check feature in a specific context
-  iz features check my-feature --user user123 --context prod/eu/france`,
+  # Check feature by name (requires --tenant)
+  iz features check my-feature --tenant my-tenant --user user123
+
+  # Check feature by name with project disambiguation
+  iz features check my-feature --tenant my-tenant --project my-project --user user123`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := cfg.Validate(); err != nil {
@@ -389,19 +405,93 @@ Examples:
 			return err
 		}
 
+		ctx := context.Background()
+		featureIDOrName := args[0]
+		var featureID string
+
+		// Determine if input is a UUID or name
+		if isUUID(featureIDOrName) {
+			// UUID mode: use directly
+			featureID = featureIDOrName
+			if cfg.Verbose {
+				fmt.Fprintf(os.Stderr, "Using feature UUID: %s\n", featureID)
+			}
+		} else {
+			if err := cfg.ValidateTenant(); err != nil {
+				return fmt.Errorf("feature name requires --tenant flag: %w", err)
+			}
+
+			if cfg.Verbose {
+				fmt.Fprintf(os.Stderr, "Resolving feature name '%s' in tenant '%s'...\n", featureIDOrName, cfg.Tenant)
+			}
+
+			// List all features for the tenant
+			features, err := client.ListFeatures(ctx, cfg.Tenant, "")
+			if err != nil {
+				return fmt.Errorf("failed to list features: %w", err)
+			}
+
+			// Filter by name
+			var matches []izanami.Feature
+			for _, f := range features {
+				if f.Name == featureIDOrName {
+					matches = append(matches, f)
+				}
+			}
+
+			// Further filter by project if specified
+			if featureProject != "" {
+				var projectMatches []izanami.Feature
+				for _, f := range matches {
+					if f.Project == featureProject {
+						projectMatches = append(projectMatches, f)
+					}
+				}
+				matches = projectMatches
+			}
+
+			// Validate matches
+			if len(matches) == 0 {
+				if featureProject != "" {
+					return fmt.Errorf("no feature named '%s' found in tenant '%s' and project '%s'", featureIDOrName, cfg.Tenant, featureProject)
+				}
+				return fmt.Errorf("no feature named '%s' found in tenant '%s'", featureIDOrName, cfg.Tenant)
+			}
+			if len(matches) > 1 {
+				return fmt.Errorf("multiple features named '%s' found (use --project to disambiguate or provide UUID instead)", featureIDOrName)
+			}
+
+			// Use the resolved UUID
+			featureID = matches[0].ID
+			if cfg.Verbose {
+				fmt.Fprintf(os.Stderr, "Found feature ID: %s\n", featureID)
+			}
+		}
+
 		// Use context from flag or config
 		contextPath := featureContextStr
 		if contextPath == "" {
 			contextPath = cfg.Context
 		}
 
-		result, err := client.CheckFeature(context.Background(), args[0], featureUser, contextPath)
+		result, err := client.CheckFeature(ctx, featureID, featureUser, contextPath)
 		if err != nil {
 			return err
 		}
 
+		// Populate tenant and id fields (not returned by the API)
+		result.Tenant = cfg.Tenant
+		result.ID = featureID
+
 		return output.Print(result, output.Format(outputFormat))
 	},
+}
+
+// isUUID checks if a string matches the UUID format (8-4-4-4-12)
+func isUUID(s string) bool {
+	uuidPattern := `^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`
+	matched, _ := regexp.MatchString(uuidPattern, s)
+	return matched
 }
 
 // parseJSONData parses JSON data from a file, stdin, or string
@@ -470,4 +560,5 @@ func init() {
 	// Check flags
 	featuresCheckCmd.Flags().StringVar(&featureUser, "user", "", "User ID for evaluation")
 	featuresCheckCmd.Flags().StringVar(&featureContextStr, "context", "", "Context path for evaluation")
+	featuresCheckCmd.Flags().StringVar(&featureProject, "project", "", "Project name (for disambiguating feature names)")
 }
