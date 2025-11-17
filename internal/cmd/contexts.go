@@ -71,8 +71,15 @@ By default, only shows root-level contexts. Use --all to show all nested context
 
 		// For table output, convert to table view (PATH first, no CHILDREN)
 		if output.Format(outputFormat) == output.Table {
-			tableView := izanami.FlattenContextsForTable(contexts)
-			return output.Print(tableView, output.Format(outputFormat))
+			// Hide overload column when listing tenant-level contexts (no --project flag)
+			// Show overload column only when --project flag is provided
+			if contextProject != "" {
+				tableView := izanami.FlattenContextsForTable(contexts)
+				return output.Print(tableView, output.Format(outputFormat))
+			} else {
+				tableView := izanami.FlattenContextsForTableSimple(contexts)
+				return output.Print(tableView, output.Format(outputFormat))
+			}
 		}
 
 		// For JSON output, keep the original structure

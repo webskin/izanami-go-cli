@@ -146,3 +146,12 @@ Authorization: Basic base64(username:token)
 - Session JWTs should continue using cookie authentication (current behavior)
 - PATs require specific tenant permissions in the database
 - PAT expiration is checked server-side
+
+### Known Bug: Invalid Cookie Token Prevents PAT Fallback
+**Issue**: If a token is stored in cookies but becomes invalid (expired/revoked), the authentication flow does not fall back to check for a Personal Access Token (PAT).
+
+**Impact**: Users with an expired cookie token cannot authenticate even if they have a valid PAT configured, forcing manual cookie deletion.
+
+**Expected Behavior**: The client should attempt PAT authentication if cookie-based authentication fails.
+
+**Investigation Needed**: Check authentication flow in `internal/izanami/client.go` to implement proper fallback mechanism.

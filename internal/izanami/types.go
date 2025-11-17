@@ -85,6 +85,16 @@ type ContextTableView struct {
 	Overloads   []FeatureOverload `json:"overloads,omitempty"`
 }
 
+// ContextTableViewSimple represents a context for table display without overloads
+// Used when listing contexts at tenant level (without --project flag)
+type ContextTableViewSimple struct {
+	Path        string `json:"path"`
+	Name        string `json:"name"`
+	Project     string `json:"project,omitempty"`
+	IsProtected bool   `json:"protected"`
+	Global      bool   `json:"global"`
+}
+
 // ToTableView converts a Context to ContextTableView for table display
 func (c *Context) ToTableView(parentPath string) ContextTableView {
 	// Build the full path
@@ -108,6 +118,28 @@ func (c *Context) ToTableView(parentPath string) ContextTableView {
 	}
 }
 
+// ToTableViewSimple converts a Context to ContextTableViewSimple for table display without overloads
+func (c *Context) ToTableViewSimple(parentPath string) ContextTableViewSimple {
+	// Build the full path
+	path := c.Name
+	if parentPath != "" {
+		path = parentPath + "/" + c.Name
+	}
+
+	// Override with the context's Path field if it's set
+	if c.Path != "" {
+		path = c.Path
+	}
+
+	return ContextTableViewSimple{
+		Path:        path,
+		Name:        c.Name,
+		Project:     c.Project,
+		IsProtected: c.IsProtected,
+		Global:      c.Global,
+	}
+}
+
 // FlattenContextsForTable converts a hierarchical context list to a flat list
 // of ContextTableView with proper paths, sorted by Global (false first) then Path
 func FlattenContextsForTable(contexts []Context) []ContextTableView {
@@ -117,6 +149,50 @@ func FlattenContextsForTable(contexts []Context) []ContextTableView {
 	flatten = func(ctx Context, parentPath string) {
 		// Add this context
 		result = append(result, ctx.ToTableView(parentPath))
+
+		// Build the path for children
+		childPath := ctx.Name
+		if parentPath != "" {
+			childPath = parentPath + "/" + ctx.Name
+		}
+		if ctx.Path != "" {
+			childPath = ctx.Path
+		}
+
+		// Recursively add children
+		for _, child := range ctx.Children {
+			if child != nil {
+				flatten(*child, childPath)
+			}
+		}
+	}
+
+	for _, ctx := range contexts {
+		flatten(ctx, "")
+	}
+
+	// Sort results: Global false first, then by Path
+	sort.Slice(result, func(i, j int) bool {
+		// If Global values differ, false comes first
+		if result[i].Global != result[j].Global {
+			return !result[i].Global
+		}
+		// If Global values are the same, sort by Path
+		return result[i].Path < result[j].Path
+	})
+
+	return result
+}
+
+// FlattenContextsForTableSimple converts a hierarchical context list to a flat list
+// of ContextTableViewSimple (without overloads) with proper paths, sorted by Global (false first) then Path
+func FlattenContextsForTableSimple(contexts []Context) []ContextTableViewSimple {
+	var result []ContextTableViewSimple
+
+	var flatten func(ctx Context, parentPath string)
+	flatten = func(ctx Context, parentPath string) {
+		// Add this context
+		result = append(result, ctx.ToTableViewSimple(parentPath))
 
 		// Build the path for children
 		childPath := ctx.Name
