@@ -701,75 +701,7 @@ func (c *Config) ResolveClientCredentials(tenant string, projects []string) (cli
 	return "", ""
 }
 
-// initViperForClientKeys initializes viper and reads the config file
-func initViperForClientKeys() (*viper.Viper, error) {
-	configPath := GetConfigPath()
-	configDir := getConfigDir()
-
-	// Create config directory if it doesn't exist
-	if err := os.MkdirAll(configDir, 0700); err != nil {
-		return nil, fmt.Errorf(errors.MsgFailedToCreateConfigDir, err)
-	}
-
-	v := viper.New()
-	v.SetConfigFile(configPath)
-	v.SetConfigType("yaml")
-
-	// Read existing config if it exists
-	if _, err := os.Stat(configPath); err == nil {
-		if err := v.ReadInConfig(); err != nil {
-			return nil, fmt.Errorf(errors.MsgFailedToReadConfigFile, err)
-		}
-	}
-
-	return v, nil
-}
-
-// getOrCreateMap safely gets or creates a map from an interface{}
-func getOrCreateMap(data interface{}) map[string]interface{} {
-	if dataMap, ok := data.(map[string]interface{}); ok {
-		return dataMap
-	}
-	return make(map[string]interface{})
-}
-
-// getOrCreateTenantData gets or creates tenant data from the client keys map
-func getOrCreateTenantData(clientKeysMap map[string]interface{}, tenant string) map[string]interface{} {
-	if tenantRaw, exists := clientKeysMap[tenant]; exists {
-		return getOrCreateMap(tenantRaw)
-	}
-	return make(map[string]interface{})
-}
-
-// getOrCreateProjectsData gets or creates projects data from tenant data
-func getOrCreateProjectsData(tenantData map[string]interface{}) map[string]interface{} {
-	if projectsRaw, exists := tenantData["projects"]; exists {
-		return getOrCreateMap(projectsRaw)
-	}
-	return make(map[string]interface{})
-}
-
-// storeTenantLevelCredentials stores credentials at the tenant level
-func storeTenantLevelCredentials(tenantData map[string]interface{}, clientID, clientSecret string) {
-	tenantData[ConfigKeyClientID] = clientID
-	tenantData[ConfigKeyClientSecret] = clientSecret
-}
-
-// storeProjectLevelCredentials stores credentials for multiple projects
-func storeProjectLevelCredentials(tenantData map[string]interface{}, projects []string, clientID, clientSecret string) {
-	projectsData := getOrCreateProjectsData(tenantData)
-
-	for _, project := range projects {
-		projectsData[project] = map[string]interface{}{
-			ConfigKeyClientID:     clientID,
-			ConfigKeyClientSecret: clientSecret,
-		}
-	}
-
-	tenantData["projects"] = projectsData
-}
-
-// AddClientKeys adds or updates client credentials in the config file.
+// AddClientKeys adds or updates client credentials in the active profile.
 // If projects is empty, credentials are stored at the tenant level.
 // If projects are specified, credentials are stored for each project.
 func AddClientKeys(tenant string, projects []string, clientID, clientSecret string) error {
@@ -780,38 +712,53 @@ func AddClientKeys(tenant string, projects []string, clientID, clientSecret stri
 		return fmt.Errorf("both client-id and client-secret are required")
 	}
 
-	v, err := initViperForClientKeys()
+	// Get active profile name
+	profileName, err := GetActiveProfileName()
 	if err != nil {
 		return err
 	}
+	if profileName == "" {
+		return fmt.Errorf("no active profile. Use 'iz profiles use <name>' to select a profile first")
+	}
 
-	// Load existing client-keys structure or create new one
-	clientKeysMap := make(map[string]interface{})
-	if v.IsSet(ConfigKeyClientKeys) {
-		clientKeysMap = v.GetStringMap(ConfigKeyClientKeys)
+	// Load the active profile
+	profile, err := GetProfile(profileName)
+	if err != nil {
+		return fmt.Errorf("failed to load active profile: %w", err)
+	}
+
+	// Initialize ClientKeys map if nil
+	if profile.ClientKeys == nil {
+		profile.ClientKeys = make(map[string]TenantClientKeysConfig)
 	}
 
 	// Get or create tenant entry
-	tenantData := getOrCreateTenantData(clientKeysMap, tenant)
+	tenantConfig := profile.ClientKeys[tenant]
 
 	// Store credentials at appropriate level
 	if len(projects) == 0 {
-		storeTenantLevelCredentials(tenantData, clientID, clientSecret)
+		// Tenant-level credentials
+		tenantConfig.ClientID = clientID
+		tenantConfig.ClientSecret = clientSecret
 	} else {
-		storeProjectLevelCredentials(tenantData, projects, clientID, clientSecret)
+		// Project-level credentials
+		if tenantConfig.Projects == nil {
+			tenantConfig.Projects = make(map[string]ProjectClientKeysConfig)
+		}
+		for _, project := range projects {
+			tenantConfig.Projects[project] = ProjectClientKeysConfig{
+				ClientID:     clientID,
+				ClientSecret: clientSecret,
+			}
+		}
 	}
 
-	clientKeysMap[tenant] = tenantData
-	v.Set(ConfigKeyClientKeys, clientKeysMap)
+	// Update the profile
+	profile.ClientKeys[tenant] = tenantConfig
 
-	// Write back to file
-	if err := v.WriteConfigAs(GetConfigPath()); err != nil {
-		return fmt.Errorf(errors.MsgFailedToWriteConfigFile, err)
-	}
-
-	// Ensure secure file permissions
-	if err := os.Chmod(GetConfigPath(), 0600); err != nil {
-		return fmt.Errorf("failed to set config file permissions: %w", err)
+	// Save the profile back
+	if err := AddProfile(profileName, profile); err != nil {
+		return fmt.Errorf("failed to save profile: %w", err)
 	}
 
 	return nil

@@ -254,12 +254,6 @@ Use --show-secrets to display sensitive values.`,
 			return err
 		}
 
-		// Load full config to get client-keys
-		config, err := izanami.LoadConfig()
-		if err != nil {
-			return err
-		}
-
 		// Create table
 		table := tablewriter.NewWriter(os.Stdout)
 		table.SetHeader([]string{"KEY", "VALUE", "SOURCE"})
@@ -273,18 +267,14 @@ Use --show-secrets to display sensitive values.`,
 		table.SetTablePadding("\t")
 		table.SetNoWhiteSpace(true)
 
-		// Create sorted list of keys (excluding client-keys, client-id, client-secret which we'll handle specially)
+		// Create sorted list of keys (client-keys are profile-specific, not shown here)
 		keys := make([]string, 0, len(allValues))
 		for key := range allValues {
-			// Skip client-keys (shown in expanded format below)
-			// Skip client-id and client-secret (now part of client-keys hierarchy)
-			if key != izanami.ConfigKeyClientKeys && key != izanami.ConfigKeyClientID && key != izanami.ConfigKeyClientSecret {
-				keys = append(keys, key)
-			}
+			keys = append(keys, key)
 		}
 		sort.Strings(keys)
 
-		// Add regular config values
+		// Add config values
 		for _, key := range keys {
 			configValue := allValues[key]
 			value := configValue.Value
@@ -302,81 +292,10 @@ Use --show-secrets to display sensitive values.`,
 			table.Append([]string{key, value, configValue.Source})
 		}
 
-		// Add client-keys in expanded format
-		if config.ClientKeys != nil && len(config.ClientKeys) > 0 {
-			// Sort tenant names
-			tenants := make([]string, 0, len(config.ClientKeys))
-			for tenant := range config.ClientKeys {
-				tenants = append(tenants, tenant)
-			}
-			sort.Strings(tenants)
-
-			for _, tenant := range tenants {
-				tenantConfig := config.ClientKeys[tenant]
-
-				// Show tenant-level credentials
-				if tenantConfig.ClientID != "" {
-					clientID := tenantConfig.ClientID
-					clientSecret := tenantConfig.ClientSecret
-					if !showSecrets {
-						if clientID != "" {
-							clientID = izanami.RedactedValue
-						}
-						if clientSecret != "" {
-							clientSecret = izanami.RedactedValue
-						}
-					}
-					table.Append([]string{
-						fmt.Sprintf("%s/%s/%s", izanami.ConfigKeyClientKeys, tenant, izanami.ConfigKeyClientID),
-						clientID,
-						"file",
-					})
-					table.Append([]string{
-						fmt.Sprintf("%s/%s/%s", izanami.ConfigKeyClientKeys, tenant, izanami.ConfigKeyClientSecret),
-						clientSecret,
-						"file",
-					})
-				}
-
-				// Show project-level credentials
-				if tenantConfig.Projects != nil && len(tenantConfig.Projects) > 0 {
-					projectNames := make([]string, 0, len(tenantConfig.Projects))
-					for project := range tenantConfig.Projects {
-						projectNames = append(projectNames, project)
-					}
-					sort.Strings(projectNames)
-
-					for _, project := range projectNames {
-						projectConfig := tenantConfig.Projects[project]
-						clientID := projectConfig.ClientID
-						clientSecret := projectConfig.ClientSecret
-						if !showSecrets {
-							if clientID != "" {
-								clientID = izanami.RedactedValue
-							}
-							if clientSecret != "" {
-								clientSecret = izanami.RedactedValue
-							}
-						}
-						table.Append([]string{
-							fmt.Sprintf("%s/%s/%s/%s", izanami.ConfigKeyClientKeys, tenant, project, izanami.ConfigKeyClientID),
-							clientID,
-							"file",
-						})
-						table.Append([]string{
-							fmt.Sprintf("%s/%s/%s/%s", izanami.ConfigKeyClientKeys, tenant, project, izanami.ConfigKeyClientSecret),
-							clientSecret,
-							"file",
-						})
-					}
-				}
-			}
-		} else {
-			// No client-keys configured
-			table.Append([]string{izanami.ConfigKeyClientKeys, "(not set)", "file"})
-		}
-
 		table.Render()
+
+		// Add note about profile-specific settings
+		fmt.Fprintln(os.Stderr, "\nNote: Client keys are stored per-profile. Use 'iz profiles show' to view profile-specific settings.")
 		return nil
 	},
 }
@@ -540,18 +459,29 @@ Note: This does not affect environment variables or command-line flags.`,
 // configClientKeysCmd represents the config client-keys command
 var configClientKeysCmd = &cobra.Command{
 	Use:   "client-keys",
-	Short: "Manage client API keys",
+	Short: "Manage client API keys in profiles",
 	Long: `Manage client API keys (client-id/client-secret) for feature evaluation.
 
-Client keys can be stored at the tenant level or per-project level in your
-config file for convenient reuse across commands.`,
+Client keys are stored in profiles and are environment-specific. Each profile
+(local, sandbox, build, prod) can have different client keys for different
+tenants and projects.
+
+Keys can be stored:
+  - At the tenant level (for all projects in that tenant)
+  - At the project level (for specific projects only)
+
+Use 'iz profiles use <name>' to switch between profiles, then add client keys
+to the active profile.`,
 }
 
 // configClientKeysAddCmd represents the config client-keys add command
 var configClientKeysAddCmd = &cobra.Command{
 	Use:   "add",
-	Short: "Add client credentials for a tenant or project",
-	Long: `Add client API credentials (client-id and client-secret) to the config file.
+	Short: "Add client credentials to active profile",
+	Long: `Add client API credentials (client-id and client-secret) to the active profile.
+
+Credentials are stored in the active profile and are environment-specific.
+Different profiles (local, sandbox, build, prod) can have different credentials.
 
 Credentials can be stored:
   - At the tenant level (for all projects in that tenant)
@@ -561,13 +491,16 @@ The 'iz features check' command will automatically use these credentials with
 the following precedence:
   1. --client-id/--client-secret flags (highest priority)
   2. IZ_CLIENT_ID/IZ_CLIENT_SECRET environment variables
-  3. Stored credentials from config file (this command)
+  3. Stored credentials from active profile (this command)
 
 Examples:
-  # Add tenant-wide credentials
+  # First, switch to the profile you want to configure
+  iz profiles use sandbox
+
+  # Add tenant-wide credentials to the active profile
   iz config client-keys add --tenant my-tenant
 
-  # Add project-specific credentials
+  # Add project-specific credentials to the active profile
   iz config client-keys add --tenant my-tenant --project proj1 --project proj2
 
 Security:
@@ -582,6 +515,17 @@ Security:
 		if tenant == "" {
 			return fmt.Errorf("--tenant is required")
 		}
+
+		// Get active profile name
+		profileName, err := izanami.GetActiveProfileName()
+		if err != nil {
+			return err
+		}
+		if profileName == "" {
+			return fmt.Errorf("no active profile. Use 'iz profiles use <name>' to select a profile first")
+		}
+
+		fmt.Fprintf(os.Stderr, "Adding credentials to profile: %s\n\n", profileName)
 
 		// Prompt for client-id
 		fmt.Fprintf(os.Stderr, "Client ID: ")
@@ -606,14 +550,14 @@ Security:
 			return fmt.Errorf("client secret cannot be empty")
 		}
 
-		// Check if credentials already exist and prompt for confirmation
-		config, err := izanami.LoadConfig()
-		if err == nil && config.ClientKeys != nil {
-			if tenantConfig, exists := config.ClientKeys[tenant]; exists {
+		// Check if credentials already exist in the active profile and prompt for confirmation
+		profile, err := izanami.GetProfile(profileName)
+		if err == nil && profile.ClientKeys != nil {
+			if tenantConfig, exists := profile.ClientKeys[tenant]; exists {
 				if len(projects) == 0 {
 					// Check tenant-level credentials
 					if tenantConfig.ClientID != "" {
-						fmt.Fprintf(os.Stderr, "\n⚠️  Tenant '%s' already has credentials configured.\n", tenant)
+						fmt.Fprintf(os.Stderr, "\n⚠️  Profile '%s' already has credentials for tenant '%s'.\n", profileName, tenant)
 						fmt.Fprintf(os.Stderr, "Overwrite existing credentials? (y/N): ")
 						var response string
 						fmt.Scanln(&response)
@@ -627,7 +571,7 @@ Security:
 					if tenantConfig.Projects != nil {
 						for _, project := range projects {
 							if projConfig, projExists := tenantConfig.Projects[project]; projExists && projConfig.ClientID != "" {
-								fmt.Fprintf(os.Stderr, "\n⚠️  Project '%s/%s' already has credentials configured.\n", tenant, project)
+								fmt.Fprintf(os.Stderr, "\n⚠️  Profile '%s' already has credentials for '%s/%s'.\n", profileName, tenant, project)
 								fmt.Fprintf(os.Stderr, "Overwrite existing credentials? (y/N): ")
 								var response string
 								fmt.Scanln(&response)
@@ -650,9 +594,9 @@ Security:
 
 		// Success message
 		if len(projects) == 0 {
-			fmt.Fprintf(os.Stderr, "\n✓ Client credentials saved for tenant '%s'\n", tenant)
+			fmt.Fprintf(os.Stderr, "\n✓ Client credentials saved to profile '%s' for tenant '%s'\n", profileName, tenant)
 		} else {
-			fmt.Fprintf(os.Stderr, "\n✓ Client credentials saved for tenant '%s', projects: %s\n", tenant, strings.Join(projects, ", "))
+			fmt.Fprintf(os.Stderr, "\n✓ Client credentials saved to profile '%s' for tenant '%s', projects: %s\n", profileName, tenant, strings.Join(projects, ", "))
 		}
 
 		fmt.Fprintln(os.Stderr, "\n⚠️  SECURITY WARNING:")
