@@ -12,9 +12,9 @@ import (
 	"golang.org/x/term"
 )
 
-// profileCmd represents the profile command
+// profileCmd represents the profiles command
 var profileCmd = &cobra.Command{
-	Use:   "profile",
+	Use:   "profiles",
 	Short: "Manage environment profiles",
 	Long: `Manage environment profiles for different Izanami servers.
 
@@ -42,7 +42,7 @@ var profileListCmd = &cobra.Command{
 The active profile is marked with an asterisk (*).
 
 Example:
-  iz profile list`,
+  iz profiles list`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		profiles, activeProfile, err := izanami.ListProfiles()
 		if err != nil {
@@ -52,8 +52,8 @@ Example:
 		if len(profiles) == 0 {
 			fmt.Println("No profiles configured")
 			fmt.Println("\nCreate a profile with:")
-			fmt.Println("  iz profile add <name>")
-			fmt.Println("  iz profile init sandbox|build|prod")
+			fmt.Println("  iz profiles add <name>")
+			fmt.Println("  iz profiles init sandbox|build|prod")
 			return nil
 		}
 
@@ -116,7 +116,7 @@ Example:
 			fmt.Printf("\nActive profile: %s\n", activeProfile)
 		} else {
 			fmt.Println("\nNo active profile set")
-			fmt.Println("Switch to a profile with: iz profile use <name>")
+			fmt.Println("Switch to a profile with: iz profiles use <name>")
 		}
 
 		return nil
@@ -130,7 +130,7 @@ var profileCurrentCmd = &cobra.Command{
 	Long: `Show the currently active profile with all its settings.
 
 Example:
-  iz profile current`,
+  iz profiles current`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		activeProfileName, err := izanami.GetActiveProfileName()
 		if err != nil {
@@ -140,7 +140,7 @@ Example:
 		if activeProfileName == "" {
 			fmt.Println("No active profile set")
 			fmt.Println("\nSet a profile with:")
-			fmt.Println("  iz profile use <name>")
+			fmt.Println("  iz profiles use <name>")
 			return nil
 		}
 
@@ -163,7 +163,7 @@ var profileShowCmd = &cobra.Command{
 	Long: `Show detailed configuration for a specific profile.
 
 Example:
-  iz profile show sandbox`,
+  iz profiles show sandbox`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		profileName := args[0]
@@ -191,7 +191,7 @@ var profileUseCmd = &cobra.Command{
 The active profile's settings will be used as defaults for all commands.
 
 Example:
-  iz profile use sandbox`,
+  iz profiles use sandbox`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		profileName := args[0]
@@ -231,13 +231,13 @@ You can specify settings via flags or be prompted interactively.
 
 Examples:
   # Interactive mode
-  iz profile add sandbox
+  iz profiles add sandbox
 
   # With flags
-  iz profile add sandbox --session sandbox-session --tenant dev-tenant
+  iz profiles add sandbox --session sandbox-session --tenant dev-tenant
 
   # Direct URL (no session)
-  iz profile add sandbox --url http://localhost:9000 --tenant dev-tenant`,
+  iz profiles add sandbox --url http://localhost:9000 --tenant dev-tenant`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		profileName := args[0]
@@ -331,7 +331,7 @@ Examples:
 		}
 
 		fmt.Printf("\nSwitch to this profile with:\n")
-		fmt.Printf("  iz profile use %s\n", profileName)
+		fmt.Printf("  iz profiles use %s\n", profileName)
 
 		if clientSecret != "" {
 			fmt.Println("\n⚠️  SECURITY WARNING:")
@@ -359,9 +359,9 @@ You can optionally specify a custom name for the profile.
 If no name is provided, the template name is used.
 
 Examples:
-  iz profile init sandbox
-  iz profile init prod my-production
-  iz profile init build staging-env`,
+  iz profiles init sandbox
+  iz profiles init prod my-production
+  iz profiles init build staging-env`,
 	Args:      cobra.RangeArgs(1, 2),
 	ValidArgs: []string{"sandbox", "build", "prod"},
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -433,7 +433,7 @@ Examples:
 		printProfile(profile, false)
 
 		fmt.Printf("\nSwitch to this profile with:\n")
-		fmt.Printf("  iz profile use %s\n", profileName)
+		fmt.Printf("  iz profiles use %s\n", profileName)
 
 		return nil
 	},
@@ -453,9 +453,9 @@ Valid keys:
   context   - Default context
 
 Examples:
-  iz profile set sandbox tenant new-tenant
-  iz profile set prod base-url https://izanami.example.com
-  iz profile set build session build-session`,
+  iz profiles set sandbox tenant new-tenant
+  iz profiles set prod base-url https://izanami.example.com
+  iz profiles set build session build-session`,
 	Args: cobra.ExactArgs(3),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		profileName := args[0]
@@ -506,7 +506,7 @@ var profileDeleteCmd = &cobra.Command{
 If you delete the active profile, no profile will be active.
 
 Example:
-  iz profile delete sandbox`,
+  iz profiles delete sandbox`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		profileName := args[0]
@@ -534,7 +534,7 @@ Example:
 
 		if activeProfile == profileName {
 			fmt.Println("\nNo active profile set. Switch to another profile with:")
-			fmt.Println("  iz profile use <name>")
+			fmt.Println("  iz profiles use <name>")
 		}
 
 		return nil

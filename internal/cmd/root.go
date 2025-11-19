@@ -44,7 +44,7 @@ Configuration can be provided via:
 
 Examples:
   # Use a profile for all commands
-  iz profile use sandbox
+  iz profiles use sandbox
   iz features check my-feature
 
   # Or override active profile temporarily
@@ -73,42 +73,20 @@ For more information, visit: https://github.com/MAIF/izanami`,
 		// 1. Command-line flags (applied later)
 		// 2. Environment variables (handled by viper)
 		// 3. Profile settings (if --profile specified or active profile exists)
-		// 4. Session settings (for auth)
+		// 4. Session settings (loaded via profile's session reference)
 		// 5. Top-level config (fallback)
 
-		// Try loading from active session first
-		cfg, _, err = izanami.LoadConfigFromSession()
-		if err != nil {
-			// Fall back to config file (with profile support)
-			if profileName != "" {
-				// Load with specific profile from --profile flag
-				cfg, err = izanami.LoadConfigWithProfile(profileName)
-			} else {
-				// Load with active profile (if any)
-				cfg, err = izanami.LoadConfigWithProfile("")
-			}
-
-			if err != nil {
-				return fmt.Errorf("no active session and failed to load config: %w (use 'iz login' to authenticate)", err)
-			}
+		// Load config via profile system (profiles load their referenced sessions)
+		if profileName != "" {
+			// Load with specific profile from --profile flag
+			cfg, err = izanami.LoadConfigWithProfile(profileName)
 		} else {
-			// We have a session, but still merge profile settings if specified
-			if profileName != "" {
-				profile, err := izanami.GetProfile(profileName)
-				if err != nil {
-					return fmt.Errorf("failed to load profile '%s': %w", profileName, err)
-				}
-				cfg.MergeWithProfile(profile)
-			} else {
-				// Try to load and merge active profile
-				activeProfile, err := izanami.GetActiveProfileName()
-				if err == nil && activeProfile != "" {
-					profile, err := izanami.GetProfile(activeProfile)
-					if err == nil {
-						cfg.MergeWithProfile(profile)
-					}
-				}
-			}
+			// Load with active profile (if any)
+			cfg, err = izanami.LoadConfigWithProfile("")
+		}
+
+		if err != nil {
+			return fmt.Errorf("failed to load config: %w (use 'iz login' to authenticate)", err)
 		}
 
 		// Command-line flags override everything (highest priority)

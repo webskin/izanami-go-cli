@@ -25,28 +25,19 @@ var loginCmd = &cobra.Command{
 	Long: `Login to an Izanami instance and save the authentication session.
 
 The command will prompt for your password securely, authenticate with
-Izanami, and save the JWT token for future use.
+Izanami, and save the JWT token for future use. The session is automatically
+linked to a profile, and the profile becomes active.
 
 Examples:
   # Login to local Izanami
   iz login http://localhost:9000 RESERVED_ADMIN_USER
 
-  # Login with a custom session name
-  iz login https://izanami.prod.com admin --name prod
-
-  # Switch to that session later
-  iz sessions use prod`,
+  # Login to production (will prompt for profile name if new URL)
+  iz login https://izanami.prod.com admin`,
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		baseURL := args[0]
 		username := args[1]
-
-		// Generate session name if not provided
-		sessionName := loginSessionName
-		if sessionName == "" {
-			// Extract hostname from URL for session name
-			sessionName = extractSessionName(baseURL, username)
-		}
 
 		// Get password
 		password := loginPassword
@@ -72,6 +63,12 @@ Examples:
 			return fmt.Errorf("login failed: %w", err)
 		}
 
+		// Determine profile name first (create or find existing)
+		profileName, profileCreated, profileUpdated := determineProfileName(baseURL, username)
+
+		// Generate deterministic session name: <profile-name>-<username>-session
+		sessionName := fmt.Sprintf("%s-%s-session", profileName, username)
+
 		// Save session
 		sessions, err := izanami.LoadSessions()
 		if err != nil {
@@ -85,20 +82,32 @@ Examples:
 			CreatedAt: time.Now(),
 		}
 
+		// Check if session with same URL+username exists and overwrite
+		for name, existingSession := range sessions.Sessions {
+			if existingSession.URL == baseURL && existingSession.Username == username {
+				// Delete old session if it has a different name
+				if name != sessionName {
+					delete(sessions.Sessions, name)
+					fmt.Fprintf(os.Stderr, "   Replacing existing session: %s\n", name)
+				}
+				break
+			}
+		}
+
 		sessions.AddSession(sessionName, session)
-		sessions.SetActiveSession(sessionName)
 
 		if err := sessions.Save(); err != nil {
 			return fmt.Errorf("failed to save session: %w", err)
 		}
 
-		// Auto-create or update profile
-		profileName, profileCreated, profileUpdated := handleProfileCreation(baseURL, username, sessionName)
+		// Update profile with session reference
+		if err := updateProfileWithSession(profileName, baseURL, username, sessionName); err != nil {
+			fmt.Fprintf(os.Stderr, "\n   Warning: failed to update profile: %v\n", err)
+		}
 
 		// Success messages
 		fmt.Fprintf(os.Stderr, "✅ Successfully logged in as %s\n", username)
 		fmt.Fprintf(os.Stderr, "   Session saved as: %s\n", sessionName)
-		fmt.Fprintf(os.Stderr, "   Active session: %s\n", sessions.Active)
 
 		// Profile messages
 		if profileCreated {
@@ -108,7 +117,10 @@ Examples:
 		}
 
 		if profileName != "" {
-			fmt.Fprintf(os.Stderr, "   Active profile: %s\n", profileName)
+			activeProfile, _ := izanami.GetActiveProfileName()
+			if activeProfile == profileName {
+				fmt.Fprintf(os.Stderr, "   Active profile: %s\n", profileName)
+			}
 		}
 
 		fmt.Fprintf(os.Stderr, "\nYou can now run commands like:\n")
@@ -182,15 +194,15 @@ func promptForProfileName(suggestedName string) string {
 	return input
 }
 
-// handleProfileCreation creates or updates a profile after successful login
+// determineProfileName determines the profile name to use for login
 // Returns (profileName, wasCreated, wasUpdated)
-func handleProfileCreation(baseURL, username, sessionName string) (string, bool, bool) {
+func determineProfileName(baseURL, username string) (string, bool, bool) {
 	// Check if any profiles exist
 	profiles, _, err := izanami.ListProfiles()
 	if err != nil {
-		// If we can't load profiles, log warning but don't fail
+		// If we can't load profiles, use default name
 		fmt.Fprintf(os.Stderr, "\n   Warning: could not load profiles: %v\n", err)
-		return "", false, false
+		return extractSessionName(baseURL, username), false, false
 	}
 
 	hasProfiles := len(profiles) > 0
@@ -200,37 +212,38 @@ func handleProfileCreation(baseURL, username, sessionName string) (string, bool,
 	if !hasProfiles {
 		// First time - no profiles exist yet
 		fmt.Fprintf(os.Stderr, "\nNo profiles exist yet. Let's create one!\n")
-		profileName = promptForProfileName(sessionName)
+		suggestedName := extractSessionName(baseURL, username)
+		profileName = promptForProfileName(suggestedName)
 		wasCreated = true
 	} else {
 		// Check if URL matches existing profile
-		existingProfileName, existingProfile, err := izanami.FindProfileByBaseURL(baseURL)
+		existingProfileName, _, err := izanami.FindProfileByBaseURL(baseURL)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "\n   Warning: could not check for existing profiles: %v\n", err)
-			return "", false, false
+			return extractSessionName(baseURL, username), false, false
 		}
 
 		if existingProfileName != "" {
-			// Found existing profile with same URL - update it
+			// Found existing profile with same URL - use it
 			profileName = existingProfileName
-			existingProfile.Session = sessionName
-			existingProfile.Username = username
-
-			if err := izanami.AddProfile(profileName, existingProfile); err != nil {
-				fmt.Fprintf(os.Stderr, "\n   Warning: failed to update profile: %v\n", err)
-				return profileName, false, false
-			}
-
 			wasUpdated = true
 		} else {
 			// New URL - prompt for profile name
-			profileName = promptForProfileName(sessionName)
+			suggestedName := extractSessionName(baseURL, username)
+			profileName = promptForProfileName(suggestedName)
 			wasCreated = true
 		}
 	}
 
-	// Create or update profile (if we need to create)
-	if wasCreated {
+	return profileName, wasCreated, wasUpdated
+}
+
+// updateProfileWithSession creates or updates a profile with session reference
+func updateProfileWithSession(profileName, baseURL, username, sessionName string) error {
+	// Try to load existing profile
+	existingProfile, err := izanami.GetProfile(profileName)
+	if err != nil {
+		// Profile doesn't exist - create new one
 		profile := &izanami.Profile{
 			Session:  sessionName,
 			BaseURL:  baseURL,
@@ -238,20 +251,24 @@ func handleProfileCreation(baseURL, username, sessionName string) (string, bool,
 		}
 
 		if err := izanami.AddProfile(profileName, profile); err != nil {
-			fmt.Fprintf(os.Stderr, "\n   Warning: failed to save profile: %v\n", err)
-			return profileName, false, false
+			return fmt.Errorf("failed to save profile: %w", err)
+		}
+	} else {
+		// Profile exists - update session reference
+		existingProfile.Session = sessionName
+		existingProfile.Username = username
+
+		if err := izanami.AddProfile(profileName, existingProfile); err != nil {
+			return fmt.Errorf("failed to update profile: %w", err)
 		}
 	}
 
 	// Set as active profile
-	if profileName != "" {
-		if err := izanami.SetActiveProfile(profileName); err != nil {
-			fmt.Fprintf(os.Stderr, "\n   Warning: failed to set active profile: %v\n", err)
-			// Don't return error - profile was still created/updated
-		}
+	if err := izanami.SetActiveProfile(profileName); err != nil {
+		return fmt.Errorf("failed to set active profile: %w", err)
 	}
 
-	return profileName, wasCreated, wasUpdated
+	return nil
 }
 
 func init() {

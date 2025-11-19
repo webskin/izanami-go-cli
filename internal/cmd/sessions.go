@@ -17,19 +17,18 @@ var sessionsCmd = &cobra.Command{
 	Short: "Manage authentication sessions",
 	Long: `Manage saved authentication sessions.
 
-Sessions store your login information so you don't need to re-authenticate
-every time. You can have multiple sessions for different Izanami instances
-and switch between them.
+Sessions store your JWT tokens from login. Sessions are referenced by profiles,
+and you control which session is used by switching profiles.
 
 Examples:
   # List all sessions
   iz sessions list
 
-  # Switch to a different session
-  iz sessions use prod
-
   # Delete a session
-  iz sessions delete old-session`,
+  iz sessions delete old-session
+
+  # Switch profiles (which reference sessions)
+  iz profiles use prod`,
 }
 
 // sessionsListCmd lists all sessions
@@ -50,7 +49,6 @@ var sessionsListCmd = &cobra.Command{
 		// Format for display
 		type SessionDisplay struct {
 			Name      string `json:"name"`
-			Active    string `json:"active"`
 			URL       string `json:"url"`
 			Username  string `json:"username"`
 			CreatedAt string `json:"created_at"`
@@ -59,16 +57,10 @@ var sessionsListCmd = &cobra.Command{
 
 		var displays []SessionDisplay
 		for name, session := range sessions.Sessions {
-			active := ""
-			if name == sessions.Active {
-				active = "✓"
-			}
-
 			age := formatAge(time.Since(session.CreatedAt))
 
 			displays = append(displays, SessionDisplay{
 				Name:      name,
-				Active:    active,
 				URL:       session.URL,
 				Username:  session.Username,
 				CreatedAt: session.CreatedAt.Format("2006-01-02 15:04:05"),
@@ -77,36 +69,6 @@ var sessionsListCmd = &cobra.Command{
 		}
 
 		return output.Print(displays, output.Format(outputFormat))
-	},
-}
-
-// sessionsUseCmd switches the active session
-var sessionsUseCmd = &cobra.Command{
-	Use:   "use <session-name>",
-	Short: "Switch to a different session",
-	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		sessionName := args[0]
-
-		sessions, err := izanami.LoadSessions()
-		if err != nil {
-			return err
-		}
-
-		if err := sessions.SetActiveSession(sessionName); err != nil {
-			return err
-		}
-
-		if err := sessions.Save(); err != nil {
-			return fmt.Errorf("%s: %w", errors.MsgFailedToSaveSessions, err)
-		}
-
-		session, _ := sessions.GetSession(sessionName)
-		fmt.Fprintf(os.Stderr, "✅ Switched to session: %s\n", sessionName)
-		fmt.Fprintf(os.Stderr, "   URL: %s\n", session.URL)
-		fmt.Fprintf(os.Stderr, "   User: %s\n", session.Username)
-
-		return nil
 	},
 }
 
@@ -132,11 +94,6 @@ var sessionsDeleteCmd = &cobra.Command{
 		}
 
 		fmt.Fprintf(os.Stderr, "✅ Deleted session: %s\n", sessionName)
-		if sessions.Active != "" {
-			fmt.Fprintf(os.Stderr, "   Active session is now: %s\n", sessions.Active)
-		} else {
-			fmt.Fprintf(os.Stderr, "   No active session. Use 'iz login' to create one.\n")
-		}
 
 		return nil
 	},
@@ -145,24 +102,39 @@ var sessionsDeleteCmd = &cobra.Command{
 // logoutCmd logs out of the current session
 var logoutCmd = &cobra.Command{
 	Use:   "logout",
-	Short: "Logout from the current session",
-	Long: `Logout from the currently active session.
+	Short: "Logout from the current profile's session",
+	Long: `Logout from the session referenced by the active profile.
 
 This will remove the saved token but keep the session entry.
 You will need to login again to use this session.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Get active profile
+		activeProfileName, err := izanami.GetActiveProfileName()
+		if err != nil {
+			return fmt.Errorf("no active profile: %w (use 'iz profiles use <name>' to set one)", err)
+		}
+
+		// Get profile
+		profile, err := izanami.GetProfile(activeProfileName)
+		if err != nil {
+			return fmt.Errorf("failed to load active profile: %w", err)
+		}
+
+		// Check if profile has a session reference
+		if profile.Session == "" {
+			return fmt.Errorf("active profile '%s' does not reference a session", activeProfileName)
+		}
+
+		// Load sessions
 		sessions, err := izanami.LoadSessions()
 		if err != nil {
 			return err
 		}
 
-		if sessions.Active == "" {
-			return fmt.Errorf(errors.MsgNoActiveSession)
-		}
-
-		session, err := sessions.GetSession(sessions.Active)
+		// Get the session
+		session, err := sessions.GetSession(profile.Session)
 		if err != nil {
-			return err
+			return fmt.Errorf("session '%s' not found: %w", profile.Session, err)
 		}
 
 		// Remove the token but keep the session
@@ -173,7 +145,7 @@ You will need to login again to use this session.`,
 			return fmt.Errorf("%s: %w", errors.MsgFailedToSaveSessions, err)
 		}
 
-		fmt.Fprintf(os.Stderr, "✅ Logged out from session: %s\n", sessions.Active)
+		fmt.Fprintf(os.Stderr, "✅ Logged out from session: %s\n", profile.Session)
 		fmt.Fprintf(os.Stderr, "   Use 'iz login %s %s' to login again\n", session.URL, session.Username)
 
 		return nil
@@ -210,6 +182,5 @@ func init() {
 	rootCmd.AddCommand(logoutCmd)
 
 	sessionsCmd.AddCommand(sessionsListCmd)
-	sessionsCmd.AddCommand(sessionsUseCmd)
 	sessionsCmd.AddCommand(sessionsDeleteCmd)
 }

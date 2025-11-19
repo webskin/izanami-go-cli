@@ -21,7 +21,6 @@ type Session struct {
 
 // Sessions represents the sessions file structure
 type Sessions struct {
-	Active   string              `yaml:"active"`
 	Sessions map[string]*Session `yaml:"sessions"`
 }
 
@@ -48,7 +47,6 @@ func LoadSessions() (*Sessions, error) {
 		if os.IsNotExist(err) {
 			// Return empty sessions if file doesn't exist
 			return &Sessions{
-				Active:   "",
 				Sessions: make(map[string]*Session),
 			}, nil
 		}
@@ -90,25 +88,6 @@ func (s *Sessions) AddSession(name string, session *Session) {
 		s.Sessions = make(map[string]*Session)
 	}
 	s.Sessions[name] = session
-
-	// Set as active if it's the first session
-	if s.Active == "" {
-		s.Active = name
-	}
-}
-
-// GetActiveSession returns the currently active session
-func (s *Sessions) GetActiveSession() (*Session, string, error) {
-	if s.Active == "" {
-		return nil, "", fmt.Errorf(errors.MsgNoActiveSessionWithLogin)
-	}
-
-	session, ok := s.Sessions[s.Active]
-	if !ok {
-		return nil, "", fmt.Errorf(errors.MsgActiveSessionNotFound, s.Active)
-	}
-
-	return session, s.Active, nil
 }
 
 // GetSession returns a specific session by name
@@ -128,25 +107,6 @@ func (s *Sessions) DeleteSession(name string) error {
 
 	delete(s.Sessions, name)
 
-	// If we deleted the active session, clear it or set to another
-	if s.Active == name {
-		s.Active = ""
-		// Set to first available session if any exist
-		for sessionName := range s.Sessions {
-			s.Active = sessionName
-			break
-		}
-	}
-
-	return nil
-}
-
-// SetActiveSession sets the active session
-func (s *Sessions) SetActiveSession(name string) error {
-	if _, ok := s.Sessions[name]; !ok {
-		return fmt.Errorf(errors.MsgSessionNotFound, name)
-	}
-	s.Active = name
 	return nil
 }
 
@@ -159,21 +119,21 @@ func (s *Session) IsTokenExpired(maxAge time.Duration) bool {
 	return time.Since(s.CreatedAt) > maxAge
 }
 
-// LoadConfigFromSession loads config from the active session
-func LoadConfigFromSession() (*Config, string, error) {
+// LoadConfigFromSession loads config from a specific session
+func LoadConfigFromSession(sessionName string) (*Config, error) {
 	sessions, err := LoadSessions()
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 
-	session, name, err := sessions.GetActiveSession()
+	session, err := sessions.GetSession(sessionName)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 
 	// Validate that the session has a valid JWT token
 	if session.JwtToken == "" {
-		return nil, "", fmt.Errorf("active session has no JWT token (session may be invalid)")
+		return nil, fmt.Errorf("session '%s' has no JWT token (session may be invalid)", sessionName)
 	}
 
 	// Load config from file first (to get client-keys and other settings)
@@ -188,5 +148,5 @@ func LoadConfigFromSession() (*Config, string, error) {
 	config.Username = session.Username
 	config.JwtToken = session.JwtToken
 
-	return config, name, nil
+	return config, nil
 }
