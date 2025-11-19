@@ -28,6 +28,12 @@ const (
 	ConfigKeyClientKeys          = "client-keys"
 )
 
+// Error message constants
+const (
+	ErrMsgFailedToCreateConfigDir = "failed to create config directory: %w"
+	ErrMsgFailedToReadConfigFile  = "failed to read config file: %w"
+)
+
 // Config holds the configuration for the Izanami client
 type Config struct {
 	BaseURL      string                            `yaml:"base-url" mapstructure:"base-url"`
@@ -230,7 +236,7 @@ var getConfigDir = func() string {
 func InitConfigFile() error {
 	configDir := getConfigDir()
 	if err := os.MkdirAll(configDir, 0700); err != nil {
-		return fmt.Errorf("failed to create config directory: %w", err)
+		return fmt.Errorf(ErrMsgFailedToCreateConfigDir, err)
 	}
 
 	configPath := filepath.Join(configDir, "config.yaml")
@@ -447,7 +453,7 @@ func SetConfigValue(key, value string) error {
 
 	// Create config directory if it doesn't exist
 	if err := os.MkdirAll(configDir, 0700); err != nil {
-		return fmt.Errorf("failed to create config directory: %w", err)
+		return fmt.Errorf(ErrMsgFailedToCreateConfigDir, err)
 	}
 
 	v := viper.New()
@@ -457,7 +463,7 @@ func SetConfigValue(key, value string) error {
 	// Read existing config if it exists
 	if _, err := os.Stat(configPath); err == nil {
 		if err := v.ReadInConfig(); err != nil {
-			return fmt.Errorf("failed to read config file: %w", err)
+			return fmt.Errorf(ErrMsgFailedToReadConfigFile, err)
 		}
 	}
 
@@ -499,7 +505,7 @@ func UnsetConfigValue(key string) error {
 
 	// Read existing config
 	if err := v.ReadInConfig(); err != nil {
-		return fmt.Errorf("failed to read config file: %w", err)
+		return fmt.Errorf(ErrMsgFailedToReadConfigFile, err)
 	}
 
 	// Get all settings
@@ -679,7 +685,7 @@ func AddClientKeys(tenant string, projects []string, clientID, clientSecret stri
 
 	// Create config directory if it doesn't exist
 	if err := os.MkdirAll(configDir, 0700); err != nil {
-		return fmt.Errorf("failed to create config directory: %w", err)
+		return fmt.Errorf(ErrMsgFailedToCreateConfigDir, err)
 	}
 
 	v := viper.New()
@@ -689,7 +695,7 @@ func AddClientKeys(tenant string, projects []string, clientID, clientSecret stri
 	// Read existing config if it exists
 	if _, err := os.Stat(configPath); err == nil {
 		if err := v.ReadInConfig(); err != nil {
-			return fmt.Errorf("failed to read config file: %w", err)
+			return fmt.Errorf(ErrMsgFailedToReadConfigFile, err)
 		}
 	}
 
@@ -713,8 +719,8 @@ func AddClientKeys(tenant string, projects []string, clientID, clientSecret stri
 
 	if len(projects) == 0 {
 		// Store at tenant level
-		tenantData["client-id"] = clientID
-		tenantData["client-secret"] = clientSecret
+		tenantData[ConfigKeyClientID] = clientID
+		tenantData[ConfigKeyClientSecret] = clientSecret
 	} else {
 		// Store at project level
 		var projectsData map[string]interface{}
@@ -731,8 +737,8 @@ func AddClientKeys(tenant string, projects []string, clientID, clientSecret stri
 		// Add credentials for each project
 		for _, project := range projects {
 			projectsData[project] = map[string]interface{}{
-				"client-id":     clientID,
-				"client-secret": clientSecret,
+				ConfigKeyClientID:     clientID,
+				ConfigKeyClientSecret: clientSecret,
 			}
 		}
 
