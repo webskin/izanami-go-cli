@@ -182,7 +182,7 @@ Use --show-secrets to display sensitive values.`,
 		for key := range allValues {
 			// Skip client-keys (shown in expanded format below)
 			// Skip client-id and client-secret (now part of client-keys hierarchy)
-			if key != "client-keys" && key != "client-id" && key != "client-secret" {
+			if key != izanami.ConfigKeyClientKeys && key != izanami.ConfigKeyClientID && key != izanami.ConfigKeyClientSecret {
 				keys = append(keys, key)
 			}
 		}
@@ -195,7 +195,7 @@ Use --show-secrets to display sensitive values.`,
 
 			// Redact sensitive values unless --show-secrets is set
 			if izanami.SensitiveKeys[key] && !showSecrets && value != "" {
-				value = "<redacted>"
+				value = izanami.RedactedValue
 			}
 
 			// Show empty values as "(not set)"
@@ -224,19 +224,19 @@ Use --show-secrets to display sensitive values.`,
 					clientSecret := tenantConfig.ClientSecret
 					if !showSecrets {
 						if clientID != "" {
-							clientID = "<redacted>"
+							clientID = izanami.RedactedValue
 						}
 						if clientSecret != "" {
-							clientSecret = "<redacted>"
+							clientSecret = izanami.RedactedValue
 						}
 					}
 					table.Append([]string{
-						fmt.Sprintf("client-keys/%s/client-id", tenant),
+						fmt.Sprintf("%s/%s/%s", izanami.ConfigKeyClientKeys, tenant, izanami.ConfigKeyClientID),
 						clientID,
 						"file",
 					})
 					table.Append([]string{
-						fmt.Sprintf("client-keys/%s/client-secret", tenant),
+						fmt.Sprintf("%s/%s/%s", izanami.ConfigKeyClientKeys, tenant, izanami.ConfigKeyClientSecret),
 						clientSecret,
 						"file",
 					})
@@ -256,19 +256,19 @@ Use --show-secrets to display sensitive values.`,
 						clientSecret := projectConfig.ClientSecret
 						if !showSecrets {
 							if clientID != "" {
-								clientID = "<redacted>"
+								clientID = izanami.RedactedValue
 							}
 							if clientSecret != "" {
-								clientSecret = "<redacted>"
+								clientSecret = izanami.RedactedValue
 							}
 						}
 						table.Append([]string{
-							fmt.Sprintf("client-keys/%s/%s/client-id", tenant, project),
+							fmt.Sprintf("%s/%s/%s/%s", izanami.ConfigKeyClientKeys, tenant, project, izanami.ConfigKeyClientID),
 							clientID,
 							"file",
 						})
 						table.Append([]string{
-							fmt.Sprintf("client-keys/%s/%s/client-secret", tenant, project),
+							fmt.Sprintf("%s/%s/%s/%s", izanami.ConfigKeyClientKeys, tenant, project, izanami.ConfigKeyClientSecret),
 							clientSecret,
 							"file",
 						})
@@ -277,7 +277,7 @@ Use --show-secrets to display sensitive values.`,
 			}
 		} else {
 			// No client-keys configured
-			table.Append([]string{"client-keys", "(not set)", "file"})
+			table.Append([]string{izanami.ConfigKeyClientKeys, "(not set)", "file"})
 		}
 
 		table.Render()

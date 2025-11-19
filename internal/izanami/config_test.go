@@ -10,6 +10,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const testBaseURL = "http://localhost:9000"
+
 // TestClientKeysConfigMarshaling tests YAML marshaling and unmarshaling of ClientKeys
 func TestClientKeysConfigMarshaling(t *testing.T) {
 	tests := []struct {
@@ -19,7 +21,7 @@ func TestClientKeysConfigMarshaling(t *testing.T) {
 		{
 			name: "tenant-level credentials only",
 			config: Config{
-				BaseURL: "http://localhost:9000",
+				BaseURL: testBaseURL,
 				ClientKeys: map[string]TenantClientKeysConfig{
 					"tenant1": {
 						ClientID:     "client-id-1",
@@ -31,7 +33,7 @@ func TestClientKeysConfigMarshaling(t *testing.T) {
 		{
 			name: "project-level credentials only",
 			config: Config{
-				BaseURL: "http://localhost:9000",
+				BaseURL: testBaseURL,
 				ClientKeys: map[string]TenantClientKeysConfig{
 					"tenant1": {
 						Projects: map[string]ProjectClientKeysConfig{
@@ -51,7 +53,7 @@ func TestClientKeysConfigMarshaling(t *testing.T) {
 		{
 			name: "both tenant and project level credentials",
 			config: Config{
-				BaseURL: "http://localhost:9000",
+				BaseURL: testBaseURL,
 				ClientKeys: map[string]TenantClientKeysConfig{
 					"tenant1": {
 						ClientID:     "tenant1-client-id",
@@ -73,7 +75,7 @@ func TestClientKeysConfigMarshaling(t *testing.T) {
 		{
 			name: "empty client keys",
 			config: Config{
-				BaseURL:    "http://localhost:9000",
+				BaseURL:    testBaseURL,
 				ClientKeys: nil,
 			},
 		},
@@ -433,7 +435,7 @@ func TestBackwardCompatibility(t *testing.T) {
 
 	// Create a config file without client-keys section (old format)
 	configPath := filepath.Join(tempDir, "config.yaml")
-	oldConfigYAML := `base-url: http://localhost:9000
+	oldConfigYAML := `base-url: ` + testBaseURL + `
 client-id: test-client
 client-secret: test-secret
 tenant: my-tenant
@@ -445,7 +447,7 @@ timeout: 30
 	// Load config - should not error
 	config, err := LoadConfig()
 	require.NoError(t, err)
-	assert.Equal(t, "http://localhost:9000", config.BaseURL)
+	assert.Equal(t, testBaseURL, config.BaseURL)
 	assert.Equal(t, "test-client", config.ClientID)
 	assert.Equal(t, "test-secret", config.ClientSecret)
 	assert.Equal(t, "my-tenant", config.Tenant)
