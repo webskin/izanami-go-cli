@@ -1,5 +1,7 @@
 # TODO
 
+## --project A --project B vs --projects A,B consistency
+
 ## CLI Configuration Management
 
 ### Implement `iz config` Commands
