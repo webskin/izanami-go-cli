@@ -57,7 +57,8 @@ type Config struct {
 	Color        string `yaml:"color" mapstructure:"color"`                 // Color output (auto/always/never)
 
 	// Profile management
-	Profiles *ProfilesConfig `yaml:"profiles,omitempty" mapstructure:"profiles"` // Named environment profiles
+	ActiveProfile string              `yaml:"active_profile,omitempty" mapstructure:"active_profile"` // Currently active profile
+	Profiles      map[string]*Profile `yaml:"profiles,omitempty" mapstructure:"profiles"`             // Named environment profiles
 }
 
 // TenantClientKeysConfig holds client credentials for a specific tenant
@@ -85,12 +86,6 @@ type Profile struct {
 	ClientID     string                            `yaml:"client-id,omitempty" mapstructure:"client-id"`                                           // Client ID for this profile
 	ClientSecret string                            `yaml:"client-secret,omitempty" mapstructure:"client-secret"`                                   // Client secret for this profile
 	ClientKeys   map[string]TenantClientKeysConfig `yaml:"client-keys,omitempty" mapstructure:"client-keys"`                                       // Profile-specific hierarchical client keys
-}
-
-// ProfilesConfig holds all profiles and tracks the active one
-type ProfilesConfig struct {
-	Active   string              `yaml:"active,omitempty" mapstructure:"active"`     // Name of currently active profile
-	Profiles map[string]*Profile `yaml:"profiles,omitempty" mapstructure:"profiles"` // All defined profiles
 }
 
 // FlagValues holds command-line flag values for merging with config
@@ -829,11 +824,11 @@ func GetActiveProfileName() (string, error) {
 		return "", err
 	}
 
-	if config.Profiles == nil || config.Profiles.Active == "" {
+	if config.ActiveProfile == "" {
 		return "", nil // No active profile
 	}
 
-	return config.Profiles.Active, nil
+	return config.ActiveProfile, nil
 }
 
 // GetProfile retrieves a specific profile from the config by name
@@ -843,11 +838,11 @@ func GetProfile(name string) (*Profile, error) {
 		return nil, err
 	}
 
-	if config.Profiles == nil || config.Profiles.Profiles == nil {
+	if config.Profiles == nil {
 		return nil, fmt.Errorf("no profiles defined")
 	}
 
-	profile, exists := config.Profiles.Profiles[name]
+	profile, exists := config.Profiles[name]
 	if !exists {
 		return nil, fmt.Errorf("profile '%s' not found", name)
 	}
@@ -947,8 +942,8 @@ func LoadConfigWithProfile(profileName string) (*Config, error) {
 	}
 
 	// If no profile name specified, try to use active profile
-	if profileName == "" && config.Profiles != nil {
-		profileName = config.Profiles.Active
+	if profileName == "" {
+		profileName = config.ActiveProfile
 	}
 
 	// If we have a profile name, merge it
@@ -990,19 +985,9 @@ func SetActiveProfile(profileName string) error {
 		profilesMap = make(map[string]interface{})
 	}
 
-	profilesList := make(map[string]interface{})
-	if profiles, ok := profilesMap["profiles"]; ok {
-		if profilesListMap, ok := profiles.(map[string]interface{}); ok {
-			profilesList = profilesListMap
-		}
-	}
-
-	if _, exists := profilesList[profileName]; !exists {
+	if _, exists := profilesMap[profileName]; !exists {
 		return fmt.Errorf("profile '%s' does not exist", profileName)
 	}
-
-	// Set active profile
-	profilesMap["active"] = profileName
 
 	// Get global settings with defaults
 	timeout := v.GetInt("timeout")
@@ -1024,11 +1009,12 @@ func SetActiveProfile(profileName string) error {
 	newV.SetConfigFile(configPath)
 	newV.SetConfigType("yaml")
 
-	// Set values in order: global settings first, then profiles
+	// Set values in order: global settings first, then active_profile, then profiles
 	newV.Set("timeout", timeout)
 	newV.Set("verbose", verbose)
 	newV.Set("output-format", outputFormat)
 	newV.Set("color", colorSetting)
+	newV.Set("active_profile", profileName)
 	newV.Set("profiles", profilesMap)
 
 	if err := newV.WriteConfigAs(configPath); err != nil {
@@ -1071,18 +1057,14 @@ func AddProfile(name string, profile *Profile) error {
 		}
 	}
 
-	// Get or create profiles structure
+	// Get or create profiles map
 	profilesMap := v.GetStringMap(ConfigKeyProfiles)
 	if profilesMap == nil {
 		profilesMap = make(map[string]interface{})
 	}
 
-	profilesList := make(map[string]interface{})
-	if profiles, ok := profilesMap["profiles"]; ok {
-		if profilesListMap, ok := profiles.(map[string]interface{}); ok {
-			profilesList = profilesListMap
-		}
-	}
+	// Get current active profile
+	activeProfile := v.GetString("active_profile")
 
 	// Convert profile to map (exclude JwtToken - it's short-lived and should only be in sessions)
 	profileMap := make(map[string]interface{})
@@ -1117,12 +1099,11 @@ func AddProfile(name string, profile *Profile) error {
 		profileMap["client-keys"] = profile.ClientKeys
 	}
 
-	profilesList[name] = profileMap
-	profilesMap["profiles"] = profilesList
+	profilesMap[name] = profileMap
 
 	// If this is the first profile, set it as active
-	if len(profilesList) == 1 {
-		profilesMap["active"] = name
+	if len(profilesMap) == 1 {
+		activeProfile = name
 	}
 
 	// Get global settings with defaults
@@ -1145,11 +1126,14 @@ func AddProfile(name string, profile *Profile) error {
 	newV.SetConfigFile(configPath)
 	newV.SetConfigType("yaml")
 
-	// Set values in order: global settings first, then profiles
+	// Set values in order: global settings first, then active_profile, then profiles
 	newV.Set("timeout", timeout)
 	newV.Set("verbose", verbose)
 	newV.Set("output-format", outputFormat)
 	newV.Set("color", colorSetting)
+	if v.IsSet("active_profile") || activeProfile != "" {
+		newV.Set("active_profile", activeProfile)
+	}
 	newV.Set("profiles", profilesMap)
 
 	if err := newV.WriteConfigAs(configPath); err != nil {
@@ -1186,33 +1170,27 @@ func DeleteProfile(name string) error {
 		return fmt.Errorf(errors.MsgFailedToReadConfigFile, err)
 	}
 
-	// Get profiles structure
+	// Get profiles map
 	profilesMap := v.GetStringMap(ConfigKeyProfiles)
 	if profilesMap == nil {
 		return fmt.Errorf("no profiles defined")
 	}
 
-	profilesList := make(map[string]interface{})
-	if profiles, ok := profilesMap["profiles"]; ok {
-		if profilesListMap, ok := profiles.(map[string]interface{}); ok {
-			profilesList = profilesListMap
-		}
-	}
-
 	// Check if profile exists
-	if _, exists := profilesList[name]; !exists {
+	if _, exists := profilesMap[name]; !exists {
 		return fmt.Errorf("profile '%s' not found", name)
 	}
 
 	// Remove the profile
-	delete(profilesList, name)
+	delete(profilesMap, name)
+
+	// Get current active profile
+	activeProfile := v.GetString("active_profile")
 
 	// If we deleted the active profile, clear the active setting
-	if active, ok := profilesMap["active"].(string); ok && active == name {
-		delete(profilesMap, "active")
+	if activeProfile == name {
+		activeProfile = ""
 	}
-
-	profilesMap["profiles"] = profilesList
 
 	// Get global settings with defaults
 	timeout := v.GetInt("timeout")
@@ -1234,11 +1212,14 @@ func DeleteProfile(name string) error {
 	newV.SetConfigFile(GetConfigPath())
 	newV.SetConfigType("yaml")
 
-	// Set values in order: global settings first, then profiles
+	// Set values in order: global settings first, then active_profile, then profiles
 	newV.Set("timeout", timeout)
 	newV.Set("verbose", verbose)
 	newV.Set("output-format", outputFormat)
 	newV.Set("color", colorSetting)
+	if v.IsSet("active_profile") || activeProfile != "" {
+		newV.Set("active_profile", activeProfile)
+	}
 	newV.Set("profiles", profilesMap)
 
 	if err := newV.WriteConfigAs(GetConfigPath()); err != nil {
@@ -1255,11 +1236,11 @@ func ListProfiles() (map[string]*Profile, string, error) {
 		return nil, "", err
 	}
 
-	if config.Profiles == nil || config.Profiles.Profiles == nil {
+	if config.Profiles == nil {
 		return make(map[string]*Profile), "", nil
 	}
 
-	return config.Profiles.Profiles, config.Profiles.Active, nil
+	return config.Profiles, config.ActiveProfile, nil
 }
 
 // normalizeURL removes protocol and trailing slashes for URL comparison
