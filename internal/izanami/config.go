@@ -995,31 +995,32 @@ func SetActiveProfile(profileName string) error {
 	// Set active profile
 	profilesMap["active"] = profileName
 
-	// Create a clean config with only the fields we want to persist
-	cleanConfig := make(map[string]interface{})
-	cleanConfig["timeout"] = v.GetInt("timeout")
-	if v.GetInt("timeout") == 0 {
-		cleanConfig["timeout"] = 30 // default
+	// Get global settings with defaults
+	timeout := v.GetInt("timeout")
+	if timeout == 0 {
+		timeout = 30
 	}
-	cleanConfig["verbose"] = v.GetBool("verbose")
-	cleanConfig["output-format"] = v.GetString("output-format")
-	if cleanConfig["output-format"] == "" {
-		cleanConfig["output-format"] = "table" // default
+	verbose := v.GetBool("verbose")
+	outputFormat := v.GetString("output-format")
+	if outputFormat == "" {
+		outputFormat = "table"
 	}
-	cleanConfig["color"] = v.GetString("color")
-	if cleanConfig["color"] == "" {
-		cleanConfig["color"] = "auto" // default
+	colorSetting := v.GetString("color")
+	if colorSetting == "" {
+		colorSetting = "auto"
 	}
-	cleanConfig["profiles"] = profilesMap
 
-	// Write the clean config back to file
+	// Write the clean config back to file in correct order
 	newV := viper.New()
 	newV.SetConfigFile(configPath)
 	newV.SetConfigType("yaml")
 
-	for k, val := range cleanConfig {
-		newV.Set(k, val)
-	}
+	// Set values in order: global settings first, then profiles
+	newV.Set("timeout", timeout)
+	newV.Set("verbose", verbose)
+	newV.Set("output-format", outputFormat)
+	newV.Set("color", colorSetting)
+	newV.Set("profiles", profilesMap)
 
 	if err := newV.WriteConfigAs(configPath); err != nil {
 		return fmt.Errorf(errors.MsgFailedToWriteConfigFile, err)
@@ -1115,31 +1116,32 @@ func AddProfile(name string, profile *Profile) error {
 		profilesMap["active"] = name
 	}
 
-	// Create a clean config with only the fields we want to persist
-	cleanConfig := make(map[string]interface{})
-	cleanConfig["timeout"] = v.GetInt("timeout")
-	if v.GetInt("timeout") == 0 {
-		cleanConfig["timeout"] = 30 // default
+	// Get global settings with defaults
+	timeout := v.GetInt("timeout")
+	if timeout == 0 {
+		timeout = 30
 	}
-	cleanConfig["verbose"] = v.GetBool("verbose")
-	cleanConfig["output-format"] = v.GetString("output-format")
-	if cleanConfig["output-format"] == "" {
-		cleanConfig["output-format"] = "table" // default
+	verbose := v.GetBool("verbose")
+	outputFormat := v.GetString("output-format")
+	if outputFormat == "" {
+		outputFormat = "table"
 	}
-	cleanConfig["color"] = v.GetString("color")
-	if cleanConfig["color"] == "" {
-		cleanConfig["color"] = "auto" // default
+	colorSetting := v.GetString("color")
+	if colorSetting == "" {
+		colorSetting = "auto"
 	}
-	cleanConfig["profiles"] = profilesMap
 
-	// Write the clean config back to file
+	// Write the clean config back to file in correct order
 	newV := viper.New()
 	newV.SetConfigFile(configPath)
 	newV.SetConfigType("yaml")
 
-	for k, val := range cleanConfig {
-		newV.Set(k, val)
-	}
+	// Set values in order: global settings first, then profiles
+	newV.Set("timeout", timeout)
+	newV.Set("verbose", verbose)
+	newV.Set("output-format", outputFormat)
+	newV.Set("color", colorSetting)
+	newV.Set("profiles", profilesMap)
 
 	if err := newV.WriteConfigAs(configPath); err != nil {
 		return fmt.Errorf(errors.MsgFailedToWriteConfigFile, err)
@@ -1203,31 +1205,32 @@ func DeleteProfile(name string) error {
 
 	profilesMap["profiles"] = profilesList
 
-	// Create a clean config with only the fields we want to persist
-	cleanConfig := make(map[string]interface{})
-	cleanConfig["timeout"] = v.GetInt("timeout")
-	if v.GetInt("timeout") == 0 {
-		cleanConfig["timeout"] = 30 // default
+	// Get global settings with defaults
+	timeout := v.GetInt("timeout")
+	if timeout == 0 {
+		timeout = 30
 	}
-	cleanConfig["verbose"] = v.GetBool("verbose")
-	cleanConfig["output-format"] = v.GetString("output-format")
-	if cleanConfig["output-format"] == "" {
-		cleanConfig["output-format"] = "table" // default
+	verbose := v.GetBool("verbose")
+	outputFormat := v.GetString("output-format")
+	if outputFormat == "" {
+		outputFormat = "table"
 	}
-	cleanConfig["color"] = v.GetString("color")
-	if cleanConfig["color"] == "" {
-		cleanConfig["color"] = "auto" // default
+	colorSetting := v.GetString("color")
+	if colorSetting == "" {
+		colorSetting = "auto"
 	}
-	cleanConfig["profiles"] = profilesMap
 
-	// Write the clean config back to file
+	// Write the clean config back to file in correct order
 	newV := viper.New()
 	newV.SetConfigFile(GetConfigPath())
 	newV.SetConfigType("yaml")
 
-	for k, val := range cleanConfig {
-		newV.Set(k, val)
-	}
+	// Set values in order: global settings first, then profiles
+	newV.Set("timeout", timeout)
+	newV.Set("verbose", verbose)
+	newV.Set("output-format", outputFormat)
+	newV.Set("color", colorSetting)
+	newV.Set("profiles", profilesMap)
 
 	if err := newV.WriteConfigAs(GetConfigPath()); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)
