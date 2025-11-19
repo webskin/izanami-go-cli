@@ -25,8 +25,8 @@ type Sessions struct {
 	Sessions map[string]*Session `yaml:"sessions"`
 }
 
-// getSessionsPath returns the path to the sessions file
-func getSessionsPath() string {
+// GetSessionsPath returns the path to the sessions file
+func GetSessionsPath() string {
 	var sessionsPath string
 
 	switch runtime.GOOS {
@@ -41,7 +41,7 @@ func getSessionsPath() string {
 
 // LoadSessions loads sessions from the sessions file
 func LoadSessions() (*Sessions, error) {
-	sessionsPath := getSessionsPath()
+	sessionsPath := GetSessionsPath()
 
 	data, err := os.ReadFile(sessionsPath)
 	if err != nil {
@@ -69,7 +69,7 @@ func LoadSessions() (*Sessions, error) {
 
 // SaveSessions saves sessions to the sessions file
 func (s *Sessions) Save() error {
-	sessionsPath := getSessionsPath()
+	sessionsPath := GetSessionsPath()
 
 	data, err := yaml.Marshal(s)
 	if err != nil {
