@@ -115,10 +115,12 @@ const maxBodyLogLength = 2048 // Maximum length for logged request/response bodi
 func (c *Client) setAdminAuth(req *resty.Request) {
 	// Priority: PAT token > JWT cookie
 	if c.config.PatToken != "" {
-		// Personal Access Token authentication (Basic auth with username:token)
+		// Personal Access Token authentication - Uses Basic Auth with username:token
+		// Username is required and sent to server for PAT authentication
 		req.SetBasicAuth(c.config.Username, c.config.PatToken)
-	} else if c.config.Username != "" && c.config.JwtToken != "" {
-		// JWT cookie authentication
+	} else if c.config.JwtToken != "" {
+		// JWT cookie authentication - ONLY sends JWT token cookie
+		// Username is NOT sent to server (JWT is self-contained)
 		req.SetHeader("Cookie", "token="+c.config.JwtToken)
 	}
 }

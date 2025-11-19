@@ -10,6 +10,13 @@ import (
 	"github.com/webskin/izanami-go-cli/internal/output"
 )
 
+var (
+	// Admin authentication flags
+	adminPATUsername string
+	adminJwtToken    string
+	adminPatToken    string
+)
+
 // adminCmd represents the admin command
 var adminCmd = &cobra.Command{
 	Use:   "admin",
@@ -23,13 +30,24 @@ Admin operations require elevated privileges and are typically used for:
   - Importing/exporting data
   - Global search
 
-These operations require username and personal access token authentication.`,
+These operations require authentication via JWT token (from 'iz login') or Personal Access Token.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		// Load config first (parent's PersistentPreRunE)
 		if rootCmd.PersistentPreRunE != nil {
 			if err := rootCmd.PersistentPreRunE(cmd, args); err != nil {
 				return err
 			}
+		}
+
+		// Apply admin-specific authentication flags
+		if adminPATUsername != "" {
+			cfg.Username = adminPATUsername
+		}
+		if adminJwtToken != "" {
+			cfg.JwtToken = adminJwtToken
+		}
+		if adminPatToken != "" {
+			cfg.PatToken = adminPatToken
 		}
 
 		// Validate admin authentication
@@ -608,6 +626,11 @@ Examples:
 
 func init() {
 	rootCmd.AddCommand(adminCmd)
+
+	// Admin authentication flags (persistent for all admin commands)
+	adminCmd.PersistentFlags().StringVar(&adminPATUsername, "personal-access-token-username", "", "Username for PAT authentication (env: IZ_PERSONAL_ACCESS_TOKEN_USERNAME)")
+	adminCmd.PersistentFlags().StringVar(&adminJwtToken, "jwt-token", "", "JWT token for admin authentication (env: IZ_JWT_TOKEN)")
+	adminCmd.PersistentFlags().StringVar(&adminPatToken, "personal-access-token", "", "Personal access token for admin authentication (env: IZ_PERSONAL_ACCESS_TOKEN)")
 
 	// Features (admin operations)
 	adminCmd.AddCommand(featuresCmd)

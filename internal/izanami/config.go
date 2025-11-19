@@ -13,21 +13,21 @@ import (
 
 // Config key constants
 const (
-	ConfigKeyBaseURL             = "base-url"
-	ConfigKeyClientID            = "client-id"
-	ConfigKeyClientSecret        = "client-secret"
-	ConfigKeyUsername            = "username"
-	ConfigKeyJwtToken            = "jwt-token"
-	ConfigKeyPersonalAccessToken = "personal-access-token"
-	ConfigKeyTenant              = "tenant"
-	ConfigKeyProject             = "project"
-	ConfigKeyContext             = "context"
-	ConfigKeyTimeout             = "timeout"
-	ConfigKeyVerbose             = "verbose"
-	ConfigKeyOutputFormat        = "output-format"
-	ConfigKeyColor               = "color"
-	ConfigKeyClientKeys          = "client-keys"
-	ConfigKeyProfiles            = "profiles"
+	ConfigKeyBaseURL                     = "base-url"
+	ConfigKeyClientID                    = "client-id"
+	ConfigKeyClientSecret                = "client-secret"
+	ConfigKeyPersonalAccessTokenUsername = "personal-access-token-username"
+	ConfigKeyJwtToken                    = "jwt-token"
+	ConfigKeyPersonalAccessToken         = "personal-access-token"
+	ConfigKeyTenant                      = "tenant"
+	ConfigKeyProject                     = "project"
+	ConfigKeyContext                     = "context"
+	ConfigKeyTimeout                     = "timeout"
+	ConfigKeyVerbose                     = "verbose"
+	ConfigKeyOutputFormat                = "output-format"
+	ConfigKeyColor                       = "color"
+	ConfigKeyClientKeys                  = "client-keys"
+	ConfigKeyProfiles                    = "profiles"
 )
 
 // Display constants
@@ -73,18 +73,18 @@ type ProjectClientKeysConfig struct {
 	ClientSecret string `yaml:"client-secret,omitempty" mapstructure:"client-secret"`
 }
 
-// Profile holds configuration for a specific environment (e.g., sandbox, build, prod)
+// Profile holds configuration for a specific environment (e.g., local, sandbox, build, prod)
 type Profile struct {
-	Session      string                            `yaml:"session,omitempty" mapstructure:"session"`                             // Reference to session name in ~/.izsessions
-	BaseURL      string                            `yaml:"base-url,omitempty" mapstructure:"base-url"`                           // Alternative to session
-	Username     string                            `yaml:"username,omitempty" mapstructure:"username"`                           // Username for admin authentication (used with PAT)
-	PatToken     string                            `yaml:"personal-access-token,omitempty" mapstructure:"personal-access-token"` // Personal Access Token (long-lived)
-	Tenant       string                            `yaml:"tenant,omitempty" mapstructure:"tenant"`                               // Default tenant for this profile
-	Project      string                            `yaml:"project,omitempty" mapstructure:"project"`                             // Default project for this profile
-	Context      string                            `yaml:"context,omitempty" mapstructure:"context"`                             // Default context for this profile
-	ClientID     string                            `yaml:"client-id,omitempty" mapstructure:"client-id"`                         // Client ID for this profile
-	ClientSecret string                            `yaml:"client-secret,omitempty" mapstructure:"client-secret"`                 // Client secret for this profile
-	ClientKeys   map[string]TenantClientKeysConfig `yaml:"client-keys,omitempty" mapstructure:"client-keys"`                     // Profile-specific hierarchical client keys
+	Session      string                            `yaml:"session,omitempty" mapstructure:"session"`                                               // Reference to session name in ~/.izsessions
+	BaseURL      string                            `yaml:"base-url,omitempty" mapstructure:"base-url"`                                             // Alternative to session
+	Username     string                            `yaml:"personal-access-token-username,omitempty" mapstructure:"personal-access-token-username"` // Username for PAT authentication (required with personal-access-token)
+	PatToken     string                            `yaml:"personal-access-token,omitempty" mapstructure:"personal-access-token"`                   // Personal Access Token (long-lived)
+	Tenant       string                            `yaml:"tenant,omitempty" mapstructure:"tenant"`                                                 // Default tenant for this profile
+	Project      string                            `yaml:"project,omitempty" mapstructure:"project"`                                               // Default project for this profile
+	Context      string                            `yaml:"context,omitempty" mapstructure:"context"`                                               // Default context for this profile
+	ClientID     string                            `yaml:"client-id,omitempty" mapstructure:"client-id"`                                           // Client ID for this profile
+	ClientSecret string                            `yaml:"client-secret,omitempty" mapstructure:"client-secret"`                                   // Client secret for this profile
+	ClientKeys   map[string]TenantClientKeysConfig `yaml:"client-keys,omitempty" mapstructure:"client-keys"`                                       // Profile-specific hierarchical client keys
 }
 
 // ProfilesConfig holds all profiles and tracks the active one
@@ -204,15 +204,15 @@ func (c *Config) Validate() error {
 
 	// Personal access token requires username
 	if c.PatToken != "" && c.Username == "" {
-		return fmt.Errorf("username is required when using personal access token (set IZ_USERNAME or --username)")
+		return fmt.Errorf("personal-access-token-username is required when using personal access token (set IZ_PERSONAL_ACCESS_TOKEN_USERNAME or --personal-access-token-username)")
 	}
 
-	// Check authentication: either client ID/secret, username/jwtToken, or patToken+username
+	// Check authentication: either client ID/secret, jwtToken, or patToken+username
 	hasClientAuth := c.ClientID != "" && c.ClientSecret != ""
-	hasUserAuth := (c.Username != "" && c.JwtToken != "") || (c.Username != "" && c.PatToken != "")
+	hasUserAuth := c.JwtToken != "" || (c.Username != "" && c.PatToken != "")
 
 	if !hasClientAuth && !hasUserAuth {
-		return fmt.Errorf("authentication required: either client-id/client-secret, username/jwt-token, or username/personal-access-token must be set")
+		return fmt.Errorf("authentication required: either client-id/client-secret, jwt-token, or personal-access-token with personal-access-token-username must be set")
 	}
 
 	return nil
@@ -224,8 +224,17 @@ func (c *Config) ValidateAdminAuth() error {
 		return fmt.Errorf("base URL is required (set IZ_BASE_URL or --url)")
 	}
 
-	if (c.Username == "" || c.JwtToken == "") && c.PatToken == "" {
-		return fmt.Errorf("admin operations require login (iz login), username/jwt-token or personal-access-token (set IZ_USERNAME and IZ_JWT_TOKEN, or IZ_PERSONAL_ACCESS_TOKEN)")
+	// Check authentication: PAT token OR JWT token (username not required for JWT)
+	hasPatAuth := c.PatToken != ""
+	hasJwtAuth := c.JwtToken != ""
+
+	if !hasPatAuth && !hasJwtAuth {
+		return fmt.Errorf("admin operations require authentication: use 'iz login' for JWT, or set IZ_JWT_TOKEN, or set IZ_PERSONAL_ACCESS_TOKEN (with IZ_PERSONAL_ACCESS_TOKEN_USERNAME)")
+	}
+
+	// If using PAT, username is required (for Basic auth)
+	if hasPatAuth && c.Username == "" {
+		return fmt.Errorf("personal-access-token-username required when using personal access token (set IZ_PERSONAL_ACCESS_TOKEN_USERNAME or --personal-access-token-username)")
 	}
 
 	return nil
@@ -335,21 +344,21 @@ type ConfigValue struct {
 
 // ValidConfigKeys defines all valid configuration keys
 var ValidConfigKeys = map[string]bool{
-	ConfigKeyBaseURL:             true,
-	ConfigKeyClientID:            true,
-	ConfigKeyClientSecret:        true,
-	ConfigKeyUsername:            true,
-	ConfigKeyJwtToken:            true,
-	ConfigKeyPersonalAccessToken: true,
-	ConfigKeyTenant:              true,
-	ConfigKeyProject:             true,
-	ConfigKeyContext:             true,
-	ConfigKeyTimeout:             true,
-	ConfigKeyVerbose:             true,
-	ConfigKeyOutputFormat:        true,
-	ConfigKeyColor:               true,
-	ConfigKeyClientKeys:          true,
-	ConfigKeyProfiles:            true,
+	ConfigKeyBaseURL:                     true,
+	ConfigKeyClientID:                    true,
+	ConfigKeyClientSecret:                true,
+	ConfigKeyPersonalAccessTokenUsername: true,
+	ConfigKeyJwtToken:                    true,
+	ConfigKeyPersonalAccessToken:         true,
+	ConfigKeyTenant:                      true,
+	ConfigKeyProject:                     true,
+	ConfigKeyContext:                     true,
+	ConfigKeyTimeout:                     true,
+	ConfigKeyVerbose:                     true,
+	ConfigKeyOutputFormat:                true,
+	ConfigKeyColor:                       true,
+	ConfigKeyClientKeys:                  true,
+	ConfigKeyProfiles:                    true,
 }
 
 // SensitiveKeys defines which keys contain sensitive information
@@ -618,20 +627,20 @@ func ValidateConfigFile() []ValidationError {
 
 	// Check authentication
 	hasClientAuth := config.ClientID != "" && config.ClientSecret != ""
-	hasUserAuth := (config.Username != "" && config.JwtToken != "") || (config.Username != "" && config.PatToken != "")
+	hasUserAuth := config.JwtToken != "" || (config.Username != "" && config.PatToken != "")
 
 	if !hasClientAuth && !hasUserAuth {
 		errs = append(errs, ValidationError{
 			Field:   "auth",
-			Message: "Authentication required: either client-id/client-secret, username/jwt-token, or username/personal-access-token must be set",
+			Message: "Authentication required: either client-id/client-secret, jwt-token, or personal-access-token with personal-access-token-username must be set",
 		})
 	}
 
 	// Personal access token requires username
 	if config.PatToken != "" && config.Username == "" {
 		errs = append(errs, ValidationError{
-			Field:   "username",
-			Message: "Username is required when using personal-access-token",
+			Field:   "personal-access-token-username",
+			Message: "personal-access-token-username is required when using personal-access-token",
 		})
 	}
 

@@ -14,8 +14,8 @@ import (
 // Session represents a saved authentication session
 type Session struct {
 	URL       string    `yaml:"url"`
-	Username  string    `yaml:"username"`
-	JwtToken  string    `yaml:"jwtToken"`
+	Username  string    `yaml:"username"`  // Stored for display purposes only (not sent to server for JWT auth)
+	JwtToken  string    `yaml:"jwtToken"`  // JWT token cookie value for admin authentication
 	CreatedAt time.Time `yaml:"created_at"`
 }
 

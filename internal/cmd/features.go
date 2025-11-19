@@ -22,6 +22,9 @@ var (
 	featureDesc       string
 	featureEnabled    bool
 	featureData       string
+	// Client credentials (only used by check command)
+	checkClientID     string
+	checkClientSecret string
 )
 
 // featuresCmd represents the admin features command
@@ -397,11 +400,20 @@ Examples:
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Resolve client credentials with 3-tier precedence:
-		// 1. Flags (--client-id/--client-secret) - already merged into cfg
+		// 1. Flags (--client-id/--client-secret) - from featuresCheckCmd
 		// 2. Environment variables (IZ_CLIENT_ID/IZ_CLIENT_SECRET) - already in cfg via viper
 		// 3. Config file (client-keys section) - fallback if both are empty
+
+		// First, apply command-specific flags if provided
+		if checkClientID != "" {
+			cfg.ClientID = checkClientID
+		}
+		if checkClientSecret != "" {
+			cfg.ClientSecret = checkClientSecret
+		}
+
+		// If still empty, try to resolve from client-keys in config
 		if cfg.ClientID == "" && cfg.ClientSecret == "" {
-			// Try to resolve from client-keys in config
 			tenant := cfg.Tenant
 			var projects []string
 			// Use cfg.Project (set by global --project flag) and featureProject (command-specific)
@@ -591,4 +603,6 @@ func init() {
 	featuresCheckCmd.Flags().StringVar(&featureUser, "user", "", "User ID for evaluation")
 	featuresCheckCmd.Flags().StringVar(&featureContextStr, "context", "", "Context path for evaluation")
 	featuresCheckCmd.Flags().StringVar(&featureProject, "project", "", "Project name (for disambiguating feature names)")
+	featuresCheckCmd.Flags().StringVar(&checkClientID, "client-id", "", "Client ID for authentication (env: IZ_CLIENT_ID)")
+	featuresCheckCmd.Flags().StringVar(&checkClientSecret, "client-secret", "", "Client secret for authentication (env: IZ_CLIENT_SECRET)")
 }

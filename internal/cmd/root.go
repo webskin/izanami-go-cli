@@ -15,11 +15,6 @@ var (
 	cfgFile      string
 	profileName  string
 	baseURL      string
-	clientID     string
-	clientSecret string
-	username     string
-	jwtToken     string
-	patToken     string
 	tenant       string
 	project      string
 	contextPath  string
@@ -42,10 +37,10 @@ allows you to interact with Izanami for both administration tasks and
 standard feature flag operations.
 
 Configuration can be provided via:
-  - Profiles: Named environment configurations (sandbox, build, prod)
+  - Profiles: Named environment configurations (local, sandbox, build, prod)
   - Config file: ~/.config/iz/config.yaml (or platform-equivalent)
-  - Environment variables: IZ_BASE_URL, IZ_CLIENT_ID, IZ_CLIENT_SECRET, etc.
-  - Command-line flags: --url, --client-id, --client-secret, etc.
+  - Environment variables: IZ_BASE_URL, IZ_TENANT, IZ_PROJECT, etc.
+  - Command-line flags: --url, --tenant, --project, etc.
 
 Examples:
   # Use a profile for all commands
@@ -118,17 +113,12 @@ For more information, visit: https://github.com/MAIF/izanami`,
 
 		// Command-line flags override everything (highest priority)
 		cfg.MergeWithFlags(izanami.FlagValues{
-			BaseURL:      baseURL,
-			ClientID:     clientID,
-			ClientSecret: clientSecret,
-			Username:     username,
-			JwtToken:     jwtToken,
-			PatToken:     patToken,
-			Tenant:       tenant,
-			Project:      project,
-			Context:      contextPath,
-			Timeout:      timeout,
-			Verbose:      verbose,
+			BaseURL: baseURL,
+			Tenant:  tenant,
+			Project: project,
+			Context: contextPath,
+			Timeout: timeout,
+			Verbose: verbose,
 		})
 
 		// Configure color output based on config setting
@@ -163,11 +153,6 @@ func init() {
 	// Global flags
 	rootCmd.PersistentFlags().StringVarP(&profileName, "profile", "p", "", "Use specific profile (overrides active profile)")
 	rootCmd.PersistentFlags().StringVar(&baseURL, "url", "", "Izanami base URL (env: IZ_BASE_URL)")
-	rootCmd.PersistentFlags().StringVar(&clientID, "client-id", "", "Client ID for authentication (env: IZ_CLIENT_ID)")
-	rootCmd.PersistentFlags().StringVar(&clientSecret, "client-secret", "", "Client secret for authentication (env: IZ_CLIENT_SECRET)")
-	rootCmd.PersistentFlags().StringVar(&username, "username", "", "Username for admin authentication (env: IZ_USERNAME)")
-	rootCmd.PersistentFlags().StringVar(&jwtToken, "jwt-token", "", "JWT token for admin authentication (env: IZ_JWT_TOKEN)")
-	rootCmd.PersistentFlags().StringVar(&patToken, "personal-access-token", "", "Personal access token for admin authentication (env: IZ_PERSONAL_ACCESS_TOKEN)")
 	rootCmd.PersistentFlags().StringVar(&tenant, "tenant", "", "Default tenant (env: IZ_TENANT)")
 	rootCmd.PersistentFlags().StringVar(&project, "project", "", "Default project (env: IZ_PROJECT)")
 	rootCmd.PersistentFlags().StringVar(&contextPath, "context", "", "Default context path (env: IZ_CONTEXT)")
@@ -196,7 +181,7 @@ func logAuthenticationMode(cfg *izanami.Config) {
 	// Check admin authentication (for admin operations)
 	if cfg.PatToken != "" {
 		adminAuth = "Personal Access Token (PAT)"
-	} else if cfg.Username != "" && cfg.JwtToken != "" {
+	} else if cfg.JwtToken != "" {
 		adminAuth = "JWT Cookie (session)"
 	} else {
 		adminAuth = "none"
