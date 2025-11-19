@@ -452,9 +452,9 @@ Examples:
 
 // profileSetCmd represents the profile set command
 var profileSetCmd = &cobra.Command{
-	Use:   "set <name> <key> <value>",
-	Short: "Update profile setting",
-	Long: `Update a specific setting in a profile.
+	Use:   "set <key> <value>",
+	Short: "Update active profile setting",
+	Long: `Update a specific setting in the active profile.
 
 Valid keys:
   session   - Session name to reference
@@ -464,14 +464,26 @@ Valid keys:
   context   - Default context
 
 Examples:
-  iz profiles set sandbox tenant new-tenant
-  iz profiles set prod base-url https://izanami.example.com
-  iz profiles set build session build-session`,
-	Args: cobra.ExactArgs(3),
+  # First switch to the profile you want to modify
+  iz profiles use sandbox
+
+  # Then set values on the active profile
+  iz profiles set tenant new-tenant
+  iz profiles set base-url https://izanami.example.com
+  iz profiles set session sandbox-session`,
+	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		profileName := args[0]
-		key := args[1]
-		value := args[2]
+		key := args[0]
+		value := args[1]
+
+		// Get active profile name
+		profileName, err := izanami.GetActiveProfileName()
+		if err != nil {
+			return err
+		}
+		if profileName == "" {
+			return fmt.Errorf("no active profile. Use 'iz profiles use <name>' to select a profile first")
+		}
 
 		// Get existing profile
 		profile, err := izanami.GetProfile(profileName)
