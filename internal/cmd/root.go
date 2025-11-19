@@ -4,13 +4,16 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	"github.com/webskin/izanami-go-cli/internal/izanami"
+	"golang.org/x/term"
 )
 
 var (
 	// Global flags
 	cfgFile      string
+	profileName  string
 	baseURL      string
 	clientID     string
 	clientSecret string
@@ -39,13 +42,18 @@ allows you to interact with Izanami for both administration tasks and
 standard feature flag operations.
 
 Configuration can be provided via:
+  - Profiles: Named environment configurations (sandbox, build, prod)
   - Config file: ~/.config/iz/config.yaml (or platform-equivalent)
   - Environment variables: IZ_BASE_URL, IZ_CLIENT_ID, IZ_CLIENT_SECRET, etc.
   - Command-line flags: --url, --client-id, --client-secret, etc.
 
 Examples:
-  # Check a feature flag
-  iz features check my-feature --user user123 --context prod
+  # Use a profile for all commands
+  iz profile use sandbox
+  iz features check my-feature
+
+  # Or override active profile temporarily
+  iz features check my-feature --profile prod
 
   # List all features in a project
   iz features list --project my-project
@@ -56,7 +64,7 @@ Examples:
 For more information, visit: https://github.com/MAIF/izanami`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		// Skip config loading for commands that don't need it
-		skipCommands := []string{"completion", "version", "help", "login", "logout", "sessions", "config"}
+		skipCommands := []string{"completion", "version", "help", "login", "logout", "sessions", "config", "profile"}
 		for _, skip := range skipCommands {
 			if cmd.Name() == skip || cmd.Parent() != nil && cmd.Parent().Name() == skip {
 				return nil
@@ -65,17 +73,50 @@ For more information, visit: https://github.com/MAIF/izanami`,
 
 		var err error
 
-		// Priority 1: Try loading from active session
+		// Load config with profile support
+		// Priority order:
+		// 1. Command-line flags (applied later)
+		// 2. Environment variables (handled by viper)
+		// 3. Profile settings (if --profile specified or active profile exists)
+		// 4. Session settings (for auth)
+		// 5. Top-level config (fallback)
+
+		// Try loading from active session first
 		cfg, _, err = izanami.LoadConfigFromSession()
 		if err != nil {
-			// Priority 2: Fall back to config file
-			cfg, err = izanami.LoadConfig()
+			// Fall back to config file (with profile support)
+			if profileName != "" {
+				// Load with specific profile from --profile flag
+				cfg, err = izanami.LoadConfigWithProfile(profileName)
+			} else {
+				// Load with active profile (if any)
+				cfg, err = izanami.LoadConfigWithProfile("")
+			}
+
 			if err != nil {
 				return fmt.Errorf("no active session and failed to load config: %w (use 'iz login' to authenticate)", err)
 			}
+		} else {
+			// We have a session, but still merge profile settings if specified
+			if profileName != "" {
+				profile, err := izanami.GetProfile(profileName)
+				if err != nil {
+					return fmt.Errorf("failed to load profile '%s': %w", profileName, err)
+				}
+				cfg.MergeWithProfile(profile)
+			} else {
+				// Try to load and merge active profile
+				activeProfile, err := izanami.GetActiveProfileName()
+				if err == nil && activeProfile != "" {
+					profile, err := izanami.GetProfile(activeProfile)
+					if err == nil {
+						cfg.MergeWithProfile(profile)
+					}
+				}
+			}
 		}
 
-		// Priority 3: Command-line flags override everything
+		// Command-line flags override everything (highest priority)
 		cfg.MergeWithFlags(izanami.FlagValues{
 			BaseURL:      baseURL,
 			ClientID:     clientID,
@@ -90,9 +131,21 @@ For more information, visit: https://github.com/MAIF/izanami`,
 			Verbose:      verbose,
 		})
 
+		// Configure color output based on config setting
+		configureColorOutput(cfg.Color)
+
 		// Log authentication mode in verbose mode
 		if cfg.Verbose {
 			logAuthenticationMode(cfg)
+			// Also log active profile if any
+			if profileName != "" {
+				fmt.Fprintf(os.Stderr, "[verbose] Using profile: %s (from --profile flag)\n", profileName)
+			} else {
+				activeProfile, err := izanami.GetActiveProfileName()
+				if err == nil && activeProfile != "" {
+					fmt.Fprintf(os.Stderr, "[verbose] Using profile: %s (active profile)\n", activeProfile)
+				}
+			}
 		}
 
 		return nil
@@ -108,6 +161,7 @@ func Execute() {
 
 func init() {
 	// Global flags
+	rootCmd.PersistentFlags().StringVarP(&profileName, "profile", "p", "", "Use specific profile (overrides active profile)")
 	rootCmd.PersistentFlags().StringVar(&baseURL, "url", "", "Izanami base URL (env: IZ_BASE_URL)")
 	rootCmd.PersistentFlags().StringVar(&clientID, "client-id", "", "Client ID for authentication (env: IZ_CLIENT_ID)")
 	rootCmd.PersistentFlags().StringVar(&clientSecret, "client-secret", "", "Client secret for authentication (env: IZ_CLIENT_SECRET)")
@@ -156,4 +210,19 @@ func logAuthenticationMode(cfg *izanami.Config) {
 	}
 
 	fmt.Fprintf(os.Stderr, "[verbose] Authentication - Admin operations: %s, Feature checks: %s\n", adminAuth, clientAuth)
+}
+
+// configureColorOutput configures color output based on the color setting
+func configureColorOutput(colorSetting string) {
+	switch colorSetting {
+	case "never":
+		// Disable all colors
+		color.NoColor = true
+	case "always":
+		// Force colors even if not a TTY
+		color.NoColor = false
+	case "auto", "":
+		// Auto-detect: enable colors only if stdout is a terminal
+		color.NoColor = !term.IsTerminal(int(os.Stdout.Fd()))
+	}
 }

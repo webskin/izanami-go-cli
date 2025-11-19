@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/spf13/viper"
 	"github.com/webskin/izanami-go-cli/internal/errors"
@@ -26,12 +27,7 @@ const (
 	ConfigKeyOutputFormat        = "output-format"
 	ConfigKeyColor               = "color"
 	ConfigKeyClientKeys          = "client-keys"
-)
-
-// Error message constants
-const (
-	ErrMsgFailedToCreateConfigDir = "failed to create config directory: %w"
-	ErrMsgFailedToReadConfigFile  = "failed to read config file: %w"
+	ConfigKeyProfiles            = "profiles"
 )
 
 // Display constants
@@ -39,22 +35,29 @@ const (
 	RedactedValue = "<redacted>"
 )
 
-// Config holds the configuration for the Izanami client
+// Config holds the runtime configuration for the Izanami client
+// Profile-specific fields are populated from the active profile
 type Config struct {
-	BaseURL      string                            `yaml:"base-url" mapstructure:"base-url"`
-	ClientID     string                            `yaml:"client-id" mapstructure:"client-id"`
-	ClientSecret string                            `yaml:"client-secret" mapstructure:"client-secret"`
-	Username     string                            `yaml:"username" mapstructure:"username"`
-	JwtToken     string                            `yaml:"jwt-token" mapstructure:"jwt-token"`                         // JWT token from login
-	PatToken     string                            `yaml:"personal-access-token" mapstructure:"personal-access-token"` // Personal Access Token
-	Tenant       string                            `yaml:"tenant" mapstructure:"tenant"`
-	Project      string                            `yaml:"project" mapstructure:"project"`
-	Context      string                            `yaml:"context" mapstructure:"context"`
-	Timeout      int                               `yaml:"timeout" mapstructure:"timeout"`
-	Verbose      bool                              `yaml:"verbose" mapstructure:"verbose"`
-	OutputFormat string                            `yaml:"output-format" mapstructure:"output-format"`       // Default output format (table/json)
-	Color        string                            `yaml:"color" mapstructure:"color"`                       // Color output (auto/always/never)
-	ClientKeys   map[string]TenantClientKeysConfig `yaml:"client-keys,omitempty" mapstructure:"client-keys"` // Tenant-specific client credentials
+	// Runtime fields (populated from active profile, not stored in top-level YAML)
+	BaseURL      string                            `yaml:"-" mapstructure:"-"` // Comes from active profile
+	ClientID     string                            `yaml:"-" mapstructure:"-"` // Comes from active profile
+	ClientSecret string                            `yaml:"-" mapstructure:"-"` // Comes from active profile
+	Username     string                            `yaml:"-" mapstructure:"-"` // Comes from session/profile
+	JwtToken     string                            `yaml:"-" mapstructure:"-"` // Comes from session/profile
+	PatToken     string                            `yaml:"-" mapstructure:"-"` // Comes from profile
+	Tenant       string                            `yaml:"-" mapstructure:"-"` // Comes from active profile
+	Project      string                            `yaml:"-" mapstructure:"-"` // Comes from active profile
+	Context      string                            `yaml:"-" mapstructure:"-"` // Comes from active profile
+	ClientKeys   map[string]TenantClientKeysConfig `yaml:"-" mapstructure:"-"` // Comes from active profile
+
+	// Global settings (stored in top-level YAML)
+	Timeout      int    `yaml:"timeout" mapstructure:"timeout"`
+	Verbose      bool   `yaml:"verbose" mapstructure:"verbose"`
+	OutputFormat string `yaml:"output-format" mapstructure:"output-format"` // Default output format (table/json)
+	Color        string `yaml:"color" mapstructure:"color"`                 // Color output (auto/always/never)
+
+	// Profile management
+	Profiles *ProfilesConfig `yaml:"profiles,omitempty" mapstructure:"profiles"` // Named environment profiles
 }
 
 // TenantClientKeysConfig holds client credentials for a specific tenant
@@ -68,6 +71,26 @@ type TenantClientKeysConfig struct {
 type ProjectClientKeysConfig struct {
 	ClientID     string `yaml:"client-id,omitempty" mapstructure:"client-id"`
 	ClientSecret string `yaml:"client-secret,omitempty" mapstructure:"client-secret"`
+}
+
+// Profile holds configuration for a specific environment (e.g., sandbox, build, prod)
+type Profile struct {
+	Session      string                            `yaml:"session,omitempty" mapstructure:"session"`                             // Reference to session name in ~/.izsessions
+	BaseURL      string                            `yaml:"base-url,omitempty" mapstructure:"base-url"`                           // Alternative to session
+	Username     string                            `yaml:"username,omitempty" mapstructure:"username"`                           // Username for admin authentication (used with PAT)
+	PatToken     string                            `yaml:"personal-access-token,omitempty" mapstructure:"personal-access-token"` // Personal Access Token (long-lived)
+	Tenant       string                            `yaml:"tenant,omitempty" mapstructure:"tenant"`                               // Default tenant for this profile
+	Project      string                            `yaml:"project,omitempty" mapstructure:"project"`                             // Default project for this profile
+	Context      string                            `yaml:"context,omitempty" mapstructure:"context"`                             // Default context for this profile
+	ClientID     string                            `yaml:"client-id,omitempty" mapstructure:"client-id"`                         // Client ID for this profile
+	ClientSecret string                            `yaml:"client-secret,omitempty" mapstructure:"client-secret"`                 // Client secret for this profile
+	ClientKeys   map[string]TenantClientKeysConfig `yaml:"client-keys,omitempty" mapstructure:"client-keys"`                     // Profile-specific hierarchical client keys
+}
+
+// ProfilesConfig holds all profiles and tracks the active one
+type ProfilesConfig struct {
+	Active   string              `yaml:"active,omitempty" mapstructure:"active"`     // Name of currently active profile
+	Profiles map[string]*Profile `yaml:"profiles,omitempty" mapstructure:"profiles"` // All defined profiles
 }
 
 // FlagValues holds command-line flag values for merging with config
@@ -241,7 +264,7 @@ var getConfigDir = func() string {
 func InitConfigFile() error {
 	configDir := getConfigDir()
 	if err := os.MkdirAll(configDir, 0700); err != nil {
-		return fmt.Errorf(ErrMsgFailedToCreateConfigDir, err)
+		return fmt.Errorf(errors.MsgFailedToCreateConfigDir, err)
 	}
 
 	configPath := filepath.Join(configDir, "config.yaml")
@@ -250,44 +273,42 @@ func InitConfigFile() error {
 	}
 
 	sampleConfig := `# Izanami CLI Configuration
-# You can also use environment variables (IZ_*) or command-line flags
+# Configuration is organized by profiles for different environments
 
-# Base URL of your Izanami instance (required)
-# base-url: "https://izanami.example.com"
-
-# Client authentication (for feature evaluation)
-# client-id: "your-client-id"
-# client-secret: "your-client-secret"
-
-# Admin authentication (for admin operations)
-# Option 1: Username + JWT token (from login)
-# username: "your-username"
-# jwt-token: "your-jwt-token"
-
-# Option 2: Username + Personal Access Token (requires username)
-# username: "your-username"
-# personal-access-token: "your-personal-access-token"
-
-# Default tenant
-# tenant: "default"
-
-# Default project
-# project: "my-project"
-
-# Default context (e.g., "prod", "dev", "prod/eu/france")
-# context: "prod"
-
-# Request timeout in seconds
+# Global settings (apply to all profiles unless overridden)
 timeout: 30
-
-# Verbose output
 verbose: false
-
-# Default output format (table or json)
 output-format: table
-
-# Color output (auto, always, never)
 color: auto
+
+# Profiles for different environments
+# Use 'iz profile' commands to manage profiles, or edit this file directly
+# Example:
+#
+# profiles:
+#   active: sandbox
+#   profiles:
+#     sandbox:
+#       base-url: "http://localhost:9000"
+#       tenant: "sandbox-tenant"
+#       project: "test"
+#       context: "dev"
+#       # Optional: client credentials for feature checks
+#       # client-id: "your-client-id"
+#       # client-secret: "your-client-secret"
+#
+#     prod:
+#       # Option 1: Reference an existing login session (for JWT auth)
+#       session: "prod-session"
+#       # Option 2: Specify URL directly with Personal Access Token (long-lived)
+#       # base-url: "https://izanami.example.com"
+#       # username: "your-username"
+#       # personal-access-token: "your-pat-token"
+#       tenant: "production"
+#       project: "main"
+#       context: "prod"
+#
+# Create profiles with: iz profile add <name> or iz profile init <template>
 `
 
 	if err := os.WriteFile(configPath, []byte(sampleConfig), 0600); err != nil {
@@ -328,6 +349,7 @@ var ValidConfigKeys = map[string]bool{
 	ConfigKeyOutputFormat:        true,
 	ConfigKeyColor:               true,
 	ConfigKeyClientKeys:          true,
+	ConfigKeyProfiles:            true,
 }
 
 // SensitiveKeys defines which keys contain sensitive information
@@ -336,6 +358,7 @@ var SensitiveKeys = map[string]bool{
 	ConfigKeyJwtToken:            true,
 	ConfigKeyPersonalAccessToken: true,
 	ConfigKeyClientKeys:          true, // Contains client secrets
+	ConfigKeyProfiles:            true, // Contains client secrets and credentials
 }
 
 // GetConfigPath returns the path to the config file
@@ -458,7 +481,7 @@ func SetConfigValue(key, value string) error {
 
 	// Create config directory if it doesn't exist
 	if err := os.MkdirAll(configDir, 0700); err != nil {
-		return fmt.Errorf(ErrMsgFailedToCreateConfigDir, err)
+		return fmt.Errorf(errors.MsgFailedToCreateConfigDir, err)
 	}
 
 	v := viper.New()
@@ -468,7 +491,7 @@ func SetConfigValue(key, value string) error {
 	// Read existing config if it exists
 	if _, err := os.Stat(configPath); err == nil {
 		if err := v.ReadInConfig(); err != nil {
-			return fmt.Errorf(ErrMsgFailedToReadConfigFile, err)
+			return fmt.Errorf(errors.MsgFailedToReadConfigFile, err)
 		}
 	}
 
@@ -510,7 +533,7 @@ func UnsetConfigValue(key string) error {
 
 	// Read existing config
 	if err := v.ReadInConfig(); err != nil {
-		return fmt.Errorf(ErrMsgFailedToReadConfigFile, err)
+		return fmt.Errorf(errors.MsgFailedToReadConfigFile, err)
 	}
 
 	// Get all settings
@@ -681,7 +704,7 @@ func initViperForClientKeys() (*viper.Viper, error) {
 
 	// Create config directory if it doesn't exist
 	if err := os.MkdirAll(configDir, 0700); err != nil {
-		return nil, fmt.Errorf(ErrMsgFailedToCreateConfigDir, err)
+		return nil, fmt.Errorf(errors.MsgFailedToCreateConfigDir, err)
 	}
 
 	v := viper.New()
@@ -691,7 +714,7 @@ func initViperForClientKeys() (*viper.Viper, error) {
 	// Read existing config if it exists
 	if _, err := os.Stat(configPath); err == nil {
 		if err := v.ReadInConfig(); err != nil {
-			return nil, fmt.Errorf(ErrMsgFailedToReadConfigFile, err)
+			return nil, fmt.Errorf(errors.MsgFailedToReadConfigFile, err)
 		}
 	}
 
@@ -788,4 +811,483 @@ func AddClientKeys(tenant string, projects []string, clientID, clientSecret stri
 	}
 
 	return nil
+}
+
+// GetActiveProfileName returns the name of the currently active profile from the config file
+func GetActiveProfileName() (string, error) {
+	config, err := LoadConfig()
+	if err != nil {
+		return "", err
+	}
+
+	if config.Profiles == nil || config.Profiles.Active == "" {
+		return "", nil // No active profile
+	}
+
+	return config.Profiles.Active, nil
+}
+
+// GetProfile retrieves a specific profile from the config by name
+func GetProfile(name string) (*Profile, error) {
+	config, err := LoadConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	if config.Profiles == nil || config.Profiles.Profiles == nil {
+		return nil, fmt.Errorf("no profiles defined")
+	}
+
+	profile, exists := config.Profiles.Profiles[name]
+	if !exists {
+		return nil, fmt.Errorf("profile '%s' not found", name)
+	}
+
+	return profile, nil
+}
+
+// MergeWithProfile merges profile settings into the config
+// Profile settings override top-level config but are overridden by env vars and flags
+// Priority: Direct profile fields > Session data > Config defaults
+func (c *Config) MergeWithProfile(profile *Profile) {
+	if profile == nil {
+		return
+	}
+
+	// If profile references a session, load session data first (as fallback)
+	var sessionData *Session
+	if profile.Session != "" {
+		sessions, err := LoadSessions()
+		if err == nil {
+			sessionData, err = sessions.GetSession(profile.Session)
+			if err != nil {
+				// Session not found - ignore error and continue with profile fields
+				sessionData = nil
+			}
+		}
+	}
+
+	// Merge authentication fields with priority: profile > session > config
+	// BaseURL: prefer profile.BaseURL, fallback to session.URL
+	if profile.BaseURL != "" && c.BaseURL == "" {
+		c.BaseURL = profile.BaseURL
+	} else if sessionData != nil && sessionData.URL != "" && c.BaseURL == "" {
+		c.BaseURL = sessionData.URL
+	}
+
+	// Username: prefer profile.Username, fallback to session.Username
+	if profile.Username != "" && c.Username == "" {
+		c.Username = profile.Username
+	} else if sessionData != nil && sessionData.Username != "" && c.Username == "" {
+		c.Username = sessionData.Username
+	}
+
+	// JwtToken: ONLY from session (short-lived, not stored in profiles)
+	if sessionData != nil && sessionData.JwtToken != "" && c.JwtToken == "" {
+		c.JwtToken = sessionData.JwtToken
+	}
+
+	// PatToken: only from profile (long-lived, not stored in sessions)
+	if profile.PatToken != "" && c.PatToken == "" {
+		c.PatToken = profile.PatToken
+	}
+
+	// Merge environment-specific settings (only from profile, not from session)
+	if profile.Tenant != "" && c.Tenant == "" {
+		c.Tenant = profile.Tenant
+	}
+	if profile.Project != "" && c.Project == "" {
+		c.Project = profile.Project
+	}
+	if profile.Context != "" && c.Context == "" {
+		c.Context = profile.Context
+	}
+	if profile.ClientID != "" && c.ClientID == "" {
+		c.ClientID = profile.ClientID
+	}
+	if profile.ClientSecret != "" && c.ClientSecret == "" {
+		c.ClientSecret = profile.ClientSecret
+	}
+
+	// Merge ClientKeys if profile has them and config doesn't
+	if profile.ClientKeys != nil && len(profile.ClientKeys) > 0 {
+		if c.ClientKeys == nil {
+			c.ClientKeys = make(map[string]TenantClientKeysConfig)
+		}
+		// Merge tenant keys from profile (don't override existing ones)
+		for tenant, tenantKeys := range profile.ClientKeys {
+			if _, exists := c.ClientKeys[tenant]; !exists {
+				c.ClientKeys[tenant] = tenantKeys
+			}
+		}
+	}
+}
+
+// LoadConfigWithProfile loads the config and merges with the specified profile
+// Priority order:
+// 1. Command-line flags (handled by caller via MergeWithFlags)
+// 2. Environment variables (handled by viper)
+// 3. Profile settings
+// 4. Session settings (for auth)
+// 5. Top-level config (fallback)
+func LoadConfigWithProfile(profileName string) (*Config, error) {
+	// Load base config first
+	config, err := LoadConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	// If no profile name specified, try to use active profile
+	if profileName == "" && config.Profiles != nil {
+		profileName = config.Profiles.Active
+	}
+
+	// If we have a profile name, merge it
+	if profileName != "" {
+		profile, err := GetProfile(profileName)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load profile '%s': %w", profileName, err)
+		}
+		config.MergeWithProfile(profile)
+	}
+
+	return config, nil
+}
+
+// SetActiveProfile sets the active profile in the config file
+func SetActiveProfile(profileName string) error {
+	configPath := GetConfigPath()
+	configDir := getConfigDir()
+
+	// Create config directory if it doesn't exist
+	if err := os.MkdirAll(configDir, 0700); err != nil {
+		return fmt.Errorf(errors.MsgFailedToCreateConfigDir, err)
+	}
+
+	v := viper.New()
+	v.SetConfigFile(configPath)
+	v.SetConfigType("yaml")
+
+	// Read existing config if it exists
+	if _, err := os.Stat(configPath); err == nil {
+		if err := v.ReadInConfig(); err != nil {
+			return fmt.Errorf(errors.MsgFailedToReadConfigFile, err)
+		}
+	}
+
+	// Verify the profile exists
+	profilesMap := v.GetStringMap(ConfigKeyProfiles)
+	if profilesMap == nil {
+		profilesMap = make(map[string]interface{})
+	}
+
+	profilesList := make(map[string]interface{})
+	if profiles, ok := profilesMap["profiles"]; ok {
+		if profilesListMap, ok := profiles.(map[string]interface{}); ok {
+			profilesList = profilesListMap
+		}
+	}
+
+	if _, exists := profilesList[profileName]; !exists {
+		return fmt.Errorf("profile '%s' does not exist", profileName)
+	}
+
+	// Set active profile
+	profilesMap["active"] = profileName
+
+	// Create a clean config with only the fields we want to persist
+	cleanConfig := make(map[string]interface{})
+	cleanConfig["timeout"] = v.GetInt("timeout")
+	if v.GetInt("timeout") == 0 {
+		cleanConfig["timeout"] = 30 // default
+	}
+	cleanConfig["verbose"] = v.GetBool("verbose")
+	cleanConfig["output-format"] = v.GetString("output-format")
+	if cleanConfig["output-format"] == "" {
+		cleanConfig["output-format"] = "table" // default
+	}
+	cleanConfig["color"] = v.GetString("color")
+	if cleanConfig["color"] == "" {
+		cleanConfig["color"] = "auto" // default
+	}
+	cleanConfig["profiles"] = profilesMap
+
+	// Write the clean config back to file
+	newV := viper.New()
+	newV.SetConfigFile(configPath)
+	newV.SetConfigType("yaml")
+
+	for k, val := range cleanConfig {
+		newV.Set(k, val)
+	}
+
+	if err := newV.WriteConfigAs(configPath); err != nil {
+		return fmt.Errorf(errors.MsgFailedToWriteConfigFile, err)
+	}
+
+	// Ensure secure file permissions
+	if err := os.Chmod(configPath, 0600); err != nil {
+		return fmt.Errorf("failed to set config file permissions: %w", err)
+	}
+
+	return nil
+}
+
+// AddProfile adds or updates a profile in the config file
+func AddProfile(name string, profile *Profile) error {
+	if name == "" {
+		return fmt.Errorf("profile name is required")
+	}
+	if profile == nil {
+		return fmt.Errorf("profile data is required")
+	}
+
+	configPath := GetConfigPath()
+	configDir := getConfigDir()
+
+	// Create config directory if it doesn't exist
+	if err := os.MkdirAll(configDir, 0700); err != nil {
+		return fmt.Errorf(errors.MsgFailedToCreateConfigDir, err)
+	}
+
+	v := viper.New()
+	v.SetConfigFile(configPath)
+	v.SetConfigType("yaml")
+
+	// Read existing config if it exists
+	if _, err := os.Stat(configPath); err == nil {
+		if err := v.ReadInConfig(); err != nil {
+			return fmt.Errorf(errors.MsgFailedToReadConfigFile, err)
+		}
+	}
+
+	// Get or create profiles structure
+	profilesMap := v.GetStringMap(ConfigKeyProfiles)
+	if profilesMap == nil {
+		profilesMap = make(map[string]interface{})
+	}
+
+	profilesList := make(map[string]interface{})
+	if profiles, ok := profilesMap["profiles"]; ok {
+		if profilesListMap, ok := profiles.(map[string]interface{}); ok {
+			profilesList = profilesListMap
+		}
+	}
+
+	// Convert profile to map (exclude JwtToken - it's short-lived and should only be in sessions)
+	profileMap := make(map[string]interface{})
+	if profile.Session != "" {
+		profileMap["session"] = profile.Session
+	}
+	if profile.BaseURL != "" {
+		profileMap["base-url"] = profile.BaseURL
+	}
+	if profile.Username != "" {
+		profileMap["username"] = profile.Username
+	}
+	if profile.PatToken != "" {
+		profileMap["personal-access-token"] = profile.PatToken
+	}
+	if profile.Tenant != "" {
+		profileMap["tenant"] = profile.Tenant
+	}
+	if profile.Project != "" {
+		profileMap["project"] = profile.Project
+	}
+	if profile.Context != "" {
+		profileMap["context"] = profile.Context
+	}
+	if profile.ClientID != "" {
+		profileMap["client-id"] = profile.ClientID
+	}
+	if profile.ClientSecret != "" {
+		profileMap["client-secret"] = profile.ClientSecret
+	}
+	if profile.ClientKeys != nil && len(profile.ClientKeys) > 0 {
+		profileMap["client-keys"] = profile.ClientKeys
+	}
+
+	profilesList[name] = profileMap
+	profilesMap["profiles"] = profilesList
+
+	// If this is the first profile, set it as active
+	if len(profilesList) == 1 {
+		profilesMap["active"] = name
+	}
+
+	// Create a clean config with only the fields we want to persist
+	cleanConfig := make(map[string]interface{})
+	cleanConfig["timeout"] = v.GetInt("timeout")
+	if v.GetInt("timeout") == 0 {
+		cleanConfig["timeout"] = 30 // default
+	}
+	cleanConfig["verbose"] = v.GetBool("verbose")
+	cleanConfig["output-format"] = v.GetString("output-format")
+	if cleanConfig["output-format"] == "" {
+		cleanConfig["output-format"] = "table" // default
+	}
+	cleanConfig["color"] = v.GetString("color")
+	if cleanConfig["color"] == "" {
+		cleanConfig["color"] = "auto" // default
+	}
+	cleanConfig["profiles"] = profilesMap
+
+	// Write the clean config back to file
+	newV := viper.New()
+	newV.SetConfigFile(configPath)
+	newV.SetConfigType("yaml")
+
+	for k, val := range cleanConfig {
+		newV.Set(k, val)
+	}
+
+	if err := newV.WriteConfigAs(configPath); err != nil {
+		return fmt.Errorf(errors.MsgFailedToWriteConfigFile, err)
+	}
+
+	// Ensure secure file permissions
+	if err := os.Chmod(configPath, 0600); err != nil {
+		return fmt.Errorf("failed to set config file permissions: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteProfile removes a profile from the config file
+func DeleteProfile(name string) error {
+	if name == "" {
+		return fmt.Errorf("profile name is required")
+	}
+
+	configPath := GetConfigPath()
+
+	// Check if config file exists
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		return fmt.Errorf("config file does not exist")
+	}
+
+	v := viper.New()
+	v.SetConfigFile(configPath)
+	v.SetConfigType("yaml")
+
+	// Read existing config
+	if err := v.ReadInConfig(); err != nil {
+		return fmt.Errorf(errors.MsgFailedToReadConfigFile, err)
+	}
+
+	// Get profiles structure
+	profilesMap := v.GetStringMap(ConfigKeyProfiles)
+	if profilesMap == nil {
+		return fmt.Errorf("no profiles defined")
+	}
+
+	profilesList := make(map[string]interface{})
+	if profiles, ok := profilesMap["profiles"]; ok {
+		if profilesListMap, ok := profiles.(map[string]interface{}); ok {
+			profilesList = profilesListMap
+		}
+	}
+
+	// Check if profile exists
+	if _, exists := profilesList[name]; !exists {
+		return fmt.Errorf("profile '%s' not found", name)
+	}
+
+	// Remove the profile
+	delete(profilesList, name)
+
+	// If we deleted the active profile, clear the active setting
+	if active, ok := profilesMap["active"].(string); ok && active == name {
+		delete(profilesMap, "active")
+	}
+
+	profilesMap["profiles"] = profilesList
+
+	// Create a clean config with only the fields we want to persist
+	cleanConfig := make(map[string]interface{})
+	cleanConfig["timeout"] = v.GetInt("timeout")
+	if v.GetInt("timeout") == 0 {
+		cleanConfig["timeout"] = 30 // default
+	}
+	cleanConfig["verbose"] = v.GetBool("verbose")
+	cleanConfig["output-format"] = v.GetString("output-format")
+	if cleanConfig["output-format"] == "" {
+		cleanConfig["output-format"] = "table" // default
+	}
+	cleanConfig["color"] = v.GetString("color")
+	if cleanConfig["color"] == "" {
+		cleanConfig["color"] = "auto" // default
+	}
+	cleanConfig["profiles"] = profilesMap
+
+	// Write the clean config back to file
+	newV := viper.New()
+	newV.SetConfigFile(GetConfigPath())
+	newV.SetConfigType("yaml")
+
+	for k, val := range cleanConfig {
+		newV.Set(k, val)
+	}
+
+	if err := newV.WriteConfigAs(GetConfigPath()); err != nil {
+		return fmt.Errorf("failed to write config file: %w", err)
+	}
+
+	return nil
+}
+
+// ListProfiles returns all defined profiles
+func ListProfiles() (map[string]*Profile, string, error) {
+	config, err := LoadConfig()
+	if err != nil {
+		return nil, "", err
+	}
+
+	if config.Profiles == nil || config.Profiles.Profiles == nil {
+		return make(map[string]*Profile), "", nil
+	}
+
+	return config.Profiles.Profiles, config.Profiles.Active, nil
+}
+
+// normalizeURL removes protocol and trailing slashes for URL comparison
+func normalizeURL(url string) string {
+	url = strings.TrimPrefix(url, "http://")
+	url = strings.TrimPrefix(url, "https://")
+	url = strings.TrimRight(url, "/")
+	return strings.ToLower(url)
+}
+
+// FindProfileByBaseURL finds a profile that matches the given base URL
+// Returns (profileName, profile, nil) if found, ("", nil, nil) if not found
+func FindProfileByBaseURL(baseURL string) (string, *Profile, error) {
+	profiles, _, err := ListProfiles()
+	if err != nil {
+		return "", nil, err
+	}
+
+	// Normalize the search URL
+	normalizedSearchURL := normalizeURL(baseURL)
+
+	// Search through all profiles
+	for name, profile := range profiles {
+		profileURL := profile.BaseURL
+
+		// If profile uses session reference, load session to get URL
+		if profileURL == "" && profile.Session != "" {
+			sessions, err := LoadSessions()
+			if err == nil {
+				if session, err := sessions.GetSession(profile.Session); err == nil {
+					profileURL = session.URL
+				}
+			}
+		}
+
+		// Compare normalized URLs
+		if normalizeURL(profileURL) == normalizedSearchURL {
+			return name, profile, nil
+		}
+	}
+
+	return "", nil, nil
 }
