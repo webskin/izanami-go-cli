@@ -15,6 +15,61 @@ import (
 	"golang.org/x/term"
 )
 
+// Global configuration keys and their descriptions
+var globalConfigKeys = map[string]string{
+	"timeout":       "Request timeout in seconds",
+	"verbose":       "Verbose output (true/false)",
+	"output-format": "Default output format (table/json)",
+	"color":         "Color output (auto/always/never)",
+}
+
+// Profile-specific configuration keys and their descriptions
+var profileConfigKeys = map[string]string{
+	"base-url":                       "Izanami server URL",
+	"tenant":                         "Default tenant name",
+	"project":                        "Default project name",
+	"context":                        "Default context path",
+	"client-id":                      "Client ID for authentication",
+	"client-secret":                  "Client secret for authentication",
+	"personal-access-token-username": "Username for PAT authentication",
+	"personal-access-token":          "Personal access token",
+}
+
+// printValidConfigKeys prints all valid configuration keys categorized
+func printValidConfigKeys() {
+	// Sort keys for consistent output
+	globalKeys := make([]string, 0, len(globalConfigKeys))
+	for key := range globalConfigKeys {
+		globalKeys = append(globalKeys, key)
+	}
+	sort.Strings(globalKeys)
+
+	profileKeys := make([]string, 0, len(profileConfigKeys))
+	for key := range profileConfigKeys {
+		profileKeys = append(profileKeys, key)
+	}
+	sort.Strings(profileKeys)
+
+	// Print global keys
+	fmt.Println("Global configuration keys (apply to all profiles):")
+	for _, key := range globalKeys {
+		fmt.Printf("  %-33s - %s\n", key, globalConfigKeys[key])
+	}
+	fmt.Println()
+
+	// Print profile-specific keys
+	fmt.Println("Profile-specific keys (use 'iz profile set' for active profile):")
+	for _, key := range profileKeys {
+		fmt.Printf("  %-33s - %s\n", key, profileConfigKeys[key])
+	}
+	fmt.Println()
+
+	// Print usage
+	fmt.Println("Usage:")
+	fmt.Println("  iz config set <key> <value>       - Set global config")
+	fmt.Println("  iz profile set <key> <value>      - Set in active profile")
+}
+
 // configCmd represents the config command
 var configCmd = &cobra.Command{
 	Use:   "config",
@@ -29,35 +84,76 @@ Configuration can be set via:
 Use subcommands to view and modify configuration.`,
 }
 
+// buildConfigSetLongHelp builds the long help text for config set command
+func buildConfigSetLongHelp() string {
+	var sb strings.Builder
+	sb.WriteString("Set a configuration value and persist it to the config file.\n\n")
+
+	// Sort and print global keys
+	globalKeys := make([]string, 0, len(globalConfigKeys))
+	for key := range globalConfigKeys {
+		globalKeys = append(globalKeys, key)
+	}
+	sort.Strings(globalKeys)
+
+	sb.WriteString("Global configuration keys (apply to all profiles):\n")
+	for _, key := range globalKeys {
+		sb.WriteString(fmt.Sprintf("  %-33s - %s\n", key, globalConfigKeys[key]))
+	}
+	sb.WriteString("\n")
+
+	// Sort and print profile-specific keys
+	profileKeys := make([]string, 0, len(profileConfigKeys))
+	for key := range profileConfigKeys {
+		profileKeys = append(profileKeys, key)
+	}
+	sort.Strings(profileKeys)
+
+	sb.WriteString("Profile-specific keys (use 'iz profile set' for active profile):\n")
+	for _, key := range profileKeys {
+		sb.WriteString(fmt.Sprintf("  %-33s - %s\n", key, profileConfigKeys[key]))
+	}
+	sb.WriteString("\n")
+
+	sb.WriteString("Examples:\n")
+	sb.WriteString("  iz config set timeout 60\n")
+	sb.WriteString("  iz config set output-format json\n")
+	sb.WriteString("  iz profile set base-url http://localhost:9000\n")
+	sb.WriteString("  iz profile set tenant my-tenant")
+
+	return sb.String()
+}
+
 // configSetCmd represents the config set command
 var configSetCmd = &cobra.Command{
 	Use:   "set <key> <value>",
 	Short: "Set a configuration value",
-	Long: `Set a configuration value and persist it to the config file.
-
-Valid configuration keys:
-  base-url                          - Izanami server URL
-  tenant                            - Default tenant name
-  project                           - Default project name
-  context                           - Default context path
-  client-id                         - Client ID for authentication
-  client-secret                     - Client secret for authentication
-  personal-access-token-username    - Username for PAT authentication
-  personal-access-token             - Personal access token
-  timeout                           - Request timeout in seconds
-  output-format                     - Default output format (table/json)
-  color                             - Color output (auto/always/never)
-
-Examples:
-  iz config set base-url http://localhost:9000
-  iz config set tenant my-tenant
-  iz config set output-format json`,
-	Args: cobra.ExactArgs(2),
+	Long:  buildConfigSetLongHelp(),
+	Args: func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 {
+			// No arguments provided - show valid keys categorized
+			printValidConfigKeys()
+			return fmt.Errorf("missing required arguments")
+		}
+		if len(args) == 1 {
+			return fmt.Errorf("missing value for key '%s'\nUsage: iz config set <key> <value>", args[0])
+		}
+		if len(args) > 2 {
+			return fmt.Errorf("too many arguments\nUsage: iz config set <key> <value>")
+		}
+		return nil
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		key := args[0]
 		value := args[1]
 
 		if err := izanami.SetConfigValue(key, value); err != nil {
+			// If invalid key, show valid keys
+			if strings.Contains(err.Error(), "invalid config key") {
+				fmt.Fprintf(os.Stderr, "Error: %v\n\n", err)
+				printValidConfigKeys()
+				return fmt.Errorf("") // Return empty error since we already printed the message
+			}
 			return err
 		}
 
