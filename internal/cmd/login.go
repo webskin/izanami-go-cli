@@ -244,9 +244,9 @@ func updateProfileWithSession(profileName, baseURL, username, sessionName string
 	existingProfile, err := izanami.GetProfile(profileName)
 	if err != nil {
 		// Profile doesn't exist - create new one
+		// Note: BaseURL is intentionally empty - it will be resolved from the session
 		profile := &izanami.Profile{
 			Session:  sessionName,
-			BaseURL:  baseURL,
 			Username: username,
 		}
 

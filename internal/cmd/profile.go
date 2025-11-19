@@ -92,7 +92,18 @@ Example:
 				session = "-"
 			}
 
+			// Resolve URL: try profile.BaseURL first, then session.URL
 			url := profile.BaseURL
+			if url == "" && profile.Session != "" {
+				// Profile references a session - get URL from session
+				sessions, err := izanami.LoadSessions()
+				if err == nil {
+					sessionData, err := sessions.GetSession(profile.Session)
+					if err == nil && sessionData.URL != "" {
+						url = sessionData.URL
+					}
+				}
+			}
 			if url == "" {
 				url = "-"
 			}
@@ -573,8 +584,21 @@ func printProfile(profile *izanami.Profile, showSecrets bool) {
 	if profile.Session != "" {
 		fmt.Printf("  Session:       %s\n", profile.Session)
 	}
-	if profile.BaseURL != "" {
-		fmt.Printf("  URL:           %s\n", profile.BaseURL)
+
+	// Resolve URL: try profile.BaseURL first, then session.URL
+	url := profile.BaseURL
+	if url == "" && profile.Session != "" {
+		// Profile references a session - get URL from session
+		sessions, err := izanami.LoadSessions()
+		if err == nil {
+			sessionData, err := sessions.GetSession(profile.Session)
+			if err == nil && sessionData.URL != "" {
+				url = sessionData.URL
+			}
+		}
+	}
+	if url != "" {
+		fmt.Printf("  URL:           %s\n", url)
 	}
 	if profile.Tenant != "" {
 		fmt.Printf("  Tenant:        %s\n", profile.Tenant)
