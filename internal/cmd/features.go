@@ -416,44 +416,16 @@ Examples:
   iz features check e878a149-df86-4f28-b1db-059580304e1e --data '{"age": 25}'`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Resolve client credentials with 3-tier precedence:
-		// 1. Flags (--client-id/--client-secret) - from featuresCheckCmd
-		// 2. Environment variables (IZ_CLIENT_ID/IZ_CLIENT_SECRET) - already in cfg via viper
-		// 3. Config file (client-keys section) - fallback if both are empty
-
-		// First, apply command-specific flags if provided
-		if checkClientID != "" {
-			cfg.ClientID = checkClientID
+		// Build projects list for credential resolution
+		var projects []string
+		if cfg.Project != "" {
+			projects = append(projects, cfg.Project)
 		}
-		if checkClientSecret != "" {
-			cfg.ClientSecret = checkClientSecret
+		if featureProject != "" && featureProject != cfg.Project {
+			projects = append(projects, featureProject)
 		}
 
-		// If still empty, try to resolve from client-keys in config
-		if cfg.ClientID == "" && cfg.ClientSecret == "" {
-			tenant := cfg.Tenant
-			var projects []string
-			// Use cfg.Project (set by global --project flag) and featureProject (command-specific)
-			if cfg.Project != "" {
-				projects = append(projects, cfg.Project)
-			}
-			if featureProject != "" && featureProject != cfg.Project {
-				projects = append(projects, featureProject)
-			}
-
-			clientID, clientSecret := cfg.ResolveClientCredentials(tenant, projects)
-			if clientID != "" && clientSecret != "" {
-				cfg.ClientID = clientID
-				cfg.ClientSecret = clientSecret
-				if cfg.Verbose {
-					if len(projects) > 0 {
-						fmt.Fprintf(os.Stderr, "Using client credentials from config (tenant: %s, projects: %v)\n", tenant, projects)
-					} else {
-						fmt.Fprintf(os.Stderr, "Using client credentials from config (tenant: %s)\n", tenant)
-					}
-				}
-			}
-		}
+		resolveClientCredentials(cfg, checkClientID, checkClientSecret, projects)
 
 		if err := cfg.Validate(); err != nil {
 			return err
@@ -609,45 +581,16 @@ Examples:
   # Check script features with payload
   iz features check-bulk --features feat1-uuid --data '{"age": 25}'`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Resolve client credentials with 3-tier precedence:
-		// 1. Flags (--client-id/--client-secret)
-		// 2. Environment variables (IZ_CLIENT_ID/IZ_CLIENT_SECRET) - already in cfg via viper
-		// 3. Config file (client-keys section) - fallback if both are empty
-
-		// First, apply command-specific flags if provided
-		if checkClientID != "" {
-			cfg.ClientID = checkClientID
+		// Build projects list for credential resolution
+		var projects []string
+		if len(checkProjects) > 0 {
+			projects = append(projects, checkProjects...)
 		}
-		if checkClientSecret != "" {
-			cfg.ClientSecret = checkClientSecret
+		if cfg.Project != "" {
+			projects = append(projects, cfg.Project)
 		}
 
-		// If still empty, try to resolve from client-keys in config
-		if cfg.ClientID == "" && cfg.ClientSecret == "" {
-			tenant := cfg.Tenant
-			var projects []string
-			// Collect project filters from --projects flag for credential resolution
-			if len(checkProjects) > 0 {
-				projects = append(projects, checkProjects...)
-			}
-			// Also include global --project if set
-			if cfg.Project != "" {
-				projects = append(projects, cfg.Project)
-			}
-
-			clientID, clientSecret := cfg.ResolveClientCredentials(tenant, projects)
-			if clientID != "" && clientSecret != "" {
-				cfg.ClientID = clientID
-				cfg.ClientSecret = clientSecret
-				if cfg.Verbose {
-					if len(projects) > 0 {
-						fmt.Fprintf(os.Stderr, "Using client credentials from config (tenant: %s, projects: %v)\n", tenant, projects)
-					} else {
-						fmt.Fprintf(os.Stderr, "Using client credentials from config (tenant: %s)\n", tenant)
-					}
-				}
-			}
-		}
+		resolveClientCredentials(cfg, checkClientID, checkClientSecret, projects)
 
 		if err := cfg.Validate(); err != nil {
 			return err
@@ -837,6 +780,38 @@ Examples:
 
 		return output.Print(results, format)
 	},
+}
+
+// resolveClientCredentials resolves client credentials with 3-tier precedence:
+// 1. Command-specific flags (--client-id/--client-secret)
+// 2. Environment variables (IZ_CLIENT_ID/IZ_CLIENT_SECRET) - already in cfg via viper
+// 3. Config file (client-keys section) - fallback if both are empty
+func resolveClientCredentials(cfg *izanami.Config, flagClientID, flagClientSecret string, projects []string) {
+	// First, apply command-specific flags if provided
+	if flagClientID != "" {
+		cfg.ClientID = flagClientID
+	}
+	if flagClientSecret != "" {
+		cfg.ClientSecret = flagClientSecret
+	}
+
+	// If still empty, try to resolve from client-keys in config
+	if cfg.ClientID == "" && cfg.ClientSecret == "" {
+		tenant := cfg.Tenant
+
+		clientID, clientSecret := cfg.ResolveClientCredentials(tenant, projects)
+		if clientID != "" && clientSecret != "" {
+			cfg.ClientID = clientID
+			cfg.ClientSecret = clientSecret
+			if cfg.Verbose {
+				if len(projects) > 0 {
+					fmt.Fprintf(os.Stderr, "Using client credentials from config (tenant: %s, projects: %v)\n", tenant, projects)
+				} else {
+					fmt.Fprintf(os.Stderr, "Using client credentials from config (tenant: %s)\n", tenant)
+				}
+			}
+		}
+	}
 }
 
 // isUUID checks if a string matches the UUID format (8-4-4-4-12)
