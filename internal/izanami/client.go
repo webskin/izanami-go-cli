@@ -489,14 +489,10 @@ func (c *Client) CheckFeatures(ctx context.Context, request CheckFeaturesRequest
 		req.SetQueryParam("context", request.Context)
 	}
 	if len(request.Features) > 0 {
-		req.SetQueryParams(map[string]string{
-			"features": strings.Join(request.Features, ","),
-		})
+		req.SetQueryParam("features", strings.Join(request.Features, ","))
 	}
 	if len(request.Projects) > 0 {
-		req.SetQueryParams(map[string]string{
-			"projects": strings.Join(request.Projects, ","),
-		})
+		req.SetQueryParam("projects", strings.Join(request.Projects, ","))
 	}
 	if request.Conditions {
 		req.SetQueryParam("conditions", "true")
@@ -505,19 +501,13 @@ func (c *Client) CheckFeatures(ctx context.Context, request CheckFeaturesRequest
 		req.SetQueryParam("date", request.Date)
 	}
 	if len(request.OneTagIn) > 0 {
-		req.SetQueryParams(map[string]string{
-			"oneTagIn": strings.Join(request.OneTagIn, ","),
-		})
+		req.SetQueryParam("oneTagIn", strings.Join(request.OneTagIn, ","))
 	}
 	if len(request.AllTagsIn) > 0 {
-		req.SetQueryParams(map[string]string{
-			"allTagsIn": strings.Join(request.AllTagsIn, ","),
-		})
+		req.SetQueryParam("allTagsIn", strings.Join(request.AllTagsIn, ","))
 	}
 	if len(request.NoTagIn) > 0 {
-		req.SetQueryParams(map[string]string{
-			"noTagIn": strings.Join(request.NoTagIn, ","),
-		})
+		req.SetQueryParam("noTagIn", strings.Join(request.NoTagIn, ","))
 	}
 
 	var resp *resty.Response
@@ -1125,14 +1115,10 @@ func (c *Client) streamEvents(ctx context.Context, request EventsWatchRequest, l
 		req.SetQueryParam("context", request.Context)
 	}
 	if len(request.Features) > 0 {
-		req.SetQueryParams(map[string]string{
-			"features": strings.Join(request.Features, ","),
-		})
+		req.SetQueryParam("features", strings.Join(request.Features, ","))
 	}
 	if len(request.Projects) > 0 {
-		req.SetQueryParams(map[string]string{
-			"projects": strings.Join(request.Projects, ","),
-		})
+		req.SetQueryParam("projects", strings.Join(request.Projects, ","))
 	}
 	if request.Conditions {
 		req.SetQueryParam("conditions", "true")
@@ -1141,19 +1127,13 @@ func (c *Client) streamEvents(ctx context.Context, request EventsWatchRequest, l
 		req.SetQueryParam("date", request.Date)
 	}
 	if len(request.OneTagIn) > 0 {
-		req.SetQueryParams(map[string]string{
-			"oneTagIn": strings.Join(request.OneTagIn, ","),
-		})
+		req.SetQueryParam("oneTagIn", strings.Join(request.OneTagIn, ","))
 	}
 	if len(request.AllTagsIn) > 0 {
-		req.SetQueryParams(map[string]string{
-			"allTagsIn": strings.Join(request.AllTagsIn, ","),
-		})
+		req.SetQueryParam("allTagIn", strings.Join(request.AllTagsIn, ","))
 	}
 	if len(request.NoTagIn) > 0 {
-		req.SetQueryParams(map[string]string{
-			"noTagIn": strings.Join(request.NoTagIn, ","),
-		})
+		req.SetQueryParam("noTagIn", strings.Join(request.NoTagIn, ","))
 	}
 	if request.RefreshInterval > 0 {
 		req.SetQueryParam("refreshInterval", strconv.Itoa(request.RefreshInterval))
