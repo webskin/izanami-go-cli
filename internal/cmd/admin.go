@@ -404,6 +404,30 @@ var adminTagsListCmd = &cobra.Command{
 	},
 }
 
+var adminTagsGetCmd = &cobra.Command{
+	Use:   "get <tag-name>",
+	Short: "Get a specific tag",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := cfg.ValidateTenant(); err != nil {
+			return err
+		}
+
+		client, err := izanami.NewClient(cfg)
+		if err != nil {
+			return err
+		}
+
+		ctx := context.Background()
+		tag, err := client.GetTag(ctx, cfg.Tenant, args[0])
+		if err != nil {
+			return err
+		}
+
+		return output.Print(tag, output.Format(outputFormat))
+	},
+}
+
 var (
 	tagDesc string
 	tagData string
@@ -669,6 +693,7 @@ func init() {
 	// Tags
 	adminCmd.AddCommand(adminTagsCmd)
 	adminTagsCmd.AddCommand(adminTagsListCmd)
+	adminTagsCmd.AddCommand(adminTagsGetCmd)
 	adminTagsCmd.AddCommand(adminTagsCreateCmd)
 	adminTagsCmd.AddCommand(adminTagsDeleteCmd)
 
