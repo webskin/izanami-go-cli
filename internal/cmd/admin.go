@@ -15,6 +15,10 @@ var (
 	adminPATUsername string
 	adminJwtToken    string
 	adminPatToken    string
+	// Delete confirmation flags
+	tenantsDeleteForce  bool
+	projectsDeleteForce bool
+	tagsDeleteForce     bool
 )
 
 // adminCmd represents the admin command
@@ -231,17 +235,26 @@ var adminTenantsDeleteCmd = &cobra.Command{
 	Long:  `Delete a tenant. WARNING: This will delete all projects, features, and data in the tenant.`,
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		tenantName := args[0]
+
+		// Confirm deletion unless --force is used
+		if !tenantsDeleteForce {
+			if !confirmDeletion(cmd, "tenant", tenantName) {
+				return nil
+			}
+		}
+
 		client, err := izanami.NewClient(cfg)
 		if err != nil {
 			return err
 		}
 
 		ctx := context.Background()
-		if err := client.DeleteTenant(ctx, args[0]); err != nil {
+		if err := client.DeleteTenant(ctx, tenantName); err != nil {
 			return err
 		}
 
-		fmt.Fprintf(os.Stderr, "Tenant deleted successfully: %s\n", args[0])
+		fmt.Fprintf(os.Stderr, "Tenant deleted successfully: %s\n", tenantName)
 		return nil
 	},
 }
@@ -356,17 +369,26 @@ var adminProjectsDeleteCmd = &cobra.Command{
 			return err
 		}
 
+		projectName := args[0]
+
+		// Confirm deletion unless --force is used
+		if !projectsDeleteForce {
+			if !confirmDeletion(cmd, "project", projectName) {
+				return nil
+			}
+		}
+
 		client, err := izanami.NewClient(cfg)
 		if err != nil {
 			return err
 		}
 
 		ctx := context.Background()
-		if err := client.DeleteProject(ctx, cfg.Tenant, args[0]); err != nil {
+		if err := client.DeleteProject(ctx, cfg.Tenant, projectName); err != nil {
 			return err
 		}
 
-		fmt.Fprintf(os.Stderr, "Project deleted successfully: %s\n", args[0])
+		fmt.Fprintf(os.Stderr, "Project deleted successfully: %s\n", projectName)
 		return nil
 	},
 }
@@ -480,17 +502,26 @@ var adminTagsDeleteCmd = &cobra.Command{
 			return err
 		}
 
+		tagName := args[0]
+
+		// Confirm deletion unless --force is used
+		if !tagsDeleteForce {
+			if !confirmDeletion(cmd, "tag", tagName) {
+				return nil
+			}
+		}
+
 		client, err := izanami.NewClient(cfg)
 		if err != nil {
 			return err
 		}
 
 		ctx := context.Background()
-		if err := client.DeleteTag(ctx, cfg.Tenant, args[0]); err != nil {
+		if err := client.DeleteTag(ctx, cfg.Tenant, tagName); err != nil {
 			return err
 		}
 
-		fmt.Fprintf(os.Stderr, "Tag deleted successfully: %s\n", args[0])
+		fmt.Fprintf(os.Stderr, "Tag deleted successfully: %s\n", tagName)
 		return nil
 	},
 }
@@ -679,6 +710,7 @@ func init() {
 	adminTenantsCreateCmd.Flags().StringVar(&tenantData, "data", "", "JSON tenant data")
 	adminTenantsUpdateCmd.Flags().StringVar(&tenantDesc, "description", "", "Tenant description")
 	adminTenantsUpdateCmd.Flags().StringVar(&tenantData, "data", "", "JSON tenant data")
+	adminTenantsDeleteCmd.Flags().BoolVarP(&tenantsDeleteForce, "force", "f", false, "Skip confirmation prompt")
 
 	// Projects
 	adminCmd.AddCommand(adminProjectsCmd)
@@ -689,6 +721,7 @@ func init() {
 
 	adminProjectsCreateCmd.Flags().StringVar(&projectDesc, "description", "", "Project description")
 	adminProjectsCreateCmd.Flags().StringVar(&projectData, "data", "", "JSON project data")
+	adminProjectsDeleteCmd.Flags().BoolVarP(&projectsDeleteForce, "force", "f", false, "Skip confirmation prompt")
 
 	// Tags
 	adminCmd.AddCommand(adminTagsCmd)
@@ -699,6 +732,7 @@ func init() {
 
 	adminTagsCreateCmd.Flags().StringVar(&tagDesc, "description", "", "Tag description")
 	adminTagsCreateCmd.Flags().StringVar(&tagData, "data", "", "JSON tag data")
+	adminTagsDeleteCmd.Flags().BoolVarP(&tagsDeleteForce, "force", "f", false, "Skip confirmation prompt")
 
 	// Search
 	adminCmd.AddCommand(adminSearchCmd)

@@ -12,6 +12,10 @@ import (
 	"golang.org/x/term"
 )
 
+var (
+	profileDeleteForce bool
+)
+
 // profileCmd represents the profiles command
 var profileCmd = &cobra.Command{
 	Use:   "profiles",
@@ -540,13 +544,11 @@ Example:
 			fmt.Printf("⚠️  Warning: '%s' is currently the active profile\n", profileName)
 		}
 
-		// Confirm deletion
-		fmt.Printf("Delete profile '%s'? (y/N): ", profileName)
-		var response string
-		fmt.Scanln(&response)
-		if strings.ToLower(strings.TrimSpace(response)) != "y" {
-			fmt.Println("Cancelled")
-			return nil
+		// Confirm deletion unless --force is used
+		if !profileDeleteForce {
+			if !confirmDeletion(cmd, "profile", profileName) {
+				return nil
+			}
 		}
 
 		if err := izanami.DeleteProfile(profileName); err != nil {
@@ -732,6 +734,9 @@ func init() {
 
 	// Add client-keys subcommands
 	profileClientKeysCmd.AddCommand(profileClientKeysAddCmd)
+
+	// Flags for profile delete
+	profileDeleteCmd.Flags().BoolVarP(&profileDeleteForce, "force", "f", false, "Skip confirmation prompt")
 
 	// Flags for profile add
 	profileAddCmd.Flags().String("session", "", "Reference to existing session")

@@ -11,6 +11,10 @@ import (
 	"github.com/webskin/izanami-go-cli/internal/output"
 )
 
+var (
+	sessionsDeleteForce bool
+)
+
 // sessionsCmd represents the sessions command
 var sessionsCmd = &cobra.Command{
 	Use:   "sessions",
@@ -79,6 +83,13 @@ var sessionsDeleteCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		sessionName := args[0]
+
+		// Confirm deletion unless --force is used
+		if !sessionsDeleteForce {
+			if !confirmDeletion(cmd, "session", sessionName) {
+				return nil
+			}
+		}
 
 		sessions, err := izanami.LoadSessions()
 		if err != nil {
@@ -183,4 +194,7 @@ func init() {
 
 	sessionsCmd.AddCommand(sessionsListCmd)
 	sessionsCmd.AddCommand(sessionsDeleteCmd)
+
+	// Delete flags
+	sessionsDeleteCmd.Flags().BoolVarP(&sessionsDeleteForce, "force", "f", false, "Skip confirmation prompt")
 }

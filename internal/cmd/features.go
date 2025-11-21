@@ -33,6 +33,7 @@ var (
 	checkOneTagIn     []string
 	checkAllTagsIn    []string
 	checkNoTagIn      []string
+	featuresDeleteForce bool
 )
 
 // featuresCmd represents the admin features command
@@ -357,17 +358,26 @@ var featuresDeleteCmd = &cobra.Command{
 			return err
 		}
 
+		featureID := args[0]
+
+		// Confirm deletion unless --force is used
+		if !featuresDeleteForce {
+			if !confirmDeletion(cmd, "feature", featureID) {
+				return nil
+			}
+		}
+
 		client, err := izanami.NewClient(cfg)
 		if err != nil {
 			return err
 		}
 
 		ctx := context.Background()
-		if err := client.DeleteFeature(ctx, cfg.Tenant, args[0]); err != nil {
+		if err := client.DeleteFeature(ctx, cfg.Tenant, featureID); err != nil {
 			return err
 		}
 
-		fmt.Fprintf(os.Stderr, "Feature deleted successfully: %s\n", args[0])
+		fmt.Fprintf(os.Stderr, "Feature deleted successfully: %s\n", featureID)
 		return nil
 	},
 }
@@ -930,6 +940,9 @@ func init() {
 	// Update flags
 	featuresUpdateCmd.Flags().StringVar(&featureData, "data", "", "JSON feature data (from file with @file.json, stdin with -, or inline)")
 	featuresUpdateCmd.MarkFlagRequired("data")
+
+	// Delete flags
+	featuresDeleteCmd.Flags().BoolVarP(&featuresDeleteForce, "force", "f", false, "Skip confirmation prompt")
 
 	// Check flags
 	featuresCheckCmd.Flags().StringVar(&featureUser, "user", "", "User ID for evaluation")

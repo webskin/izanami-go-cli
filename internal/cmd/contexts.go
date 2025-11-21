@@ -17,6 +17,7 @@ var (
 	contextProtected bool
 	contextGlobal    bool
 	contextData      string
+	contextsDeleteForce bool
 )
 
 // contextsCmd represents the admin contexts command
@@ -223,6 +224,15 @@ The context path should be the full hierarchical path.`,
 			return err
 		}
 
+		contextPath := args[0]
+
+		// Confirm deletion unless --force is used
+		if !contextsDeleteForce {
+			if !confirmDeletion(cmd, "context", contextPath) {
+				return nil
+			}
+		}
+
 		// Determine project
 		proj := contextProject
 		if proj == "" {
@@ -235,11 +245,11 @@ The context path should be the full hierarchical path.`,
 		}
 
 		ctx := context.Background()
-		if err := client.DeleteContext(ctx, cfg.Tenant, proj, args[0]); err != nil {
+		if err := client.DeleteContext(ctx, cfg.Tenant, proj, contextPath); err != nil {
 			return err
 		}
 
-		fmt.Fprintf(os.Stderr, "Context deleted successfully: %s\n", args[0])
+		fmt.Fprintf(os.Stderr, "Context deleted successfully: %s\n", contextPath)
 		return nil
 	},
 }
@@ -291,4 +301,5 @@ func init() {
 
 	// Delete flags
 	contextsDeleteCmd.Flags().StringVar(&contextProject, "project", "", "Project for the context")
+	contextsDeleteCmd.Flags().BoolVarP(&contextsDeleteForce, "force", "f", false, "Skip confirmation prompt")
 }

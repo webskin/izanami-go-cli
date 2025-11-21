@@ -18,6 +18,7 @@ var (
 	keyProjects    []string
 	keyEnabled     bool
 	keyAdmin       bool
+	keysDeleteForce bool
 )
 
 // keysCmd represents the keys command
@@ -215,6 +216,13 @@ var keysDeleteCmd = &cobra.Command{
 			return fmt.Errorf(errors.MsgTenantRequired)
 		}
 
+		// Confirm deletion unless --force is used
+		if !keysDeleteForce {
+			if !confirmDeletion(cmd, "API key", clientID) {
+				return nil
+			}
+		}
+
 		client, err := izanami.NewClient(cfg)
 		if err != nil {
 			return err
@@ -251,4 +259,7 @@ func init() {
 	keysUpdateCmd.Flags().StringSliceVar(&keyProjects, "projects", []string{}, "New project list")
 	keysUpdateCmd.Flags().BoolVar(&keyEnabled, "enabled", true, "Whether the key is enabled")
 	keysUpdateCmd.Flags().BoolVar(&keyAdmin, "admin", false, "Whether this key has admin privileges")
+
+	// Delete flags
+	keysDeleteCmd.Flags().BoolVarP(&keysDeleteForce, "force", "f", false, "Skip confirmation prompt")
 }
