@@ -1363,13 +1363,23 @@ func (c *Client) Search(ctx context.Context, tenant, query string, filters []str
 }
 
 // Export exports tenant data
+// By default, exports all projects, keys, webhooks, and user rights
 func (c *Client) Export(ctx context.Context, tenant string) (string, error) {
 	path := apiAdminTenants + buildPath(tenant, "_export")
+
+	// Default export request: export everything
+	body := map[string]interface{}{
+		"allProjects": true,
+		"allKeys":     true,
+		"allWebhooks": true,
+		"userRights":  true,
+	}
 
 	req := c.http.R().
 		SetContext(ctx).
 		SetHeader("Accept", "application/x-ndjson").
-		SetHeader("Content-Type", "application/json")
+		SetHeader("Content-Type", "application/json").
+		SetBody(body)
 	c.setAdminAuth(req)
 	resp, err := req.Post(path)
 
