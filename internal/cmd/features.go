@@ -570,13 +570,13 @@ var featuresCheckBulkCmd = &cobra.Command{
 This command uses the GET/POST /api/v2/features endpoint to check multiple
 features simultaneously. You can filter features by:
   - Specific feature IDs or names (--features)
-  - Project IDs (--projects) - checks all features in those projects
+  - Project IDs or names (--projects) - checks all features in those projects
   - Tags (--one-tag-in, --all-tags-in, --no-tag-in)
 
-The --features flag accepts both UUIDs and feature names:
+The --features and --projects flags accept both UUIDs and names:
   - UUIDs are used directly (no tenant required)
   - Names are resolved to UUIDs (requires --tenant flag)
-  - If a name matches multiple features, use --projects to disambiguate
+  - If a feature name matches multiple features, use --projects to disambiguate
 
 Optionally, you can request activation conditions (--conditions) which allows
 offline re-evaluation of features without another API call.
@@ -594,11 +594,14 @@ Examples:
   # Mix UUIDs and names
   iz features check-bulk --features feat1-uuid,my-feature --tenant my-tenant --user user123
 
-  # Check all features in specific projects
+  # Check all features in specific projects by UUID
   iz features check-bulk --projects proj1-uuid,proj2-uuid --user user123
 
+  # Check all features in specific projects by name (requires --tenant)
+  iz features check-bulk --projects test-project,prod-project --tenant my-tenant --user user123
+
   # Check features with tag filtering
-  iz features check-bulk --projects proj1-uuid --one-tag-in beta,experimental
+  iz features check-bulk --projects test-project --tenant my-tenant --one-tag-in beta,experimental
 
   # Get conditions for offline evaluation
   iz features check-bulk --features feat1-uuid --conditions --user user123
@@ -662,6 +665,55 @@ Examples:
 
 		ctx := context.Background()
 
+		// Resolve project names to UUIDs if needed
+		resolvedProjects := make([]string, 0, len(checkProjects))
+		var projectsToResolve []string
+
+		for _, projectIDOrName := range checkProjects {
+			if isUUID(projectIDOrName) {
+				// Already a UUID, use as-is
+				resolvedProjects = append(resolvedProjects, projectIDOrName)
+			} else {
+				// Not a UUID, need to resolve
+				projectsToResolve = append(projectsToResolve, projectIDOrName)
+			}
+		}
+
+		// If we have project names to resolve, fetch all projects and map them
+		if len(projectsToResolve) > 0 {
+			if err := cfg.ValidateTenant(); err != nil {
+				return fmt.Errorf("project names require --tenant flag: %w", err)
+			}
+
+			if cfg.Verbose {
+				fmt.Fprintf(os.Stderr, "Resolving project names %v in tenant '%s'...\n", projectsToResolve, cfg.Tenant)
+			}
+
+			// List all projects for the tenant
+			projects, err := client.ListProjects(ctx, cfg.Tenant)
+			if err != nil {
+				return fmt.Errorf("failed to list projects: %w", err)
+			}
+
+			// Build name->ID map
+			nameToID := make(map[string]string)
+			for _, p := range projects {
+				nameToID[p.Name] = p.ID
+			}
+
+			// Resolve each name
+			for _, name := range projectsToResolve {
+				if id, found := nameToID[name]; found {
+					resolvedProjects = append(resolvedProjects, id)
+					if cfg.Verbose {
+						fmt.Fprintf(os.Stderr, "Resolved project '%s' to ID: %s\n", name, id)
+					}
+				} else {
+					return fmt.Errorf("no project named '%s' found in tenant '%s'", name, cfg.Tenant)
+				}
+			}
+		}
+
 		// Resolve feature names to UUIDs if needed
 		// If any feature in checkFeatures is not a UUID, we need tenant to resolve it
 		resolvedFeatures := make([]string, 0, len(checkFeatures))
@@ -703,11 +755,11 @@ Examples:
 			for _, name := range featuresToResolve {
 				matches := nameToID[name]
 
-				// Further filter by project if projects are specified
-				if len(checkProjects) > 0 {
+				// Further filter by project if projects are specified (use resolved project UUIDs)
+				if len(resolvedProjects) > 0 {
 					var projectMatches []izanami.Feature
 					projectSet := make(map[string]bool)
-					for _, p := range checkProjects {
+					for _, p := range resolvedProjects {
 						projectSet[p] = true
 					}
 					for _, f := range matches {
@@ -720,8 +772,8 @@ Examples:
 
 				// Validate matches
 				if len(matches) == 0 {
-					if len(checkProjects) > 0 {
-						return fmt.Errorf("no feature named '%s' found in tenant '%s' within specified projects %v", name, cfg.Tenant, checkProjects)
+					if len(resolvedProjects) > 0 {
+						return fmt.Errorf("no feature named '%s' found in tenant '%s' within specified projects %v", name, cfg.Tenant, resolvedProjects)
 					}
 					return fmt.Errorf("no feature named '%s' found in tenant '%s'", name, cfg.Tenant)
 				}
@@ -757,12 +809,12 @@ Examples:
 			payload = string(payloadBytes)
 		}
 
-		// Build request with resolved UUIDs
+		// Build request with resolved UUIDs (both features and projects)
 		request := izanami.CheckFeaturesRequest{
 			User:       featureUser,
 			Context:    contextPath,
 			Features:   resolvedFeatures,
-			Projects:   checkProjects,
+			Projects:   resolvedProjects,
 			Conditions: checkConditions,
 			Date:       checkDate,
 			OneTagIn:   checkOneTagIn,
@@ -870,7 +922,7 @@ func init() {
 	featuresCheckBulkCmd.Flags().StringVar(&featureUser, "user", "", "User ID for evaluation")
 	featuresCheckBulkCmd.Flags().StringVar(&featureContextStr, "context", "", "Context path for evaluation")
 	featuresCheckBulkCmd.Flags().StringSliceVar(&checkFeatures, "features", []string{}, "Feature IDs or names to check (comma-separated, names require --tenant)")
-	featuresCheckBulkCmd.Flags().StringSliceVar(&checkProjects, "projects", []string{}, "Project IDs to check all features from (comma-separated)")
+	featuresCheckBulkCmd.Flags().StringSliceVar(&checkProjects, "projects", []string{}, "Project IDs or names to check all features from (comma-separated, names require --tenant)")
 	featuresCheckBulkCmd.Flags().BoolVar(&checkConditions, "conditions", false, "Return activation conditions alongside results")
 	featuresCheckBulkCmd.Flags().StringVar(&checkDate, "date", "", "Date for evaluation (ISO 8601 format)")
 	featuresCheckBulkCmd.Flags().StringSliceVar(&checkOneTagIn, "one-tag-in", []string{}, "Features must have at least one of these tags (comma-separated)")

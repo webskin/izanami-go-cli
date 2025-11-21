@@ -1,6 +1,7 @@
 package izanami
 
 import (
+	"fmt"
 	"sort"
 	"time"
 
@@ -69,7 +70,7 @@ type FeatureCheckResult struct {
 // ActivationWithConditions represents a feature activation with optional conditions
 type ActivationWithConditions struct {
 	Name       string                     `json:"name"`
-	Active     bool                       `json:"active"`
+	Active     interface{}                `json:"active"` // Can be bool, string, or number (same as FeatureCheckResult)
 	Project    string                     `json:"project"`
 	Conditions map[string]ContextOverload `json:"conditions,omitempty"`
 }
@@ -85,18 +86,63 @@ type ActivationsWithConditions map[string]ActivationWithConditions
 
 // ActivationTableView represents a feature activation for table display
 type ActivationTableView struct {
+	ID      string      `json:"id"`
+	Name    string      `json:"name"`
+	Active  interface{} `json:"active"` // Can be bool, string, or number
+	Project string      `json:"project"`
+}
+
+// FormatActive formats the Active field with color
+// Red for false/0/""/nil, Green for any other value
+func (a ActivationTableView) FormatActive() string {
+	switch v := a.Active.(type) {
+	case bool:
+		if v {
+			return color.GreenString("true")
+		}
+		return color.RedString("false")
+	case string:
+		if v == "" || v == "false" || v == "0" {
+			return color.RedString(v)
+		}
+		return color.GreenString(v)
+	case int, int8, int16, int32, int64:
+		if v == 0 {
+			return color.RedString("0")
+		}
+		return color.GreenString("%v", v)
+	case float32, float64:
+		if v == 0.0 {
+			return color.RedString("0")
+		}
+		return color.GreenString("%v", v)
+	case nil:
+		return color.RedString("false")
+	default:
+		// For other types, just show in green if not false/0
+		str := fmt.Sprintf("%v", v)
+		if str == "false" || str == "0" || str == "" {
+			return color.RedString(str)
+		}
+		return color.GreenString(str)
+	}
+}
+
+// ActivationTableRow represents a single row for table display with formatted Active field
+type ActivationTableRow struct {
 	ID      string `json:"id"`
 	Name    string `json:"name"`
-	Active  bool   `json:"active"`
+	Active  string `json:"active"` // Formatted and colored
 	Project string `json:"project"`
 }
 
 // ToTableView converts ActivationsWithConditions to a sorted slice for table display
-func (a ActivationsWithConditions) ToTableView() []ActivationTableView {
-	var result []ActivationTableView
+func (a ActivationsWithConditions) ToTableView() []ActivationTableRow {
+	var temp []ActivationTableView
 
+	// First create the intermediate views
 	for id, activation := range a {
-		result = append(result, ActivationTableView{
+		temp = append(temp, ActivationTableView{
 			ID:      id,
 			Name:    activation.Name,
 			Active:  activation.Active,
@@ -105,9 +151,20 @@ func (a ActivationsWithConditions) ToTableView() []ActivationTableView {
 	}
 
 	// Sort by name for consistent output
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].Name < result[j].Name
+	sort.Slice(temp, func(i, j int) bool {
+		return temp[i].Name < temp[j].Name
 	})
+
+	// Convert to rows with formatted Active field
+	result := make([]ActivationTableRow, len(temp))
+	for i, item := range temp {
+		result[i] = ActivationTableRow{
+			ID:      item.ID,
+			Name:    item.Name,
+			Active:  item.FormatActive(),
+			Project: item.Project,
+		}
+	}
 
 	return result
 }
