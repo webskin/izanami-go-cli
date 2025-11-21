@@ -3,6 +3,7 @@ package izanami
 import (
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/fatih/color"
@@ -457,15 +458,111 @@ type User struct {
 	Rights        map[string]TenantRight `json:"rights,omitempty"`
 }
 
+// UserListItem represents a user in the list response (simplified format)
+type UserListItem struct {
+	Username     string            `json:"username"`
+	Email        string            `json:"email"`
+	Admin        bool              `json:"admin"`
+	UserType     string            `json:"userType"`
+	TenantRights map[string]string `json:"tenantRights,omitempty"` // Simple map of tenant->level
+}
+
+// FormatTenantRights formats tenant rights for table display
+// Shows up to 3 items as "tenant:level,tenant2:level2", then "[x items]" if more
+func (u UserListItem) FormatTenantRights() string {
+	if len(u.TenantRights) == 0 {
+		return "-"
+	}
+
+	if len(u.TenantRights) > 3 {
+		return fmt.Sprintf("[%d items]", len(u.TenantRights))
+	}
+
+	var items []string
+	for tenant, level := range u.TenantRights {
+		items = append(items, fmt.Sprintf("%s:%s", tenant, level))
+	}
+
+	return strings.Join(items, ",")
+}
+
+// UserWithSingleLevelRight represents a user with tenant-level right
+type UserWithSingleLevelRight struct {
+	Username      string `json:"username"`
+	Email         string `json:"email"`
+	UserType      string `json:"userType"`
+	Admin         bool   `json:"admin"`
+	DefaultTenant string `json:"defaultTenant,omitempty"`
+	Right         string `json:"right,omitempty"` // Read, Write, Admin - for tenant level
+}
+
+// ProjectScopedUser represents a user with project-level right
+type ProjectScopedUser struct {
+	Username      string  `json:"username"`
+	Email         string  `json:"email"`
+	UserType      string  `json:"userType"`
+	Admin         bool    `json:"admin"`
+	DefaultTenant string  `json:"defaultTenant,omitempty"`
+	TenantAdmin   bool    `json:"tenantAdmin"`
+	Right         string  `json:"right"`         // Project-level right
+	DefaultRight  *string `json:"defaultRight"`  // Default project right at tenant level
+}
+
 // TenantRight represents user rights for a tenant
 type TenantRight struct {
-	Level    string                  `json:"level"` // Read, Write, Admin
-	Projects map[string]ProjectRight `json:"projects,omitempty"`
+	Level              string                         `json:"level"` // Read, Write, Admin
+	Projects           map[string]ProjectRight        `json:"projects,omitempty"`
+	Keys               map[string]GeneralAtomicRight  `json:"keys,omitempty"`
+	Webhooks           map[string]GeneralAtomicRight  `json:"webhooks,omitempty"`
+	DefaultProjectRight *string                       `json:"defaultProjectRight,omitempty"`
+	DefaultKeyRight     *string                       `json:"defaultKeyRight,omitempty"`
+	DefaultWebhookRight *string                       `json:"defaultWebhookRight,omitempty"`
 }
 
 // ProjectRight represents user rights for a project
 type ProjectRight struct {
 	Level string `json:"level"` // Read, Update, Write, Admin
+}
+
+// GeneralAtomicRight represents atomic rights for keys/webhooks
+type GeneralAtomicRight struct {
+	Level string `json:"level"` // Read, Write, Admin
+}
+
+// UserInformationUpdateRequest represents a request to update user information
+type UserInformationUpdateRequest struct {
+	Username      string  `json:"username"`
+	Email         string  `json:"email"`
+	Password      string  `json:"password"`
+	DefaultTenant *string `json:"defaultTenant,omitempty"`
+}
+
+// UserRightsUpdateRequest represents a request to update user rights
+type UserRightsUpdateRequest struct {
+	Rights map[string]TenantRight `json:"rights"`
+	Admin  *bool                  `json:"admin,omitempty"`
+}
+
+// TenantRightUpdateRequest represents a request to update user rights for a specific tenant
+type TenantRightUpdateRequest struct {
+	Level               *string  `json:"level,omitempty"`
+	DefaultProjectRight *string  `json:"defaultProjectRight,omitempty"`
+	DefaultKeyRight     *string  `json:"defaultKeyRight,omitempty"`
+	DefaultWebhookRight *string  `json:"defaultWebhookRight,omitempty"`
+	Projects            map[string]ProjectRight       `json:"projects,omitempty"`
+	Keys                map[string]GeneralAtomicRight `json:"keys,omitempty"`
+	Webhooks            map[string]GeneralAtomicRight `json:"webhooks,omitempty"`
+}
+
+// ProjectRightUpdateRequest represents a request to update user's project rights
+type ProjectRightUpdateRequest struct {
+	Level string `json:"level"` // Read, Update, Write, Admin
+}
+
+// UserInvitation represents a user invitation for bulk operations
+type UserInvitation struct {
+	Username string `json:"username"`
+	Level    string `json:"level"` // Right level (RightLevel for tenants, ProjectRightLevel for projects)
 }
 
 // SearchResult represents a search result

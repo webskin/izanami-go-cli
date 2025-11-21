@@ -246,10 +246,39 @@ func extractRow(val reflect.Value, headers []string) []string {
 		}
 
 		fieldVal := val.Field(i)
-		row = append(row, formatValue(fieldVal))
+		fieldName := getFieldName(field)
+
+		// Special handling for tenantRights field (map[string]string)
+		if fieldName == "tenantRights" && fieldVal.Kind() == reflect.Map {
+			row = append(row, formatTenantRightsMap(fieldVal))
+		} else {
+			row = append(row, formatValue(fieldVal))
+		}
 	}
 
 	return row
+}
+
+// formatTenantRightsMap formats a map[string]string of tenant rights
+// Shows up to 3 items as "tenant:level,tenant2:level2", then "[x items]" if more
+func formatTenantRightsMap(val reflect.Value) string {
+	if val.Len() == 0 {
+		return "-"
+	}
+
+	if val.Len() > 3 {
+		return fmt.Sprintf("[%d items]", val.Len())
+	}
+
+	var items []string
+	iter := val.MapRange()
+	for iter.Next() {
+		tenant := iter.Key().String()
+		level := iter.Value().String()
+		items = append(items, fmt.Sprintf("%s:%s", tenant, level))
+	}
+
+	return strings.Join(items, ",")
 }
 
 // formatSliceValue formats a slice or array value
