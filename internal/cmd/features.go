@@ -608,6 +608,20 @@ Examples:
 
 		ctx := context.Background()
 
+		// Resolve tag names to UUIDs if needed
+		resolvedOneTagIn, err := resolveTagNames(ctx, client, cfg.Tenant, checkOneTagIn)
+		if err != nil {
+			return err
+		}
+		resolvedAllTagsIn, err := resolveTagNames(ctx, client, cfg.Tenant, checkAllTagsIn)
+		if err != nil {
+			return err
+		}
+		resolvedNoTagIn, err := resolveTagNames(ctx, client, cfg.Tenant, checkNoTagIn)
+		if err != nil {
+			return err
+		}
+
 		// Resolve project names to UUIDs if needed
 		resolvedProjects := make([]string, 0, len(checkProjects))
 		var projectsToResolve []string
@@ -752,7 +766,7 @@ Examples:
 			payload = string(payloadBytes)
 		}
 
-		// Build request with resolved UUIDs (both features and projects)
+		// Build request with resolved UUIDs (features, projects, and tags)
 		request := izanami.CheckFeaturesRequest{
 			User:       featureUser,
 			Context:    contextPath,
@@ -760,9 +774,9 @@ Examples:
 			Projects:   resolvedProjects,
 			Conditions: checkConditions,
 			Date:       checkDate,
-			OneTagIn:   checkOneTagIn,
-			AllTagsIn:  checkAllTagsIn,
-			NoTagIn:    checkNoTagIn,
+			OneTagIn:   resolvedOneTagIn,
+			AllTagsIn:  resolvedAllTagsIn,
+			NoTagIn:    resolvedNoTagIn,
 			Payload:    payload,
 		}
 
@@ -780,6 +794,38 @@ Examples:
 
 		return output.Print(results, format)
 	},
+}
+
+// resolveTagNames resolves tag names to UUIDs
+// Supports mixing UUIDs and names; requires tenant for name resolution
+// Uses the dedicated GET /api/admin/tenants/:tenant/tags/:name endpoint for individual lookups
+func resolveTagNames(ctx context.Context, client *izanami.Client, tenant string, tags []string) ([]string, error) {
+	if len(tags) == 0 {
+		return nil, nil
+	}
+
+	resolved := make([]string, 0, len(tags))
+
+	for _, tag := range tags {
+		if isUUID(tag) {
+			// Already a UUID, use as-is
+			resolved = append(resolved, tag)
+		} else {
+			// Not a UUID, need to resolve using dedicated endpoint
+			if tenant == "" {
+				return nil, fmt.Errorf("tag names require --tenant flag")
+			}
+
+			tagObj, err := client.GetTag(ctx, tenant, tag)
+			if err != nil {
+				return nil, fmt.Errorf("failed to resolve tag '%s': %w", tag, err)
+			}
+
+			resolved = append(resolved, tagObj.ID)
+		}
+	}
+
+	return resolved, nil
 }
 
 // resolveClientCredentials resolves client credentials with 3-tier precedence:
@@ -900,9 +946,9 @@ func init() {
 	featuresCheckBulkCmd.Flags().StringSliceVar(&checkProjects, "projects", []string{}, "Project IDs or names to check all features from (comma-separated, names require --tenant)")
 	featuresCheckBulkCmd.Flags().BoolVar(&checkConditions, "conditions", false, "Return activation conditions alongside results")
 	featuresCheckBulkCmd.Flags().StringVar(&checkDate, "date", "", "Date for evaluation (ISO 8601 format)")
-	featuresCheckBulkCmd.Flags().StringSliceVar(&checkOneTagIn, "one-tag-in", []string{}, "Features must have at least one of these tags (comma-separated)")
-	featuresCheckBulkCmd.Flags().StringSliceVar(&checkAllTagsIn, "all-tags-in", []string{}, "Features must have all of these tags (comma-separated)")
-	featuresCheckBulkCmd.Flags().StringSliceVar(&checkNoTagIn, "no-tag-in", []string{}, "Features must not have any of these tags (comma-separated)")
+	featuresCheckBulkCmd.Flags().StringSliceVar(&checkOneTagIn, "one-tag-in", []string{}, "Tag IDs or names - features must have at least one of these tags (comma-separated, names require --tenant)")
+	featuresCheckBulkCmd.Flags().StringSliceVar(&checkAllTagsIn, "all-tags-in", []string{}, "Tag IDs or names - features must have all of these tags (comma-separated, names require --tenant)")
+	featuresCheckBulkCmd.Flags().StringSliceVar(&checkNoTagIn, "no-tag-in", []string{}, "Tag IDs or names - features must not have any of these tags (comma-separated, names require --tenant)")
 	featuresCheckBulkCmd.Flags().StringVar(&checkClientID, "client-id", "", "Client ID for authentication (env: IZ_CLIENT_ID)")
 	featuresCheckBulkCmd.Flags().StringVar(&checkClientSecret, "client-secret", "", "Client secret for authentication (env: IZ_CLIENT_SECRET)")
 	featuresCheckBulkCmd.Flags().StringVar(&featureData, "data", "", "JSON payload for script features (from file with @file.json, stdin with -, or inline)")

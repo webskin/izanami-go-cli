@@ -973,6 +973,27 @@ func (c *Client) ListTags(ctx context.Context, tenant string) ([]Tag, error) {
 	return tags, nil
 }
 
+// GetTag retrieves a specific tag by name using the dedicated endpoint
+// GET /api/admin/tenants/:tenant/tags/:name
+func (c *Client) GetTag(ctx context.Context, tenant, tagName string) (*Tag, error) {
+	path := fmt.Sprintf("/api/admin/tenants/%s/tags/%s", tenant, tagName)
+
+	var tag Tag
+	req := c.http.R().SetContext(ctx).SetResult(&tag)
+	c.setAdminAuth(req)
+	resp, err := req.Get(path)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get tag: %w", err)
+	}
+
+	if resp.StatusCode() != http.StatusOK {
+		return nil, c.handleError(resp)
+	}
+
+	return &tag, nil
+}
+
 // CreateTag creates a new tag
 // The tag parameter accepts either a *Tag or any compatible struct
 func (c *Client) CreateTag(ctx context.Context, tenant string, tag interface{}) error {
