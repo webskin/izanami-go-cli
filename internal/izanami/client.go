@@ -166,7 +166,12 @@ func logRequest(resp *resty.Response, sensitiveHeaders map[string]bool) {
 
 	fmt.Fprintf(os.Stderr, "==============================================================================\n")
 	fmt.Fprintf(os.Stderr, "~~~ REQUEST ~~~\n")
-	fmt.Fprintf(os.Stderr, "%s  %s  %s\n", req.Method, req.URL.Path, req.Proto)
+	// Log full URL including query parameters
+	url := req.URL.Path
+	if req.URL.RawQuery != "" {
+		url += "?" + req.URL.RawQuery
+	}
+	fmt.Fprintf(os.Stderr, "%s  %s  %s\n", req.Method, url, req.Proto)
 	fmt.Fprintf(os.Stderr, "HOST   : %s\n", req.Host)
 	fmt.Fprintf(os.Stderr, "HEADERS:\n")
 	for key, values := range req.Header {
