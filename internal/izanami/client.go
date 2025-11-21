@@ -1368,7 +1368,8 @@ func (c *Client) Export(ctx context.Context, tenant string) (string, error) {
 
 	req := c.http.R().
 		SetContext(ctx).
-		SetHeader("Accept", "application/x-ndjson")
+		SetHeader("Accept", "application/x-ndjson").
+		SetHeader("Content-Type", "application/json")
 	c.setAdminAuth(req)
 	resp, err := req.Post(path)
 
