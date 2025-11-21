@@ -427,7 +427,8 @@ func (c *Client) DeleteFeature(ctx context.Context, tenant, featureID string) er
 
 // CheckFeature checks if a feature is active (client API)
 // Note: Feature check always uses CLIENT_ID/CLIENT_SECRET, not PAT token
-func (c *Client) CheckFeature(ctx context.Context, featureID, user, contextPath string) (*FeatureCheckResult, error) {
+// If payload is provided, uses POST method for script features, otherwise uses GET
+func (c *Client) CheckFeature(ctx context.Context, featureID, user, contextPath, payload string) (*FeatureCheckResult, error) {
 	path := "/api/v2/features/" + buildPath(featureID)
 
 	req := c.http.R().SetContext(ctx).SetResult(&FeatureCheckResult{})
@@ -444,7 +445,17 @@ func (c *Client) CheckFeature(ctx context.Context, featureID, user, contextPath 
 		req.SetQueryParam("context", contextPath)
 	}
 
-	resp, err := req.Get(path)
+	var resp *resty.Response
+	var err error
+
+	// Use POST if payload is provided, GET otherwise
+	if payload != "" {
+		req.SetHeader("Content-Type", "application/json").SetBody(payload)
+		resp, err = req.Post(path)
+	} else {
+		resp, err = req.Get(path)
+	}
+
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", errmsg.MsgFailedToCheckFeature, err)
 	}
@@ -454,6 +465,80 @@ func (c *Client) CheckFeature(ctx context.Context, featureID, user, contextPath 
 	}
 
 	result := resp.Result().(*FeatureCheckResult)
+	return result, nil
+}
+
+// CheckFeatures checks activation for multiple features (bulk operation)
+// Supports filtering by feature IDs, projects, tags, and returns conditions if requested
+func (c *Client) CheckFeatures(ctx context.Context, request CheckFeaturesRequest) (ActivationsWithConditions, error) {
+	path := "/api/v2/features"
+
+	result := make(ActivationsWithConditions)
+	req := c.http.R().SetContext(ctx).SetResult(&result)
+
+	// Set client authentication
+	if err := c.setClientAuth(req); err != nil {
+		return nil, err
+	}
+
+	// Set query parameters
+	if request.User != "" {
+		req.SetQueryParam("user", request.User)
+	}
+	if request.Context != "" {
+		req.SetQueryParam("context", request.Context)
+	}
+	if len(request.Features) > 0 {
+		req.SetQueryParams(map[string]string{
+			"features": strings.Join(request.Features, ","),
+		})
+	}
+	if len(request.Projects) > 0 {
+		req.SetQueryParams(map[string]string{
+			"projects": strings.Join(request.Projects, ","),
+		})
+	}
+	if request.Conditions {
+		req.SetQueryParam("conditions", "true")
+	}
+	if request.Date != "" {
+		req.SetQueryParam("date", request.Date)
+	}
+	if len(request.OneTagIn) > 0 {
+		req.SetQueryParams(map[string]string{
+			"oneTagIn": strings.Join(request.OneTagIn, ","),
+		})
+	}
+	if len(request.AllTagsIn) > 0 {
+		req.SetQueryParams(map[string]string{
+			"allTagsIn": strings.Join(request.AllTagsIn, ","),
+		})
+	}
+	if len(request.NoTagIn) > 0 {
+		req.SetQueryParams(map[string]string{
+			"noTagIn": strings.Join(request.NoTagIn, ","),
+		})
+	}
+
+	var resp *resty.Response
+	var err error
+
+	// Use POST if payload is provided, GET otherwise
+	if request.Payload != "" {
+		req.SetHeader("Content-Type", "application/json").SetBody(request.Payload)
+		resp, err = req.Post(path)
+	} else {
+		resp, err = req.Get(path)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to check features: %w", err)
+	}
+
+	if resp.StatusCode() != http.StatusOK {
+		return nil, c.handleError(resp)
+	}
+
 	return result, nil
 }
 
@@ -947,7 +1032,8 @@ type EventCallback func(event Event) error
 // WatchEvents opens a Server-Sent Events stream to watch for feature flag changes.
 // The callback is called for each event received. Return an error to stop watching.
 // Implements automatic reconnection with exponential backoff on connection failures.
-func (c *Client) WatchEvents(ctx context.Context, callback EventCallback) error {
+// The request parameter allows filtering which events to receive and setting refresh intervals.
+func (c *Client) WatchEvents(ctx context.Context, request EventsWatchRequest, callback EventCallback) error {
 	lastEventID := ""
 	backoff := 1 * time.Second
 	maxBackoff := 60 * time.Second
@@ -959,7 +1045,7 @@ func (c *Client) WatchEvents(ctx context.Context, callback EventCallback) error 
 		default:
 		}
 
-		retryDelay, err := c.streamEvents(ctx, lastEventID, func(event Event) error {
+		retryDelay, err := c.streamEvents(ctx, request, lastEventID, func(event Event) error {
 			lastEventID = event.ID
 			return callback(event)
 		})
@@ -998,14 +1084,74 @@ func (c *Client) WatchEvents(ctx context.Context, callback EventCallback) error 
 
 // streamEvents opens a single SSE connection and processes events.
 // Returns the retry delay suggested by the server (if any) and any error encountered.
-func (c *Client) streamEvents(ctx context.Context, lastEventID string, callback EventCallback) (time.Duration, error) {
+func (c *Client) streamEvents(ctx context.Context, request EventsWatchRequest, lastEventID string, callback EventCallback) (time.Duration, error) {
 	req := c.http.R().SetContext(ctx).SetDoNotParseResponse(true)
+
+	// Set client authentication
+	if err := c.setClientAuth(req); err != nil {
+		return 0, err
+	}
 
 	if lastEventID != "" {
 		req.SetHeader("Last-Event-Id", lastEventID)
 	}
 
-	resp, err := req.Get("/api/v2/events")
+	// Set query parameters
+	if request.User != "" {
+		req.SetQueryParam("user", request.User)
+	}
+	if request.Context != "" {
+		req.SetQueryParam("context", request.Context)
+	}
+	if len(request.Features) > 0 {
+		req.SetQueryParams(map[string]string{
+			"features": strings.Join(request.Features, ","),
+		})
+	}
+	if len(request.Projects) > 0 {
+		req.SetQueryParams(map[string]string{
+			"projects": strings.Join(request.Projects, ","),
+		})
+	}
+	if request.Conditions {
+		req.SetQueryParam("conditions", "true")
+	}
+	if request.Date != "" {
+		req.SetQueryParam("date", request.Date)
+	}
+	if len(request.OneTagIn) > 0 {
+		req.SetQueryParams(map[string]string{
+			"oneTagIn": strings.Join(request.OneTagIn, ","),
+		})
+	}
+	if len(request.AllTagsIn) > 0 {
+		req.SetQueryParams(map[string]string{
+			"allTagsIn": strings.Join(request.AllTagsIn, ","),
+		})
+	}
+	if len(request.NoTagIn) > 0 {
+		req.SetQueryParams(map[string]string{
+			"noTagIn": strings.Join(request.NoTagIn, ","),
+		})
+	}
+	if request.RefreshInterval > 0 {
+		req.SetQueryParam("refreshInterval", strconv.Itoa(request.RefreshInterval))
+	}
+	if request.KeepAliveInterval > 0 {
+		req.SetQueryParam("keepAliveInterval", strconv.Itoa(request.KeepAliveInterval))
+	}
+
+	var resp *resty.Response
+	var err error
+
+	// Use POST if payload is provided, GET otherwise
+	if request.Payload != "" {
+		req.SetHeader("Content-Type", "application/json").SetBody(request.Payload)
+		resp, err = req.Post("/api/v2/events")
+	} else {
+		resp, err = req.Get("/api/v2/events")
+	}
+
 	if err != nil {
 		// Check if this is a context cancellation
 		if ctx.Err() != nil {

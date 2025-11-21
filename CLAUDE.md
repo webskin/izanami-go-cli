@@ -58,3 +58,6 @@ VERSION=1.0.0 make build
 ## Known TODOs
 
 See [TODO.md](TODO.md) for pending tasks and features.
+
+## Izanami swagger
+Izanami server endpoints description can be found here https://maif.github.io/izanami/swagger/swagger.json

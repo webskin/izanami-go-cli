@@ -66,6 +66,82 @@ type FeatureCheckResult struct {
 	ID      string      `json:"id,omitempty"`     // Feature ID (populated by CLI, not from API)
 }
 
+// ActivationWithConditions represents a feature activation with optional conditions
+type ActivationWithConditions struct {
+	Name       string                     `json:"name"`
+	Active     bool                       `json:"active"`
+	Project    string                     `json:"project"`
+	Conditions map[string]ContextOverload `json:"conditions,omitempty"`
+}
+
+// ContextOverload represents feature conditions for a specific context
+type ContextOverload struct {
+	Enabled    bool                   `json:"enabled"`
+	Conditions []ActivationCondition  `json:"conditions"`
+}
+
+// ActivationsWithConditions is a map of feature IDs to their activation results
+type ActivationsWithConditions map[string]ActivationWithConditions
+
+// ActivationTableView represents a feature activation for table display
+type ActivationTableView struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Active  bool   `json:"active"`
+	Project string `json:"project"`
+}
+
+// ToTableView converts ActivationsWithConditions to a sorted slice for table display
+func (a ActivationsWithConditions) ToTableView() []ActivationTableView {
+	var result []ActivationTableView
+
+	for id, activation := range a {
+		result = append(result, ActivationTableView{
+			ID:      id,
+			Name:    activation.Name,
+			Active:  activation.Active,
+			Project: activation.Project,
+		})
+	}
+
+	// Sort by name for consistent output
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Name < result[j].Name
+	})
+
+	return result
+}
+
+// CheckFeaturesRequest represents the request parameters for bulk feature checking
+type CheckFeaturesRequest struct {
+	User       string   `json:"-"` // Query param, not body
+	Context    string   `json:"-"` // Query param, not body
+	Features   []string `json:"-"` // Query param: feature IDs to check
+	Projects   []string `json:"-"` // Query param: project IDs to check
+	Conditions bool     `json:"-"` // Query param: whether to return conditions
+	Date       string   `json:"-"` // Query param: ISO 8601 datetime
+	OneTagIn   []string `json:"-"` // Query param: at least one tag must match
+	AllTagsIn  []string `json:"-"` // Query param: all tags must match
+	NoTagIn    []string `json:"-"` // Query param: none of these tags can match
+	Payload    string   `json:"-"` // Optional JSON payload for POST requests (script features)
+}
+
+// EventsWatchRequest represents the request parameters for watching events
+type EventsWatchRequest struct {
+	User              string   `json:"-"` // Query param: user for feature evaluation (default: "*")
+	Context           string   `json:"-"` // Query param: context for evaluation
+	Features          []string `json:"-"` // Query param: feature IDs to watch
+	Projects          []string `json:"-"` // Query param: project IDs to watch
+	Conditions        bool     `json:"-"` // Query param: whether to include conditions
+	Date              string   `json:"-"` // Query param: ISO 8601 datetime
+	OneTagIn          []string `json:"-"` // Query param: at least one tag must match
+	AllTagsIn         []string `json:"-"` // Query param: all tags must match
+	NoTagIn           []string `json:"-"` // Query param: none of these tags can match
+	RefreshInterval   int      `json:"-"` // Query param: periodic refresh interval in seconds
+	KeepAliveInterval int      `json:"-"` // Query param: keep-alive interval in seconds (default: 25)
+	Payload           string   `json:"-"` // Optional JSON payload for POST requests (script features)
+}
+
 // Context represents a feature context (environment/override)
 type Context struct {
 	Name        string            `json:"name"`

@@ -25,6 +25,14 @@ var (
 	// Client credentials (only used by check command)
 	checkClientID     string
 	checkClientSecret string
+	// Bulk check parameters
+	checkFeatures     []string
+	checkProjects     []string
+	checkConditions   bool
+	checkDate         string
+	checkOneTagIn     []string
+	checkAllTagsIn    []string
+	checkNoTagIn      []string
 )
 
 // featuresCmd represents the admin features command
@@ -388,6 +396,12 @@ This uses the client API (v2) to evaluate the feature, taking into account:
 - Time-based activation
 - Context-specific overrides
 
+Script Features:
+  For script-based features, you can provide a JSON payload via --data:
+    iz features check <uuid> --user user123 --data '{"customField": "value"}'
+    iz features check <uuid> --user user123 --data @payload.json
+  This will use POST /api/v2/features/{id} instead of GET.
+
 Examples:
   # Check feature by UUID
   iz features check e878a149-df86-4f28-b1db-059580304e1e --user user123
@@ -396,7 +410,10 @@ Examples:
   iz features check my-feature --tenant my-tenant --user user123
 
   # Check feature by name with project disambiguation
-  iz features check my-feature --tenant my-tenant --project my-project --user user123`,
+  iz features check my-feature --tenant my-tenant --project my-project --user user123
+
+  # Check script feature with payload
+  iz features check e878a149-df86-4f28-b1db-059580304e1e --data '{"age": 25}'`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Resolve client credentials with 3-tier precedence:
@@ -516,7 +533,22 @@ Examples:
 			contextPath = cfg.Context
 		}
 
-		result, err := client.CheckFeature(ctx, featureID, featureUser, contextPath)
+		// Parse payload if provided
+		var payload string
+		if featureData != "" {
+			var payloadData interface{}
+			if err := parseJSONData(featureData, &payloadData); err != nil {
+				return fmt.Errorf("invalid JSON payload: %w", err)
+			}
+			// Convert back to JSON string for the API call
+			payloadBytes, err := json.Marshal(payloadData)
+			if err != nil {
+				return fmt.Errorf("failed to serialize payload: %w", err)
+			}
+			payload = string(payloadBytes)
+		}
+
+		result, err := client.CheckFeature(ctx, featureID, featureUser, contextPath, payload)
 		if err != nil {
 			return err
 		}
@@ -526,6 +558,232 @@ Examples:
 		result.ID = featureID
 
 		return output.Print(result, output.Format(outputFormat))
+	},
+}
+
+// featuresCheckBulkCmd checks multiple features in a single request
+var featuresCheckBulkCmd = &cobra.Command{
+	Use:   "check-bulk",
+	Short: "Check multiple features at once",
+	Long: `Check activation status for multiple features in a single request.
+
+This command uses the GET/POST /api/v2/features endpoint to check multiple
+features simultaneously. You can filter features by:
+  - Specific feature IDs or names (--features)
+  - Project IDs (--projects) - checks all features in those projects
+  - Tags (--one-tag-in, --all-tags-in, --no-tag-in)
+
+The --features flag accepts both UUIDs and feature names:
+  - UUIDs are used directly (no tenant required)
+  - Names are resolved to UUIDs (requires --tenant flag)
+  - If a name matches multiple features, use --projects to disambiguate
+
+Optionally, you can request activation conditions (--conditions) which allows
+offline re-evaluation of features without another API call.
+
+Script Features:
+  For script-based features, provide a JSON payload via --data to use POST method.
+
+Examples:
+  # Check specific features by UUID
+  iz features check-bulk --features feat1-uuid,feat2-uuid --user user123
+
+  # Check features by name (requires --tenant)
+  iz features check-bulk --features my-feature,other-feature --tenant my-tenant --user user123
+
+  # Mix UUIDs and names
+  iz features check-bulk --features feat1-uuid,my-feature --tenant my-tenant --user user123
+
+  # Check all features in specific projects
+  iz features check-bulk --projects proj1-uuid,proj2-uuid --user user123
+
+  # Check features with tag filtering
+  iz features check-bulk --projects proj1-uuid --one-tag-in beta,experimental
+
+  # Get conditions for offline evaluation
+  iz features check-bulk --features feat1-uuid --conditions --user user123
+
+  # Check script features with payload
+  iz features check-bulk --features feat1-uuid --data '{"age": 25}'`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// Resolve client credentials with 3-tier precedence:
+		// 1. Flags (--client-id/--client-secret)
+		// 2. Environment variables (IZ_CLIENT_ID/IZ_CLIENT_SECRET) - already in cfg via viper
+		// 3. Config file (client-keys section) - fallback if both are empty
+
+		// First, apply command-specific flags if provided
+		if checkClientID != "" {
+			cfg.ClientID = checkClientID
+		}
+		if checkClientSecret != "" {
+			cfg.ClientSecret = checkClientSecret
+		}
+
+		// If still empty, try to resolve from client-keys in config
+		if cfg.ClientID == "" && cfg.ClientSecret == "" {
+			tenant := cfg.Tenant
+			var projects []string
+			// Collect project filters from --projects flag for credential resolution
+			if len(checkProjects) > 0 {
+				projects = append(projects, checkProjects...)
+			}
+			// Also include global --project if set
+			if cfg.Project != "" {
+				projects = append(projects, cfg.Project)
+			}
+
+			clientID, clientSecret := cfg.ResolveClientCredentials(tenant, projects)
+			if clientID != "" && clientSecret != "" {
+				cfg.ClientID = clientID
+				cfg.ClientSecret = clientSecret
+				if cfg.Verbose {
+					if len(projects) > 0 {
+						fmt.Fprintf(os.Stderr, "Using client credentials from config (tenant: %s, projects: %v)\n", tenant, projects)
+					} else {
+						fmt.Fprintf(os.Stderr, "Using client credentials from config (tenant: %s)\n", tenant)
+					}
+				}
+			}
+		}
+
+		if err := cfg.Validate(); err != nil {
+			return err
+		}
+
+		// Validate that at least one filter is provided
+		if len(checkFeatures) == 0 && len(checkProjects) == 0 {
+			return fmt.Errorf("at least one filter is required: --features or --projects")
+		}
+
+		client, err := izanami.NewClient(cfg)
+		if err != nil {
+			return err
+		}
+
+		ctx := context.Background()
+
+		// Resolve feature names to UUIDs if needed
+		// If any feature in checkFeatures is not a UUID, we need tenant to resolve it
+		resolvedFeatures := make([]string, 0, len(checkFeatures))
+		var featuresToResolve []string
+
+		for _, featureIDOrName := range checkFeatures {
+			if isUUID(featureIDOrName) {
+				// Already a UUID, use as-is
+				resolvedFeatures = append(resolvedFeatures, featureIDOrName)
+			} else {
+				// Not a UUID, need to resolve
+				featuresToResolve = append(featuresToResolve, featureIDOrName)
+			}
+		}
+
+		// If we have names to resolve, fetch all features and map them
+		if len(featuresToResolve) > 0 {
+			if err := cfg.ValidateTenant(); err != nil {
+				return fmt.Errorf("feature names require --tenant flag: %w", err)
+			}
+
+			if cfg.Verbose {
+				fmt.Fprintf(os.Stderr, "Resolving feature names %v in tenant '%s'...\n", featuresToResolve, cfg.Tenant)
+			}
+
+			// List all features for the tenant
+			features, err := client.ListFeatures(ctx, cfg.Tenant, "")
+			if err != nil {
+				return fmt.Errorf("failed to list features: %w", err)
+			}
+
+			// Build name->ID map
+			nameToID := make(map[string][]izanami.Feature)
+			for _, f := range features {
+				nameToID[f.Name] = append(nameToID[f.Name], f)
+			}
+
+			// Resolve each name
+			for _, name := range featuresToResolve {
+				matches := nameToID[name]
+
+				// Further filter by project if projects are specified
+				if len(checkProjects) > 0 {
+					var projectMatches []izanami.Feature
+					projectSet := make(map[string]bool)
+					for _, p := range checkProjects {
+						projectSet[p] = true
+					}
+					for _, f := range matches {
+						if projectSet[f.Project] {
+							projectMatches = append(projectMatches, f)
+						}
+					}
+					matches = projectMatches
+				}
+
+				// Validate matches
+				if len(matches) == 0 {
+					if len(checkProjects) > 0 {
+						return fmt.Errorf("no feature named '%s' found in tenant '%s' within specified projects %v", name, cfg.Tenant, checkProjects)
+					}
+					return fmt.Errorf("no feature named '%s' found in tenant '%s'", name, cfg.Tenant)
+				}
+				if len(matches) > 1 {
+					return fmt.Errorf("multiple features named '%s' found (use --projects to disambiguate or provide UUID instead)", name)
+				}
+
+				// Use the resolved UUID
+				resolvedFeatures = append(resolvedFeatures, matches[0].ID)
+				if cfg.Verbose {
+					fmt.Fprintf(os.Stderr, "Resolved feature '%s' to ID: %s\n", name, matches[0].ID)
+				}
+			}
+		}
+
+		// Use context from flag or config
+		contextPath := featureContextStr
+		if contextPath == "" {
+			contextPath = cfg.Context
+		}
+
+		// Parse payload if provided
+		var payload string
+		if featureData != "" {
+			var payloadData interface{}
+			if err := parseJSONData(featureData, &payloadData); err != nil {
+				return fmt.Errorf("invalid JSON payload: %w", err)
+			}
+			payloadBytes, err := json.Marshal(payloadData)
+			if err != nil {
+				return fmt.Errorf("failed to serialize payload: %w", err)
+			}
+			payload = string(payloadBytes)
+		}
+
+		// Build request with resolved UUIDs
+		request := izanami.CheckFeaturesRequest{
+			User:       featureUser,
+			Context:    contextPath,
+			Features:   resolvedFeatures,
+			Projects:   checkProjects,
+			Conditions: checkConditions,
+			Date:       checkDate,
+			OneTagIn:   checkOneTagIn,
+			AllTagsIn:  checkAllTagsIn,
+			NoTagIn:    checkNoTagIn,
+			Payload:    payload,
+		}
+
+		results, err := client.CheckFeatures(ctx, request)
+		if err != nil {
+			return err
+		}
+
+		// For table format, convert to table view
+		format := output.Format(outputFormat)
+		if format == output.Table {
+			tableView := results.ToTableView()
+			return output.Print(tableView, format)
+		}
+
+		return output.Print(results, format)
 	},
 }
 
@@ -583,6 +841,7 @@ func init() {
 	// Register root-level features command for client operations
 	rootCmd.AddCommand(rootFeaturesCmd)
 	rootFeaturesCmd.AddCommand(featuresCheckCmd)
+	rootFeaturesCmd.AddCommand(featuresCheckBulkCmd)
 
 	// List flags
 	featuresListCmd.Flags().StringVar(&featureTag, "tag", "", "Filter by tag (server-side)")
@@ -605,4 +864,19 @@ func init() {
 	featuresCheckCmd.Flags().StringVar(&featureProject, "project", "", "Project name (for disambiguating feature names)")
 	featuresCheckCmd.Flags().StringVar(&checkClientID, "client-id", "", "Client ID for authentication (env: IZ_CLIENT_ID)")
 	featuresCheckCmd.Flags().StringVar(&checkClientSecret, "client-secret", "", "Client secret for authentication (env: IZ_CLIENT_SECRET)")
+	featuresCheckCmd.Flags().StringVar(&featureData, "data", "", "JSON payload for script features (from file with @file.json, stdin with -, or inline)")
+
+	// Bulk check flags
+	featuresCheckBulkCmd.Flags().StringVar(&featureUser, "user", "", "User ID for evaluation")
+	featuresCheckBulkCmd.Flags().StringVar(&featureContextStr, "context", "", "Context path for evaluation")
+	featuresCheckBulkCmd.Flags().StringSliceVar(&checkFeatures, "features", []string{}, "Feature IDs or names to check (comma-separated, names require --tenant)")
+	featuresCheckBulkCmd.Flags().StringSliceVar(&checkProjects, "projects", []string{}, "Project IDs to check all features from (comma-separated)")
+	featuresCheckBulkCmd.Flags().BoolVar(&checkConditions, "conditions", false, "Return activation conditions alongside results")
+	featuresCheckBulkCmd.Flags().StringVar(&checkDate, "date", "", "Date for evaluation (ISO 8601 format)")
+	featuresCheckBulkCmd.Flags().StringSliceVar(&checkOneTagIn, "one-tag-in", []string{}, "Features must have at least one of these tags (comma-separated)")
+	featuresCheckBulkCmd.Flags().StringSliceVar(&checkAllTagsIn, "all-tags-in", []string{}, "Features must have all of these tags (comma-separated)")
+	featuresCheckBulkCmd.Flags().StringSliceVar(&checkNoTagIn, "no-tag-in", []string{}, "Features must not have any of these tags (comma-separated)")
+	featuresCheckBulkCmd.Flags().StringVar(&checkClientID, "client-id", "", "Client ID for authentication (env: IZ_CLIENT_ID)")
+	featuresCheckBulkCmd.Flags().StringVar(&checkClientSecret, "client-secret", "", "Client secret for authentication (env: IZ_CLIENT_SECRET)")
+	featuresCheckBulkCmd.Flags().StringVar(&featureData, "data", "", "JSON payload for script features (from file with @file.json, stdin with -, or inline)")
 }

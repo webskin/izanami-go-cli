@@ -1,0 +1,1079 @@
+Here are the scala routes for izanami-server for checking features
+
+```
+GET           /api/v2/features/:id                                                                 fr.maif.izanami.web.FeatureController.checkFeatureForContext(id: String, user: String ?= "", context: fr.maif.izanami.web.FeatureContextPath)
+POST          /api/v2/features/:id                                                                 fr.maif.izanami.web.FeatureController.checkFeatureForContext(id: String, user: String ?= "", context: fr.maif.izanami.web.FeatureContextPath)
+GET           /api/v2/features                                                                     fr.maif.izanami.web.FeatureController.evaluateFeaturesForContext(user: String ?= "", conditions: Boolean ?= false, date: Option[java.time.Instant], featureRequest: fr.maif.izanami.models.FeatureRequest)
+POST          /api/v2/features                                                                     fr.maif.izanami.web.FeatureController.evaluateFeaturesForContext(user: String ?= "", conditions: Boolean ?= false, date: Option[java.time.Instant], featureRequest: fr.maif.izanami.models.FeatureRequest)
+GET           /api/v2/events                                                                       fr.maif.izanami.web.EventController.newEvents(user: String ?= "*", conditions: Boolean ?= false, refreshInterval: Int ?= 0, keepAliveInterval: Int ?= 25, featureRequest: fr.maif.izanami.models.FeatureRequest)
+POST          /api/v2/events                                                                       fr.maif.izanami.web.EventController.newEvents(user: String ?= "*", conditions: Boolean ?= false, refreshInterval: Int ?= 0, keepAliveInterval: Int ?= 25, featureRequest: fr.maif.izanami.models.FeatureRequest)
+```
+
+The linked swagger
+```json
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Izanami client API",
+    "description": "This describes client endpoints exposed by Izanami. These endpoints are accessible using an api key. This swagger does not yet include 'admin' endpoints that are used by backoffice.",
+    "version": "2.0.0"
+  },
+  "paths": {
+    "/api/v2/events": {
+      "description": "Emit Server Sent Events when features in given scope are modified. This endpoint also emit initially (and optionally periodically) a global event that contains state of every feature in scope.",
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/clientId"
+        },
+        {
+          "$ref": "#/components/parameters/clientSecret"
+        },
+        {
+          "$ref": "#/components/parameters/user"
+        },
+        {
+          "$ref": "#/components/parameters/context"
+        },
+        {
+          "$ref": "#/components/parameters/features"
+        },
+        {
+          "$ref": "#/components/parameters/projects"
+        },
+        {
+          "$ref": "#/components/parameters/conditions"
+        },
+        {
+          "$ref": "#/components/parameters/date"
+        },
+        {
+          "$ref": "#/components/parameters/oneTagIn"
+        },
+        {
+          "$ref": "#/components/parameters/allTagsIn"
+        },
+        {
+          "$ref": "#/components/parameters/noTagIn"
+        }
+      ],
+      "get": {
+        "summary": "Suscribe to events",
+        "description": "⚠️⚠️⚠️ Below model is represented with JSON for OpenAPI convenience, however this endpoinst serves Server Sent Event format (see <a href=\"https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events#event_stream_format\">MDN SSE documentation</a> for details).",
+        "operationId": "modernEventGet",
+        "tags": [
+          "V2 feature endpoints"
+        ],
+        "responses": {
+          "200": {
+            "description": "success",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/Event"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Suscribe to events and pass a JSON payload (script feature)",
+        "description": "⚠️⚠️⚠️ Below model is represented with JSON for OpenAPI convenience, however this endpoinst serves Server Sent Event format (see <a href=\"https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events#event_stream_format\">MDN SSE documentation</a> for details).",
+        "operationId": "modernEventGet",
+        "tags": [
+          "V2 feature endpoints"
+        ],
+        "responses": {
+          "200": {
+            "description": "success",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/Event"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/features/{id}": {
+      "description": "Compute feature activation for given parameters. POST endpoint allows to pass data in body that can be used by script based features.",
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/clientId"
+        },
+        {
+          "$ref": "#/components/parameters/clientSecret"
+        },
+        {
+          "$ref": "#/components/parameters/featureId"
+        },
+        {
+          "$ref": "#/components/parameters/user"
+        },
+        {
+          "$ref": "#/components/parameters/context"
+        }
+      ],
+      "get": {
+        "summary": "Check feature activation",
+        "operationId": "checkModernFeatureGet",
+        "tags": [
+          "V2 feature endpoints"
+        ],
+        "responses": {
+          "200": {
+            "description": "success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Activation"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Check feature activation with payload",
+        "operationId": "checkModernFeaturePost",
+        "tags": [
+          "V2 feature endpoints"
+        ],
+        "responses": {
+          "200": {
+            "description": "success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Activation"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/features": {
+      "description": "These two endpoints allows checking activation for multiple features. Optionally, they can return activation conditions for these features., allowing to recompute their activation offline.",
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/clientId"
+        },
+        {
+          "$ref": "#/components/parameters/clientSecret"
+        },
+        {
+          "$ref": "#/components/parameters/user"
+        },
+        {
+          "$ref": "#/components/parameters/context"
+        },
+        {
+          "$ref": "#/components/parameters/features"
+        },
+        {
+          "$ref": "#/components/parameters/projects"
+        },
+        {
+          "$ref": "#/components/parameters/conditions"
+        },
+        {
+          "$ref": "#/components/parameters/date"
+        },
+        {
+          "$ref": "#/components/parameters/oneTagIn"
+        },
+        {
+          "$ref": "#/components/parameters/allTagsIn"
+        },
+        {
+          "$ref": "#/components/parameters/noTagIn"
+        }
+      ],
+      "get": {
+        "summary": "Check features activation",
+        "operationId": "checkModernFeaturesGet",
+        "tags": [
+          "V2 feature endpoints"
+        ],
+        "responses": {
+          "200": {
+            "description": "success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivationsWithConditions"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Check features activation with payload",
+        "operationId": "checkModernFeaturesPost",
+        "tags": [
+          "V2 feature endpoints"
+        ],
+        "responses": {
+          "200": {
+            "description": "success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivationsWithConditions"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Event": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "FEATURE_STATES",
+              "FEATURE_CREATED",
+              "FEATURE_UPDATED",
+              "FEATURE_DELETED",
+              "KEEP_ALIVE"
+            ]
+          },
+          "id": {
+            "type": "number"
+          },
+          "data": {
+            "$ref": "#/components/schemas/EventData"
+          }
+        }
+      },
+      "EventData": {
+        "allOf": [
+          {
+            "properties": {
+              "_id": {
+                "type": "number"
+              },
+              "timestamp": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/FeatureUpdatedEvent"
+              },
+              {
+                "$ref": "#/components/schemas/FeatureDeletedEvent"
+              },
+              {
+                "$ref": "#/components/schemas/FeatureCreatedEvent"
+              },
+              {
+                "$ref": "#/components/schemas/FeatureStatesEvent"
+              },
+              {
+                "$ref": "#/components/schemas/KeepAliveEvent"
+              }
+            ]
+          }
+        ]
+      },
+      "KeepAliveEvent": {
+        "title": "Keep alive event",
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "FEATURE_STATES"
+            ]
+          }
+        }
+      },
+      "FeatureStatesEvent": {
+        "title": "FeatureStatesEvent",
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "FEATURE_STATES"
+            ]
+          },
+          "payload": {
+            "title": "Features activation/conditions",
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ActivationWithConditions"
+            }
+          }
+        }
+      },
+      "FeatureUpdatedEvent": {
+        "title": "FeatureUpdatedEvent",
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "FEATURE_UPDATED"
+            ]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ActivationWithConditions"
+          }
+        }
+      },
+      "FeatureCreatedEvent": {
+        "title": "FeatureCreatedEvent",
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "FEATURE_CREATED"
+            ]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ActivationWithConditions"
+          }
+        }
+      },
+      "FeatureDeletedEvent": {
+        "title": "FeatureDeletedEvent",
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "FEATURE_DELETED"
+            ]
+          },
+          "payload": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "HealthStatus": {
+        "type": "object",
+        "properties": {
+          "database": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Activation": {
+        "type": "object",
+        "properties": {
+          "active": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          }
+        }
+      },
+      "Activations": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LegacyFeatureWithActivation"
+            }
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/Metadata"
+          }
+        }
+      },
+      "Metadata": {
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "number"
+          },
+          "page": {
+            "type": "number"
+          },
+          "pageSize": {
+            "type": "number"
+          },
+          "nbPages": {
+            "type": "number"
+          }
+        }
+      },
+      "ActivationsWithConditions": {
+        "type": "object",
+        "additionalProperties": {
+          "$ref": "#/components/schemas/ActivationWithConditions"
+        },
+        "example": {
+          "9fddafb4-a69b-4ea3-a75b-867d95e24557": {
+            "name": "modern-feature",
+            "active": true,
+            "project": "my-project",
+            "conditions": {
+              "": {
+                "enabled": true,
+                "conditions": []
+              }
+            }
+          },
+          "77072778-0de9-4132-9b35-ab8a9c8a302e": {
+            "name": "modern-feature",
+            "active": true,
+            "project": "my-project",
+            "conditions": {
+              "dev": {
+                "enabled": true,
+                "conditions": []
+              },
+              "production": {
+                "enabled": true,
+                "conditions": [
+                  {
+                    "period": {
+                      "begin": "2024-01-01T08:00:00Z",
+                      "end": "2024-01-31T22:00:00Z",
+                      "hourPeriods": [
+                        {
+                          "startTime": "08:00:00",
+                          "endTime": "12:30:00"
+                        },
+                        {
+                          "startTime": "14:00:00",
+                          "endTime": "18:30:00"
+                        }
+                      ],
+                      "activationDays": {
+                        "days": [
+                          "MONDAY",
+                          "TUESDAY",
+                          "WEDNESDAY",
+                          "THURSDAY",
+                          "FRIDAY"
+                        ]
+                      },
+                      "timezone": "Europe/Paris"
+                    },
+                    "rule": {
+                      "percentage": 10
+                    }
+                  },
+                  {
+                    "period": null,
+                    "rule": {
+                      "users": [
+                        "qa-user-1",
+                        "qa-user-2"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "": {
+                "enabled": false,
+                "conditions": []
+              }
+            }
+          }
+        }
+      },
+      "ActivationWithConditions": {
+        "title": "Feature activation/conditions",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Activation"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "conditions": {
+                "$ref": "#/components/schemas/ConditionMap"
+              }
+            }
+          }
+        ]
+      },
+      "ConditionMap": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "conditions": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/ActivationCondition"
+              }
+            }
+          }
+        }
+      },
+      "ActivationCondition": {
+        "type": "object",
+        "properties": {
+          "period": {
+            "$ref": "#/components/schemas/TimeCondition"
+          },
+          "rule": {
+            "$ref": "#/components/schemas/UserCondition"
+          }
+        }
+      },
+      "UserCondition": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/UserListCondition"
+          },
+          {
+            "$ref": "#/components/schemas/UserPercentageCondition"
+          }
+        ]
+      },
+      "UserListCondition": {
+        "type": "object",
+        "properties": {
+          "users": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "UserPercentageCondition": {
+        "type": "object",
+        "properties": {
+          "percentage": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          }
+        }
+      },
+      "TimeCondition": {
+        "type": "object",
+        "properties": {
+          "begin": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "end": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "activationDays": {
+            "type": "object",
+            "properties": {
+              "days": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "MONDAY",
+                    "TUESDAY",
+                    "WEDNESDAY",
+                    "THURSDAY",
+                    "FRIDAY",
+                    "SATURDAY",
+                    "SUNDAY"
+                  ]
+                }
+              }
+            }
+          },
+          "hourPeriods": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "startTime": {
+                  "type": "string",
+                  "format": "time"
+                },
+                "endTime": {
+                  "type": "string",
+                  "format": "time"
+                }
+              }
+            }
+          }
+        }
+      },
+      "LegacyEvent": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "message"
+            ]
+          },
+          "id": {
+            "type": "number"
+          },
+          "origin": {
+            "type": "string",
+            "format": "uri"
+          },
+          "data": {
+            "$ref": "#/components/schemas/LegacyEventData"
+          }
+        }
+      },
+      "LegacyEventData": {
+        "type": "object",
+        "properties": {
+          "_id": {
+            "type": "number"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "KEEP_ALIVE",
+              "FEATURE_UPDATED",
+              "FEATURE_CREATED",
+              "FEATURE_DELETED"
+            ]
+          },
+          "key": {
+            "type": "string"
+          },
+          "domain": {
+            "type": "string",
+            "enum": [
+              "Feature"
+            ]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/LegacyFeature"
+          }
+        }
+      },
+      "LegacyFeatureWithActivation": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/LegacyFeature"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "active": {
+                "type": "boolean"
+              }
+            }
+          }
+        ]
+      },
+      "LegacyFeature": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/LegacyPercentageFeature"
+          },
+          {
+            "$ref": "#/components/schemas/LegacyCustomerListFeature"
+          },
+          {
+            "$ref": "#/components/schemas/LegacyReleaseDateFeature"
+          },
+          {
+            "$ref": "#/components/schemas/LegacyDateRangeFeature"
+          },
+          {
+            "$ref": "#/components/schemas/LegacyHourRangeFeature"
+          },
+          {
+            "$ref": "#/components/schemas/LegacyScriptFeature"
+          }
+        ]
+      },
+      "LegacyScriptFeature": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/LegacyFeatureBase"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "activationStrategy": {
+                "type": "string",
+                "enum": [
+                  "SCRIPT"
+                ]
+              },
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "javascript"
+                    ]
+                  },
+                  "script": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "LegacyReleaseDateFeature": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/LegacyFeatureBase"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "activationStrategy": {
+                "type": "string",
+                "enum": [
+                  "RELEASE_DATE"
+                ]
+              },
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "releaseDate": {
+                    "type": "string",
+                    "pattern": "^\\d{2}\\/\\d{2}\\/\\d{4} \\d{2}:\\d{2}:\\d{2}$"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "LegacyDateRangeFeature": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/LegacyFeatureBase"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "activationStrategy": {
+                "type": "string",
+                "enum": [
+                  "DATE_RANGE"
+                ]
+              },
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "from": {
+                    "type": "string",
+                    "pattern": "^\\d{2}\\/\\d{2}\\/\\d{4} \\d{2}:\\d{2}:\\d{2}$"
+                  },
+                  "to": {
+                    "type": "string",
+                    "pattern": "^\\d{2}\\/\\d{2}\\/\\d{4} \\d{2}:\\d{2}:\\d{2}$"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "LegacyHourRangeFeature": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/LegacyFeatureBase"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "activationStrategy": {
+                "type": "string",
+                "enum": [
+                  "HOUR_RANGE"
+                ]
+              },
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "startAt": {
+                    "type": "string",
+                    "pattern": "\\d{2}:\\d{2}$"
+                  },
+                  "endAt": {
+                    "type": "string",
+                    "pattern": "\\d{2}:\\d{2}$"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "LegacyPercentageFeature": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/LegacyFeatureBase"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "activationStrategy": {
+                "type": "string",
+                "enum": [
+                  "PERCENTAGE"
+                ]
+              },
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "percentage": {
+                    "type": "number"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "LegacyCustomerListFeature": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/LegacyFeatureBase"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "activationStrategy": {
+                "type": "string",
+                "enum": [
+                  "CUSTOMERS_LIST"
+                ]
+              },
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "customers": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "LegacyFeatureBase": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "parameters": {
+            "type": "object"
+          },
+          "name": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "description": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "parameters": {
+      "clientId": {
+        "in": "header",
+        "name": "izanami-client-id",
+        "schema": {
+          "type": "string"
+        },
+        "required": true,
+        "description": "client key id"
+      },
+      "clientSecret": {
+        "in": "header",
+        "name": "izanami-client-secret",
+        "schema": {
+          "type": "string"
+        },
+        "required": true,
+        "description": "client key secret"
+      },
+      "featureId": {
+        "in": "path",
+        "name": "id",
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "required": true,
+        "description": "Feature id."
+      },
+      "user": {
+        "in": "query",
+        "name": "user",
+        "schema": {
+          "type": "string",
+          "default": ""
+        },
+        "description": "User for which activation should be computed, this is used by user based conditions (user list, percentage, ...)"
+      },
+      "context": {
+        "in": "query",
+        "name": "context",
+        "schema": {
+          "type": "string",
+          "default": ""
+        },
+        "description": "Context to use for computing activation, for subcontext separate context by a '/' character (ex: 'root/subcontext/subsubcontext')."
+      },
+      "pattern": {
+        "in": "query",
+        "name": "pattern",
+        "schema": {
+          "default": "*",
+          "type": "string"
+        },
+        "required": false,
+        "description": "Pattern to search feature for. For instance pattern foo:* will match for feature 'foo:bar', 'foo:baz:biz' but not 'baz'"
+      },
+      "pageSize": {
+        "in": "query",
+        "name": "pageSize",
+        "schema": {
+          "default": 15,
+          "format": "int32",
+          "type": "integer"
+        },
+        "required": false,
+        "description": "Number of elements by page."
+      },
+      "page": {
+        "in": "query",
+        "name": "page",
+        "schema": {
+          "default": 1,
+          "format": "int32",
+          "type": "integer"
+        },
+        "required": false,
+        "description": "Page to fetch, it starts at 1 (not 0)."
+      },
+      "features": {
+        "in": "query",
+        "name": "features",
+        "schema": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "description": "Ids of features to query, activation status will be returned for all these features."
+      },
+      "projects": {
+        "in": "query",
+        "name": "projects",
+        "schema": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "description": "Ids of projects to query, activation will be returned for every feature of these projects, after applying them tag filters."
+      },
+      "conditions": {
+        "in": "query",
+        "name": "conditions",
+        "schema": {
+          "type": "boolean",
+          "default": false
+        },
+        "description": "Whether activation condition should be returned alongside feature activations. Conditions are returned for all contexts / subcontexts. These conditions can be used to recompute activation locally, without needing another call. This parameter should not be 'true' if you have no interest in computing activation locally, since it may have a minor impact on response time performances."
+      },
+      "date": {
+        "in": "query",
+        "name": "date",
+        "schema": {
+          "type": "string",
+          "format": "date-time",
+          "default": null
+        },
+        "description": "Date for which activation should be computed, used by time based activation conditions. Default is current time."
+      },
+      "oneTagIn": {
+        "in": "query",
+        "name": "oneTagIn",
+        "schema": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "description": "When querying projects using 'projects' parameters, feature of these projects are filtered to keep only features with one tag in this tag array. Format is 'tag1,tag2,tag3'."
+      },
+      "allTagsIn": {
+        "in": "query",
+        "name": "allTagsIn",
+        "schema": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "description": "When querying projects using 'projects' parameters, feature of these projects are filtered to keep only features with all given tags. Format is 'tag1,tag2,tag3'."
+      },
+      "noTagIn": {
+        "in": "query",
+        "name": "noTagIn",
+        "schema": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "description": "When querying projects using 'projects' parameters, feature of these projects are filtered to keep only features none of the given tags. Format is 'tag1,tag2,tag3'."
+      }
+    }
+  }
+}
+``` 
+
+Ensure endpoint are well defined for this CLI

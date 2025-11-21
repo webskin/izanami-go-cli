@@ -14,8 +14,23 @@ import (
 )
 
 var (
-	eventsRaw    bool
-	eventsPretty bool
+	eventsRaw             bool
+	eventsPretty          bool
+	eventsUser            string
+	eventsContext         string
+	eventsFeatures        []string
+	eventsProjects        []string
+	eventsConditions      bool
+	eventsDate            string
+	eventsOneTagIn        []string
+	eventsAllTagsIn       []string
+	eventsNoTagIn         []string
+	eventsRefreshInterval int
+	eventsKeepAlive       int
+	eventsData            string
+	// Client credentials for events
+	eventsClientID        string
+	eventsClientSecret    string
 )
 
 // eventsCmd represents the events command
@@ -27,15 +42,30 @@ var eventsCmd = &cobra.Command{
 This command opens a persistent connection to Izanami and streams events as they occur.
 Useful for monitoring feature flag changes in real-time.
 
+You can filter events by:
+  - Specific features (--features)
+  - Projects (--projects)
+  - Tags (--one-tag-in, --all-tags-in, --no-tag-in)
+  - User/context (--user, --context)
+
 Examples:
   # Watch all events
   iz events watch --client-id xxx --client-secret yyy
 
+  # Watch specific features
+  iz events watch --features feat1-uuid,feat2-uuid
+
+  # Watch all features in specific projects
+  iz events watch --projects proj1-uuid,proj2-uuid
+
+  # Watch with tag filtering
+  iz events watch --projects proj1-uuid --one-tag-in beta,experimental
+
   # Watch events with pretty JSON formatting
-  iz events watch --client-id xxx --client-secret yyy --pretty
+  iz events watch --pretty
 
   # Watch raw SSE format (shows event IDs and types)
-  iz events watch --client-id xxx --client-secret yyy --raw`,
+  iz events watch --raw`,
 }
 
 // eventsWatchCmd watches for events in real-time
@@ -48,6 +78,35 @@ and displays events as they occur.
 The connection will automatically reconnect if interrupted.
 Press Ctrl+C to stop watching.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Resolve client credentials
+		if eventsClientID != "" {
+			cfg.ClientID = eventsClientID
+		}
+		if eventsClientSecret != "" {
+			cfg.ClientSecret = eventsClientSecret
+		}
+
+		if cfg.ClientID == "" && cfg.ClientSecret == "" {
+			tenant := cfg.Tenant
+			var projects []string
+			if cfg.Project != "" {
+				projects = append(projects, cfg.Project)
+			}
+
+			clientID, clientSecret := cfg.ResolveClientCredentials(tenant, projects)
+			if clientID != "" && clientSecret != "" {
+				cfg.ClientID = clientID
+				cfg.ClientSecret = clientSecret
+				if cfg.Verbose {
+					if len(projects) > 0 {
+						fmt.Fprintf(os.Stderr, "Using client credentials from config (tenant: %s, projects: %v)\n", tenant, projects)
+					} else {
+						fmt.Fprintf(os.Stderr, "Using client credentials from config (tenant: %s)\n", tenant)
+					}
+				}
+			}
+		}
+
 		client, err := izanami.NewClient(cfg)
 		if err != nil {
 			return err
@@ -65,13 +124,49 @@ Press Ctrl+C to stop watching.`,
 			cancel()
 		}()
 
+		// Use context from flag or config
+		contextPath := eventsContext
+		if contextPath == "" {
+			contextPath = cfg.Context
+		}
+
+		// Parse payload if provided
+		var payload string
+		if eventsData != "" {
+			var payloadData interface{}
+			if err := parseJSONData(eventsData, &payloadData); err != nil {
+				return fmt.Errorf("invalid JSON payload: %w", err)
+			}
+			payloadBytes, err := json.Marshal(payloadData)
+			if err != nil {
+				return fmt.Errorf("failed to serialize payload: %w", err)
+			}
+			payload = string(payloadBytes)
+		}
+
+		// Build request
+		request := izanami.EventsWatchRequest{
+			User:              eventsUser,
+			Context:           contextPath,
+			Features:          eventsFeatures,
+			Projects:          eventsProjects,
+			Conditions:        eventsConditions,
+			Date:              eventsDate,
+			OneTagIn:          eventsOneTagIn,
+			AllTagsIn:         eventsAllTagsIn,
+			NoTagIn:           eventsNoTagIn,
+			RefreshInterval:   eventsRefreshInterval,
+			KeepAliveInterval: eventsKeepAlive,
+			Payload:           payload,
+		}
+
 		fmt.Fprintf(os.Stderr, "🔄 Connecting to Izanami event stream...\n")
 		fmt.Fprintf(os.Stderr, "   Press Ctrl+C to stop\n\n")
 
 		startTime := time.Now()
 		eventCount := 0
 
-		err = client.WatchEvents(ctx, func(event izanami.Event) error {
+		err = client.WatchEvents(ctx, request, func(event izanami.Event) error {
 			eventCount++
 
 			if eventsRaw {
@@ -134,4 +229,22 @@ func init() {
 
 	eventsWatchCmd.Flags().BoolVar(&eventsRaw, "raw", false, "Show raw SSE format (id, event, data)")
 	eventsWatchCmd.Flags().BoolVar(&eventsPretty, "pretty", false, "Pretty-print JSON output (default: compact)")
+
+	// Filtering flags
+	eventsWatchCmd.Flags().StringVar(&eventsUser, "user", "", "User for feature evaluation (default: *)")
+	eventsWatchCmd.Flags().StringVar(&eventsContext, "context", "", "Context path for evaluation")
+	eventsWatchCmd.Flags().StringSliceVar(&eventsFeatures, "features", []string{}, "Feature IDs to watch (comma-separated)")
+	eventsWatchCmd.Flags().StringSliceVar(&eventsProjects, "projects", []string{}, "Project IDs to watch (comma-separated)")
+	eventsWatchCmd.Flags().BoolVar(&eventsConditions, "conditions", false, "Include activation conditions in events")
+	eventsWatchCmd.Flags().StringVar(&eventsDate, "date", "", "Date for evaluation (ISO 8601 format)")
+	eventsWatchCmd.Flags().StringSliceVar(&eventsOneTagIn, "one-tag-in", []string{}, "Features must have at least one of these tags (comma-separated)")
+	eventsWatchCmd.Flags().StringSliceVar(&eventsAllTagsIn, "all-tags-in", []string{}, "Features must have all of these tags (comma-separated)")
+	eventsWatchCmd.Flags().StringSliceVar(&eventsNoTagIn, "no-tag-in", []string{}, "Features must not have any of these tags (comma-separated)")
+	eventsWatchCmd.Flags().IntVar(&eventsRefreshInterval, "refresh-interval", 0, "Periodic refresh interval in seconds (0 = no periodic refresh)")
+	eventsWatchCmd.Flags().IntVar(&eventsKeepAlive, "keep-alive-interval", 0, "Keep-alive interval in seconds (default: 25)")
+	eventsWatchCmd.Flags().StringVar(&eventsData, "data", "", "JSON payload for script features (from file with @file.json, stdin with -, or inline)")
+
+	// Client credentials
+	eventsWatchCmd.Flags().StringVar(&eventsClientID, "client-id", "", "Client ID for authentication (env: IZ_CLIENT_ID)")
+	eventsWatchCmd.Flags().StringVar(&eventsClientSecret, "client-secret", "", "Client secret for authentication (env: IZ_CLIENT_SECRET)")
 }
