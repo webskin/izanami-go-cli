@@ -514,6 +514,8 @@ Examples:
 		if contextPath == "" {
 			contextPath = cfg.Context
 		}
+		// Ensure context has leading slash if specified
+		contextPath = ensureLeadingSlash(contextPath)
 
 		// Parse payload if provided
 		var payload string
@@ -761,6 +763,8 @@ Examples:
 		if contextPath == "" {
 			contextPath = cfg.Context
 		}
+		// Ensure context has leading slash if specified
+		contextPath = ensureLeadingSlash(contextPath)
 
 		// Parse payload if provided
 		var payload string
@@ -875,6 +879,14 @@ func isUUID(s string) bool {
 	uuidPattern := `^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`
 	matched, _ := regexp.MatchString(uuidPattern, s)
 	return matched
+}
+
+// ensureLeadingSlash adds a leading slash to the context path if it's not empty and doesn't have one
+func ensureLeadingSlash(context string) string {
+	if context != "" && context[0] != '/' {
+		return "/" + context
+	}
+	return context
 }
 
 // parseJSONData parses JSON data from a file, stdin, or string
