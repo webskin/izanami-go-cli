@@ -1,5 +1,21 @@
 # TODO
 
+## User Subcommands Testing
+
+The following `iz admin users` subcommands need to be tested:
+- `create` - Create a new user
+- `delete` - Delete a user
+- `get-for-tenant` - Get user's rights for a specific tenant
+- `invite-to-project` - Invite multiple users to a project with specified rights
+- `invite-to-tenant` - Invite multiple users to a tenant with specified rights
+- `list-for-project` - List all users with rights for a specific project
+- `list-for-tenant` - List all users with rights for a specific tenant
+- `search` - Search for users by username
+- `update` - Update user information (email, default tenant)
+- `update-project-rights` - Update user's rights for a specific project
+- `update-rights` - Update user's global rights (admin status and tenant rights)
+- `update-tenant-rights` - Update user's rights for a specific tenant
+
 ## --project A --project B vs --projects A,B consistency
 
 ## CLI Configuration Management
