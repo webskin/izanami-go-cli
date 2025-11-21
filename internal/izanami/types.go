@@ -454,8 +454,13 @@ type User struct {
 	Password      string                 `json:"password,omitempty"` // Only for creation/update
 	Admin         bool                   `json:"admin"`
 	UserType      string                 `json:"userType"` // INTERNAL, OTOROSHI, OIDC
-	DefaultTenant string                 `json:"defaultTenant,omitempty"`
-	Rights        map[string]TenantRight `json:"rights,omitempty"`
+	DefaultTenant *string                `json:"defaultTenant"` // Pointer to handle null
+	Rights        UserRights             `json:"rights,omitempty"`
+}
+
+// UserRights wraps the tenants map as returned by the API
+type UserRights struct {
+	Tenants map[string]TenantRight `json:"tenants"`
 }
 
 // UserListItem represents a user in the list response (simplified format)
