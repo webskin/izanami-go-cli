@@ -24,10 +24,10 @@ func TestClient_Health(t *testing.T) {
 	defer server.Close()
 
 	config := &Config{
-		BaseURL:      server.URL,
+		BaseURL:  server.URL,
 		Username: "test-user",
 		JwtToken: "test-jwt-token",
-		Timeout:      30,
+		Timeout:  30,
 	}
 
 	client, err := NewClient(config)
@@ -72,10 +72,10 @@ func TestClient_Search(t *testing.T) {
 	defer server.Close()
 
 	config := &Config{
-		BaseURL:      server.URL,
+		BaseURL:  server.URL,
 		Username: "test-user",
 		JwtToken: "test-jwt-token",
-		Timeout:      30,
+		Timeout:  30,
 	}
 
 	client, err := NewClient(config)
@@ -109,10 +109,10 @@ func TestClient_Search_Global(t *testing.T) {
 	defer server.Close()
 
 	config := &Config{
-		BaseURL:      server.URL,
+		BaseURL:  server.URL,
 		Username: "test-user",
 		JwtToken: "test-jwt-token",
-		Timeout:      30,
+		Timeout:  30,
 	}
 
 	client, err := NewClient(config)
@@ -152,10 +152,10 @@ func TestClient_Export(t *testing.T) {
 	defer server.Close()
 
 	config := &Config{
-		BaseURL:      server.URL,
+		BaseURL:  server.URL,
 		Username: "test-user",
 		JwtToken: "test-jwt-token",
-		Timeout:      30,
+		Timeout:  30,
 	}
 
 	client, err := NewClient(config)

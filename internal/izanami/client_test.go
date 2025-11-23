@@ -26,10 +26,10 @@ func TestNewClient(t *testing.T) {
 		{
 			name: "valid client auth",
 			config: &Config{
-				BaseURL:      "http://localhost:9000",
+				BaseURL:  "http://localhost:9000",
 				Username: "test-user",
 				JwtToken: "test-jwt-token",
-				Timeout:      30,
+				Timeout:  30,
 			},
 			wantErr: false,
 		},
@@ -85,10 +85,10 @@ func TestClient_ErrorHandling(t *testing.T) {
 	defer server.Close()
 
 	config := &Config{
-		BaseURL:      server.URL,
+		BaseURL:  server.URL,
 		Username: "test-user",
 		JwtToken: "test-jwt-token",
-		Timeout:      30,
+		Timeout:  30,
 	}
 
 	client, err := NewClient(config)
@@ -123,10 +123,10 @@ func TestClient_Login(t *testing.T) {
 	defer server.Close()
 
 	config := &Config{
-		BaseURL:      server.URL,
+		BaseURL:  server.URL,
 		Username: "test-user",
 		JwtToken: "test-jwt-token",
-		Timeout:      30,
+		Timeout:  30,
 	}
 
 	client, err := NewClient(config)
@@ -221,10 +221,10 @@ func TestClient_Hooks(t *testing.T) {
 	defer server.Close()
 
 	config := &Config{
-		BaseURL:      server.URL,
+		BaseURL:  server.URL,
 		Username: "test-user",
 		JwtToken: "test-jwt-token",
-		Timeout:      30,
+		Timeout:  30,
 	}
 
 	client, err := NewClient(config)
@@ -259,11 +259,11 @@ func TestClient_StructuredLogger(t *testing.T) {
 	defer server.Close()
 
 	config := &Config{
-		BaseURL:      server.URL,
+		BaseURL:  server.URL,
 		Username: "test-user",
 		JwtToken: "test-jwt-token",
-		Timeout:      30,
-		Verbose:      true,
+		Timeout:  30,
+		Verbose:  true,
 	}
 
 	client, err := NewClient(config)

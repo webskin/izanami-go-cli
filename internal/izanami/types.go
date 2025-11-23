@@ -78,8 +78,8 @@ type ActivationWithConditions struct {
 
 // ContextOverload represents feature conditions for a specific context
 type ContextOverload struct {
-	Enabled    bool                   `json:"enabled"`
-	Conditions []ActivationCondition  `json:"conditions"`
+	Enabled    bool                  `json:"enabled"`
+	Conditions []ActivationCondition `json:"conditions"`
 }
 
 // ActivationsWithConditions is a map of feature IDs to their activation results
@@ -449,13 +449,13 @@ type Webhook struct {
 
 // User represents an Izanami user
 type User struct {
-	Username      string                 `json:"username"`
-	Email         string                 `json:"email"`
-	Password      string                 `json:"password,omitempty"` // Only for creation/update
-	Admin         bool                   `json:"admin"`
-	UserType      string                 `json:"userType"` // INTERNAL, OTOROSHI, OIDC
-	DefaultTenant *string                `json:"defaultTenant"` // Pointer to handle null
-	Rights        UserRights             `json:"rights,omitempty"`
+	Username      string     `json:"username"`
+	Email         string     `json:"email"`
+	Password      string     `json:"password,omitempty"` // Only for creation/update
+	Admin         bool       `json:"admin"`
+	UserType      string     `json:"userType"`      // INTERNAL, OTOROSHI, OIDC
+	DefaultTenant *string    `json:"defaultTenant"` // Pointer to handle null
+	Rights        UserRights `json:"rights,omitempty"`
 }
 
 // UserRights wraps the tenants map as returned by the API
@@ -509,16 +509,16 @@ type ProjectScopedUser struct {
 	Admin         bool    `json:"admin"`
 	DefaultTenant string  `json:"defaultTenant,omitempty"`
 	TenantAdmin   bool    `json:"tenantAdmin"`
-	Right         string  `json:"right"`         // Project-level right
-	DefaultRight  *string `json:"defaultRight"`  // Default project right at tenant level
+	Right         string  `json:"right"`        // Project-level right
+	DefaultRight  *string `json:"defaultRight"` // Default project right at tenant level
 }
 
 // TenantRight represents user rights for a tenant
 type TenantRight struct {
-	Level              string                         `json:"level"` // Read, Write, Admin
-	Projects           map[string]ProjectRight        `json:"projects,omitempty"`
-	Keys               map[string]GeneralAtomicRight  `json:"keys,omitempty"`
-	Webhooks           map[string]GeneralAtomicRight  `json:"webhooks,omitempty"`
+	Level               string                        `json:"level"` // Read, Write, Admin
+	Projects            map[string]ProjectRight       `json:"projects,omitempty"`
+	Keys                map[string]GeneralAtomicRight `json:"keys,omitempty"`
+	Webhooks            map[string]GeneralAtomicRight `json:"webhooks,omitempty"`
 	DefaultProjectRight *string                       `json:"defaultProjectRight,omitempty"`
 	DefaultKeyRight     *string                       `json:"defaultKeyRight,omitempty"`
 	DefaultWebhookRight *string                       `json:"defaultWebhookRight,omitempty"`
@@ -550,10 +550,10 @@ type UserRightsUpdateRequest struct {
 
 // TenantRightUpdateRequest represents a request to update user rights for a specific tenant
 type TenantRightUpdateRequest struct {
-	Level               *string  `json:"level,omitempty"`
-	DefaultProjectRight *string  `json:"defaultProjectRight,omitempty"`
-	DefaultKeyRight     *string  `json:"defaultKeyRight,omitempty"`
-	DefaultWebhookRight *string  `json:"defaultWebhookRight,omitempty"`
+	Level               *string                       `json:"level,omitempty"`
+	DefaultProjectRight *string                       `json:"defaultProjectRight,omitempty"`
+	DefaultKeyRight     *string                       `json:"defaultKeyRight,omitempty"`
+	DefaultWebhookRight *string                       `json:"defaultWebhookRight,omitempty"`
 	Projects            map[string]ProjectRight       `json:"projects,omitempty"`
 	Keys                map[string]GeneralAtomicRight `json:"keys,omitempty"`
 	Webhooks            map[string]GeneralAtomicRight `json:"webhooks,omitempty"`

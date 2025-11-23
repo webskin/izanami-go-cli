@@ -26,13 +26,13 @@ var (
 	checkClientID     string
 	checkClientSecret string
 	// Bulk check parameters
-	checkFeatures     []string
-	checkProjects     []string
-	checkConditions   bool
-	checkDate         string
-	checkOneTagIn     []string
-	checkAllTagsIn    []string
-	checkNoTagIn      []string
+	checkFeatures       []string
+	checkProjects       []string
+	checkConditions     bool
+	checkDate           string
+	checkOneTagIn       []string
+	checkAllTagsIn      []string
+	checkNoTagIn        []string
 	featuresDeleteForce bool
 )
 

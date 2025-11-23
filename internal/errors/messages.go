@@ -64,17 +64,17 @@ const (
 	MsgFailedToDeleteTag = "failed to delete tag"
 
 	// User error messages
-	MsgFailedToListUsers             = "failed to list users"
-	MsgFailedToGetUser               = "failed to get user"
-	MsgFailedToCreateUser            = "failed to create user"
-	MsgFailedToUpdateUser            = "failed to update user"
-	MsgFailedToDeleteUser            = "failed to delete user"
-	MsgFailedToUpdateUserRights      = "failed to update user rights"
-	MsgFailedToSearchUsers           = "failed to search users"
-	MsgFailedToInviteUsersToTenant   = "failed to invite users to tenant"
-	MsgFailedToInviteUsersToProject  = "failed to invite users to project"
-	MsgFailedToUpdateTenantRights    = "failed to update user tenant rights"
-	MsgFailedToUpdateProjectRights   = "failed to update user project rights"
+	MsgFailedToListUsers            = "failed to list users"
+	MsgFailedToGetUser              = "failed to get user"
+	MsgFailedToCreateUser           = "failed to create user"
+	MsgFailedToUpdateUser           = "failed to update user"
+	MsgFailedToDeleteUser           = "failed to delete user"
+	MsgFailedToUpdateUserRights     = "failed to update user rights"
+	MsgFailedToSearchUsers          = "failed to search users"
+	MsgFailedToInviteUsersToTenant  = "failed to invite users to tenant"
+	MsgFailedToInviteUsersToProject = "failed to invite users to project"
+	MsgFailedToUpdateTenantRights   = "failed to update user tenant rights"
+	MsgFailedToUpdateProjectRights  = "failed to update user project rights"
 
 	// Event/Stream error messages
 	MsgFailedToConnectToEventStream = "failed to connect to event stream"

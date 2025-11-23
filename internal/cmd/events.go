@@ -29,8 +29,8 @@ var (
 	eventsKeepAlive       int
 	eventsData            string
 	// Client credentials for events
-	eventsClientID        string
-	eventsClientSecret    string
+	eventsClientID     string
+	eventsClientSecret string
 )
 
 // eventsCmd represents the events command

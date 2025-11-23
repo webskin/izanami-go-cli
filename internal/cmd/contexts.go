@@ -11,12 +11,12 @@ import (
 )
 
 var (
-	contextProject   string
-	contextAll       bool
-	contextParent    string
-	contextProtected bool
-	contextGlobal    bool
-	contextData      string
+	contextProject      string
+	contextAll          bool
+	contextParent       string
+	contextProtected    bool
+	contextGlobal       bool
+	contextData         string
 	contextsDeleteForce bool
 )
 

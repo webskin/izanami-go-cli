@@ -15,18 +15,18 @@ import (
 )
 
 var (
-	userName           string
-	userEmail          string
-	userPassword       string
-	userAdmin          bool
-	userType           string
-	userDefaultTenant  string
-	userRightsFile     string
-	userTenantRight    string
-	userProjectRight   string
-	usersDeleteForce   bool
-	usersInviteFile    string
-	usersSearchCount   int
+	userName          string
+	userEmail         string
+	userPassword      string
+	userAdmin         bool
+	userType          string
+	userDefaultTenant string
+	userRightsFile    string
+	userTenantRight   string
+	userProjectRight  string
+	usersDeleteForce  bool
+	usersInviteFile   string
+	usersSearchCount  int
 )
 
 // usersCmd represents the users command

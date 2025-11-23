@@ -35,10 +35,10 @@ func TestClient_ListContexts(t *testing.T) {
 	defer server.Close()
 
 	config := &Config{
-		BaseURL:      server.URL,
+		BaseURL:  server.URL,
 		Username: "test-user",
 		JwtToken: "test-jwt-token",
-		Timeout:      30,
+		Timeout:  30,
 	}
 
 	client, err := NewClient(config)
@@ -77,10 +77,10 @@ func TestClient_CreateContext(t *testing.T) {
 	defer server.Close()
 
 	config := &Config{
-		BaseURL:      server.URL,
+		BaseURL:  server.URL,
 		Username: "test-user",
 		JwtToken: "test-jwt-token",
-		Timeout:      30,
+		Timeout:  30,
 	}
 
 	client, err := NewClient(config)
@@ -103,10 +103,10 @@ func TestClient_DeleteContext(t *testing.T) {
 	defer server.Close()
 
 	config := &Config{
-		BaseURL:      server.URL,
+		BaseURL:  server.URL,
 		Username: "test-user",
 		JwtToken: "test-jwt-token",
-		Timeout:      30,
+		Timeout:  30,
 	}
 
 	client, err := NewClient(config)

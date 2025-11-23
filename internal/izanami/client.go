@@ -21,11 +21,11 @@ const (
 
 // Client represents an Izanami HTTP client
 type Client struct {
-	http              *resty.Client
-	config            *Config
-	beforeRequest     []func(*resty.Request) error
-	afterResponse     []func(*resty.Response) error
-	structuredLogger  func(level, message string, fields map[string]interface{})
+	http             *resty.Client
+	config           *Config
+	beforeRequest    []func(*resty.Request) error
+	afterResponse    []func(*resty.Response) error
+	structuredLogger func(level, message string, fields map[string]interface{})
 }
 
 // APIError represents a structured API error with status code and message

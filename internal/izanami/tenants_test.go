@@ -32,10 +32,10 @@ func TestClient_ListTenants(t *testing.T) {
 	defer server.Close()
 
 	config := &Config{
-		BaseURL:      server.URL,
+		BaseURL:  server.URL,
 		Username: "test-user",
 		JwtToken: "test-jwt-token",
-		Timeout:      30,
+		Timeout:  30,
 	}
 
 	client, err := NewClient(config)
@@ -66,10 +66,10 @@ func TestClient_GetTenant(t *testing.T) {
 	defer server.Close()
 
 	config := &Config{
-		BaseURL:      server.URL,
+		BaseURL:  server.URL,
 		Username: "test-user",
 		JwtToken: "test-jwt-token",
-		Timeout:      30,
+		Timeout:  30,
 	}
 
 	client, err := NewClient(config)
@@ -113,10 +113,10 @@ func TestClient_CreateTenant(t *testing.T) {
 	defer server.Close()
 
 	config := &Config{
-		BaseURL:      server.URL,
+		BaseURL:  server.URL,
 		Username: "test-user",
 		JwtToken: "test-jwt-token",
-		Timeout:      30,
+		Timeout:  30,
 	}
 
 	client, err := NewClient(config)
@@ -150,10 +150,10 @@ func TestClient_UpdateTenant(t *testing.T) {
 	defer server.Close()
 
 	config := &Config{
-		BaseURL:      server.URL,
+		BaseURL:  server.URL,
 		Username: "test-user",
 		JwtToken: "test-jwt-token",
-		Timeout:      30,
+		Timeout:  30,
 	}
 
 	client, err := NewClient(config)
@@ -175,10 +175,10 @@ func TestClient_DeleteTenant(t *testing.T) {
 	defer server.Close()
 
 	config := &Config{
-		BaseURL:      server.URL,
+		BaseURL:  server.URL,
 		Username: "test-user",
 		JwtToken: "test-jwt-token",
-		Timeout:      30,
+		Timeout:  30,
 	}
 
 	client, err := NewClient(config)

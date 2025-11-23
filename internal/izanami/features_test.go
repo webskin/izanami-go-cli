@@ -42,10 +42,10 @@ func TestClient_ListFeatures(t *testing.T) {
 	defer server.Close()
 
 	config := &Config{
-		BaseURL:      server.URL,
+		BaseURL:  server.URL,
 		Username: "test-user",
 		JwtToken: "test-jwt-token",
-		Timeout:      30,
+		Timeout:  30,
 	}
 
 	client, err := NewClient(config)
@@ -79,10 +79,10 @@ func TestClient_GetFeature(t *testing.T) {
 	defer server.Close()
 
 	config := &Config{
-		BaseURL:      server.URL,
+		BaseURL:  server.URL,
 		Username: "test-user",
 		JwtToken: "test-jwt-token",
-		Timeout:      30,
+		Timeout:  30,
 	}
 
 	client, err := NewClient(config)
@@ -131,10 +131,10 @@ func TestClient_CreateFeature(t *testing.T) {
 	defer server.Close()
 
 	config := &Config{
-		BaseURL:      server.URL,
+		BaseURL:  server.URL,
 		Username: "test-user",
 		JwtToken: "test-jwt-token",
-		Timeout:      30,
+		Timeout:  30,
 	}
 
 	client, err := NewClient(config)
@@ -171,10 +171,10 @@ func TestClient_UpdateFeature(t *testing.T) {
 	defer server.Close()
 
 	config := &Config{
-		BaseURL:      server.URL,
+		BaseURL:  server.URL,
 		Username: "test-user",
 		JwtToken: "test-jwt-token",
-		Timeout:      30,
+		Timeout:  30,
 	}
 
 	client, err := NewClient(config)
@@ -196,10 +196,10 @@ func TestClient_DeleteFeature(t *testing.T) {
 	defer server.Close()
 
 	config := &Config{
-		BaseURL:      server.URL,
+		BaseURL:  server.URL,
 		Username: "test-user",
 		JwtToken: "test-jwt-token",
-		Timeout:      30,
+		Timeout:  30,
 	}
 
 	client, err := NewClient(config)

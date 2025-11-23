@@ -13,11 +13,11 @@ import (
 )
 
 var (
-	keyName        string
-	keyDescription string
-	keyProjects    []string
-	keyEnabled     bool
-	keyAdmin       bool
+	keyName         string
+	keyDescription  string
+	keyProjects     []string
+	keyEnabled      bool
+	keyAdmin        bool
 	keysDeleteForce bool
 )
 

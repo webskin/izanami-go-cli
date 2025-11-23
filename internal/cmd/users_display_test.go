@@ -27,8 +27,8 @@ func TestPrintUserDetails(t *testing.T) {
 						"test-project2": {Level: "Admin"},
 					},
 					Keys: map[string]izanami.GeneralAtomicRight{
-						"test-key2-tenant-wide":   {Level: "Admin"},
-						"my-project-key-from-cli": {Level: "Admin"},
+						"test-key2-tenant-wide":     {Level: "Admin"},
+						"my-project-key-from-cli":   {Level: "Admin"},
 						"my-project-key-from-cli-2": {Level: "Admin"},
 					},
 					Webhooks:            map[string]izanami.GeneralAtomicRight{},
