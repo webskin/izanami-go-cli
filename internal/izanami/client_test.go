@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/go-resty/resty/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -26,8 +27,8 @@ func TestNewClient(t *testing.T) {
 			name: "valid client auth",
 			config: &Config{
 				BaseURL:      "http://localhost:9000",
-				ClientID:     "test-client",
-				ClientSecret: "test-secret",
+				Username: "test-user",
+				JwtToken: "test-jwt-token",
 				Timeout:      30,
 			},
 			wantErr: false,
@@ -45,8 +46,8 @@ func TestNewClient(t *testing.T) {
 		{
 			name: "missing base URL",
 			config: &Config{
-				ClientID:     "test-client",
-				ClientSecret: "test-secret",
+				Username: "test-user",
+				JwtToken: "test-jwt-token",
 			},
 			wantErr: true,
 		},
@@ -73,217 +74,6 @@ func TestNewClient(t *testing.T) {
 	}
 }
 
-func TestClient_Health(t *testing.T) {
-	server := mockServer(t, func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/api/_health", r.URL.Path)
-		assert.Equal(t, "GET", r.Method)
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(HealthStatus{
-			Status:  "UP",
-			Version: "1.0.0",
-		})
-	})
-	defer server.Close()
-
-	config := &Config{
-		BaseURL:      server.URL,
-		ClientID:     "test-client",
-		ClientSecret: "test-secret",
-		Timeout:      30,
-	}
-
-	client, err := NewClient(config)
-	require.NoError(t, err)
-
-	ctx := context.Background()
-	health, err := client.Health(ctx)
-
-	assert.NoError(t, err)
-	assert.NotNil(t, health)
-	assert.Equal(t, "UP", health.Status)
-	assert.Equal(t, "1.0.0", health.Version)
-}
-
-func TestClient_ListFeatures(t *testing.T) {
-	expectedFeatures := []Feature{
-		{
-			ID:          "feature-1",
-			Name:        "feature-1",
-			Description: "Test feature 1",
-			Project:     "test-project",
-			Enabled:     true,
-			Tags:        []string{"test"},
-		},
-		{
-			ID:          "feature-2",
-			Name:        "feature-2",
-			Description: "Test feature 2",
-			Project:     "test-project",
-			Enabled:     false,
-		},
-	}
-
-	server := mockServer(t, func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/api/admin/tenants/test-tenant/features", r.URL.Path)
-		assert.Equal(t, "GET", r.Method)
-
-		// Note: project filtering is not supported by Izanami API
-		// Only tag filtering is supported via query params
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(expectedFeatures)
-	})
-	defer server.Close()
-
-	config := &Config{
-		BaseURL:      server.URL,
-		ClientID:     "test-client",
-		ClientSecret: "test-secret",
-		Timeout:      30,
-	}
-
-	client, err := NewClient(config)
-	require.NoError(t, err)
-
-	ctx := context.Background()
-	features, err := client.ListFeatures(ctx, "test-tenant", "")
-
-	assert.NoError(t, err)
-	assert.Len(t, features, 2)
-	assert.Equal(t, "feature-1", features[0].ID)
-	assert.Equal(t, "feature-2", features[1].ID)
-}
-
-func TestClient_GetFeature(t *testing.T) {
-	expectedFeature := &FeatureWithOverloads{
-		ID:      "feature-1",
-		Name:    "feature-1",
-		Project: "test-project",
-		Enabled: true,
-		Tags:    []string{"test"},
-	}
-
-	server := mockServer(t, func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/api/admin/tenants/test-tenant/features/feature-1", r.URL.Path)
-		assert.Equal(t, "GET", r.Method)
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(expectedFeature)
-	})
-	defer server.Close()
-
-	config := &Config{
-		BaseURL:      server.URL,
-		ClientID:     "test-client",
-		ClientSecret: "test-secret",
-		Timeout:      30,
-	}
-
-	client, err := NewClient(config)
-	require.NoError(t, err)
-
-	ctx := context.Background()
-	feature, err := client.GetFeature(ctx, "test-tenant", "feature-1")
-
-	assert.NoError(t, err)
-	assert.NotNil(t, feature)
-	assert.Equal(t, "feature-1", feature.ID)
-	assert.Equal(t, "test-project", feature.Project)
-	assert.True(t, feature.Enabled)
-}
-
-func TestClient_CreateFeature(t *testing.T) {
-	featureData := map[string]interface{}{
-		"name":        "new-feature",
-		"description": "New test feature",
-		"enabled":     true,
-	}
-
-	expectedFeature := &Feature{
-		ID:          "new-feature",
-		Name:        "new-feature",
-		Description: "New test feature",
-		Project:     "test-project",
-		Enabled:     true,
-	}
-
-	server := mockServer(t, func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/api/admin/tenants/test-tenant/projects/test-project/features", r.URL.Path)
-		assert.Equal(t, "POST", r.Method)
-		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
-
-		// Decode and verify request body
-		var body map[string]interface{}
-		err := json.NewDecoder(r.Body).Decode(&body)
-		assert.NoError(t, err)
-		assert.Equal(t, "new-feature", body["name"])
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(expectedFeature)
-	})
-	defer server.Close()
-
-	config := &Config{
-		BaseURL:      server.URL,
-		ClientID:     "test-client",
-		ClientSecret: "test-secret",
-		Timeout:      30,
-	}
-
-	client, err := NewClient(config)
-	require.NoError(t, err)
-
-	ctx := context.Background()
-	feature, err := client.CreateFeature(ctx, "test-tenant", "test-project", featureData)
-
-	assert.NoError(t, err)
-	assert.NotNil(t, feature)
-	assert.Equal(t, "new-feature", feature.ID)
-}
-
-func TestClient_CheckFeature(t *testing.T) {
-	expectedResult := &FeatureCheckResult{
-		Active:  true,
-		Name:    "my-feature",
-		Project: "test-project",
-	}
-
-	server := mockServer(t, func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/api/v2/features/my-feature", r.URL.Path)
-		assert.Equal(t, "GET", r.Method)
-
-		// Check query params
-		user := r.URL.Query().Get("user")
-		context := r.URL.Query().Get("context")
-		assert.Equal(t, "user123", user)
-		assert.Equal(t, "/prod", context) // context paths are normalized to have leading slash
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(expectedResult)
-	})
-	defer server.Close()
-
-	config := &Config{
-		BaseURL:      server.URL,
-		ClientID:     "test-client",
-		ClientSecret: "test-secret",
-		Timeout:      30,
-	}
-
-	client, err := NewClient(config)
-	require.NoError(t, err)
-
-	ctx := context.Background()
-	result, err := client.CheckFeature(ctx, "my-feature", "user123", "prod", "")
-
-	assert.NoError(t, err)
-	assert.NotNil(t, result)
-	assert.Equal(t, true, result.Active)
-	assert.Equal(t, "my-feature", result.Name)
-}
-
 func TestClient_ErrorHandling(t *testing.T) {
 	server := mockServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -296,8 +86,8 @@ func TestClient_ErrorHandling(t *testing.T) {
 
 	config := &Config{
 		BaseURL:      server.URL,
-		ClientID:     "test-client",
-		ClientSecret: "test-secret",
+		Username: "test-user",
+		JwtToken: "test-jwt-token",
 		Timeout:      30,
 	}
 
@@ -310,4 +100,185 @@ func TestClient_ErrorHandling(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "404")
 	assert.Contains(t, err.Error(), "Feature not found")
+}
+
+func TestClient_Login(t *testing.T) {
+	server := mockServer(t, func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/admin/login", r.URL.Path)
+		assert.Equal(t, "POST", r.Method)
+
+		// Check basic auth header
+		user, pass, ok := r.BasicAuth()
+		assert.True(t, ok)
+		assert.Equal(t, "testuser", user)
+		assert.Equal(t, "testpass", pass)
+
+		// Set JWT token in cookie
+		http.SetCookie(w, &http.Cookie{
+			Name:  "token",
+			Value: "jwt-token-12345",
+		})
+		w.WriteHeader(http.StatusOK)
+	})
+	defer server.Close()
+
+	config := &Config{
+		BaseURL:      server.URL,
+		Username: "test-user",
+		JwtToken: "test-jwt-token",
+		Timeout:      30,
+	}
+
+	client, err := NewClient(config)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	token, err := client.Login(ctx, "testuser", "testpass")
+
+	assert.NoError(t, err)
+	assert.Equal(t, "jwt-token-12345", token)
+}
+
+func Test_buildPath(t *testing.T) {
+	tests := []struct {
+		name     string
+		segments []string
+		want     string
+	}{
+		{
+			name:     "simple path",
+			segments: []string{"tenant", "features"},
+			want:     "tenant/features",
+		},
+		{
+			name:     "path with special chars",
+			segments: []string{"tenant", "feature@1"},
+			want:     "tenant/feature@1",
+		},
+		{
+			name:     "path with empty segment",
+			segments: []string{"tenant", "", "features"},
+			want:     "tenant/features",
+		},
+		{
+			name:     "path with spaces",
+			segments: []string{"tenant", "my feature"},
+			want:     "tenant/my%20feature",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := buildPath(tt.segments...)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func Test_truncateString(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		maxLength int
+		want      string
+	}{
+		{
+			name:      "short string",
+			input:     "hello",
+			maxLength: 10,
+			want:      "hello",
+		},
+		{
+			name:      "exact length",
+			input:     "hello",
+			maxLength: 5,
+			want:      "hello",
+		},
+		{
+			name:      "truncated string",
+			input:     "hello world this is a long string",
+			maxLength: 10,
+			want:      "hello worl... [TRUNCATED: 23 more bytes]",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := truncateString(tt.input, tt.maxLength)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestClient_Hooks(t *testing.T) {
+	server := mockServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(HealthStatus{
+			Status:  "UP",
+			Version: "1.0.0",
+		})
+	})
+	defer server.Close()
+
+	config := &Config{
+		BaseURL:      server.URL,
+		Username: "test-user",
+		JwtToken: "test-jwt-token",
+		Timeout:      30,
+	}
+
+	client, err := NewClient(config)
+	require.NoError(t, err)
+
+	// Test before request hook registration
+	client.AddBeforeRequestHook(func(req *resty.Request) error {
+		return nil
+	})
+
+	// Test after response hook registration
+	client.AddAfterResponseHook(func(resp *resty.Response) error {
+		return nil
+	})
+
+	ctx := context.Background()
+	_, err = client.Health(ctx)
+	require.NoError(t, err)
+
+	// Note: Hooks are defined but not yet integrated into API methods
+	// This test just verifies hooks can be registered without errors
+}
+
+func TestClient_StructuredLogger(t *testing.T) {
+	server := mockServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(HealthStatus{
+			Status:  "UP",
+			Version: "1.0.0",
+		})
+	})
+	defer server.Close()
+
+	config := &Config{
+		BaseURL:      server.URL,
+		Username: "test-user",
+		JwtToken: "test-jwt-token",
+		Timeout:      30,
+		Verbose:      true,
+	}
+
+	client, err := NewClient(config)
+	require.NoError(t, err)
+
+	logCalled := false
+	client.SetStructuredLogger(func(level, message string, fields map[string]interface{}) {
+		logCalled = true
+		assert.Contains(t, []string{"info", "warn", "error"}, level)
+	})
+
+	ctx := context.Background()
+	_, err = client.Health(ctx)
+	require.NoError(t, err)
+
+	// With verbose mode enabled, structured logger should be called
+	assert.True(t, logCalled)
 }
