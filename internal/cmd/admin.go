@@ -155,7 +155,7 @@ var adminTenantsCreateCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Fprintf(os.Stderr, "Tenant created successfully: %s\n", tenantName)
+		fmt.Fprintf(cmd.OutOrStderr(), "Tenant created successfully: %s\n", tenantName)
 		return nil
 	},
 }
@@ -224,7 +224,7 @@ Examples:
 			return err
 		}
 
-		fmt.Fprintf(os.Stderr, "Tenant updated successfully: %s\n", tenantName)
+		fmt.Fprintf(cmd.OutOrStderr(), "Tenant updated successfully: %s\n", tenantName)
 		return nil
 	},
 }
@@ -254,7 +254,7 @@ var adminTenantsDeleteCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Fprintf(os.Stderr, "Tenant deleted successfully: %s\n", tenantName)
+		fmt.Fprintf(cmd.OutOrStderr(), "Tenant deleted successfully: %s\n", tenantName)
 		return nil
 	},
 }
@@ -354,7 +354,7 @@ var adminProjectsCreateCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Fprintf(os.Stderr, "Project created successfully: %s\n", projectName)
+		fmt.Fprintf(cmd.OutOrStderr(), "Project created successfully: %s\n", projectName)
 		return nil
 	},
 }
@@ -388,7 +388,7 @@ var adminProjectsDeleteCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Fprintf(os.Stderr, "Project deleted successfully: %s\n", projectName)
+		fmt.Fprintf(cmd.OutOrStderr(), "Project deleted successfully: %s\n", projectName)
 		return nil
 	},
 }
@@ -488,7 +488,7 @@ var adminTagsCreateCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Fprintf(os.Stderr, "Tag created successfully: %s\n", tagName)
+		fmt.Fprintf(cmd.OutOrStderr(), "Tag created successfully: %s\n", tagName)
 		return nil
 	},
 }
@@ -521,7 +521,7 @@ var adminTagsDeleteCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Fprintf(os.Stderr, "Tag deleted successfully: %s\n", tagName)
+		fmt.Fprintf(cmd.OutOrStderr(), "Tag deleted successfully: %s\n", tagName)
 		return nil
 	},
 }
@@ -614,9 +614,9 @@ Examples:
 			if err := os.WriteFile(exportOutput, []byte(data), 0644); err != nil {
 				return fmt.Errorf("failed to write export file: %w", err)
 			}
-			fmt.Fprintf(os.Stderr, "Export written to: %s\n", exportOutput)
+			fmt.Fprintf(cmd.OutOrStderr(), "Export written to: %s\n", exportOutput)
 		} else {
-			fmt.Print(data)
+			fmt.Fprint(cmd.OutOrStdout(), data)
 		}
 
 		return nil
@@ -669,10 +669,10 @@ Examples:
 			return err
 		}
 
-		fmt.Fprintf(os.Stderr, "Import started: %s\n", status.ID)
-		fmt.Fprintf(os.Stderr, "Status: %s\n", status.Status)
+		fmt.Fprintf(cmd.OutOrStderr(), "Import started: %s\n", status.ID)
+		fmt.Fprintf(cmd.OutOrStderr(), "Status: %s\n", status.Status)
 		if status.Message != "" {
-			fmt.Fprintf(os.Stderr, "Message: %s\n", status.Message)
+			fmt.Fprintf(cmd.OutOrStderr(), "Message: %s\n", status.Message)
 		}
 
 		return nil
