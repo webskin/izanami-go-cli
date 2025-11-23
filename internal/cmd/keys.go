@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/webskin/izanami-go-cli/internal/errors"
@@ -62,7 +61,7 @@ var keysListCmd = &cobra.Command{
 		}
 
 		if len(keys) == 0 {
-			fmt.Fprintln(os.Stderr, "No API keys found")
+			fmt.Fprintln(cmd.OutOrStderr(), "No API keys found")
 			return nil
 		}
 
@@ -133,22 +132,22 @@ var keysCreateCmd = &cobra.Command{
 
 		// Print the result with the secret
 		if output.Format(outputFormat) == output.JSON {
-			encoder := json.NewEncoder(os.Stdout)
+			encoder := json.NewEncoder(cmd.OutOrStdout())
 			encoder.SetIndent("", "  ")
 			return encoder.Encode(result)
 		}
 
 		// For table output, show important info
-		fmt.Fprintf(os.Stderr, "✅ API key created successfully\n\n")
-		fmt.Fprintf(os.Stderr, "Client ID:     %s\n", result.ClientID)
-		fmt.Fprintf(os.Stderr, "Client Secret: %s\n", result.ClientSecret)
-		fmt.Fprintf(os.Stderr, "Name:          %s\n", result.Name)
-		fmt.Fprintf(os.Stderr, "Enabled:       %t\n", result.Enabled)
-		fmt.Fprintf(os.Stderr, "Admin:         %t\n", result.Admin)
+		fmt.Fprintf(cmd.OutOrStderr(), "✅ API key created successfully\n\n")
+		fmt.Fprintf(cmd.OutOrStderr(), "Client ID:     %s\n", result.ClientID)
+		fmt.Fprintf(cmd.OutOrStderr(), "Client Secret: %s\n", result.ClientSecret)
+		fmt.Fprintf(cmd.OutOrStderr(), "Name:          %s\n", result.Name)
+		fmt.Fprintf(cmd.OutOrStderr(), "Enabled:       %t\n", result.Enabled)
+		fmt.Fprintf(cmd.OutOrStderr(), "Admin:         %t\n", result.Admin)
 		if len(result.Projects) > 0 {
-			fmt.Fprintf(os.Stderr, "Projects:      %v\n", result.Projects)
+			fmt.Fprintf(cmd.OutOrStderr(), "Projects:      %v\n", result.Projects)
 		}
-		fmt.Fprintf(os.Stderr, "\n⚠️  IMPORTANT: Save the Client Secret - it won't be shown again!\n")
+		fmt.Fprintf(cmd.OutOrStderr(), "\n⚠️  IMPORTANT: Save the Client Secret - it won't be shown again!\n")
 
 		return nil
 	},
@@ -199,7 +198,7 @@ var keysUpdateCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Fprintf(os.Stderr, "✅ API key updated successfully\n")
+		fmt.Fprintf(cmd.OutOrStderr(), "✅ API key updated successfully\n")
 		return nil
 	},
 }
@@ -233,7 +232,7 @@ var keysDeleteCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Fprintf(os.Stderr, "✅ API key deleted successfully\n")
+		fmt.Fprintf(cmd.OutOrStderr(), "✅ API key deleted successfully\n")
 		return nil
 	},
 }
