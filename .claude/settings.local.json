@@ -6,7 +6,9 @@
       "WebSearch",
       "WebFetch(domain:maif.github.io)",
       "WebFetch(domain:api.github.com)",
-      "Bash(make test:*)"
+      "Bash(make test:*)",
+      "Bash(go test:*)",
+      "Bash(go build:*)"
     ],
     "deny": [],
     "ask": []

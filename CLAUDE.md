@@ -61,3 +61,4 @@ See [TODO.md](TODO.md) for pending tasks and features.
 
 ## Izanami swagger
 Izanami server endpoints description can be found here https://maif.github.io/izanami/swagger/swagger.json
+- Follow Cobra best practices by using cmd.OutOrStdout() instead of direct os.Stdout writes, which allows for proper testing while maintaining backward compatibility with normal CLI usage.
