@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"os"
 	"testing"
 
 	"github.com/webskin/izanami-go-cli/internal/izanami"
@@ -53,7 +54,7 @@ func TestPrintUserDetails(t *testing.T) {
 	}
 
 	// This will print to stderr, showing the fancy table format
-	if err := printUserDetails(user); err != nil {
+	if err := printUserDetails(os.Stderr, user); err != nil {
 		t.Fatalf("printUserDetails() error = %v", err)
 	}
 }
@@ -93,7 +94,7 @@ func TestPrintUserDetailsWithManyItems(t *testing.T) {
 		},
 	}
 
-	if err := printUserDetails(user); err != nil {
+	if err := printUserDetails(os.Stderr, user); err != nil {
 		t.Fatalf("printUserDetails() error = %v", err)
 	}
 }
@@ -110,7 +111,7 @@ func TestPrintUserDetailsNoRights(t *testing.T) {
 		},
 	}
 
-	if err := printUserDetails(user); err != nil {
+	if err := printUserDetails(os.Stderr, user); err != nil {
 		t.Fatalf("printUserDetails() error = %v", err)
 	}
 }

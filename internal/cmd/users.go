@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strings"
@@ -75,7 +76,7 @@ var usersListCmd = &cobra.Command{
 		}
 
 		if len(users) == 0 {
-			fmt.Fprintln(os.Stderr, "No users found")
+			fmt.Fprintln(cmd.OutOrStderr(), "No users found")
 			return nil
 		}
 
@@ -104,7 +105,7 @@ var usersGetCmd = &cobra.Command{
 
 		// For table output, use custom fancy display
 		if output.Format(outputFormat) == output.Table {
-			return printUserDetails(user)
+			return printUserDetails(cmd.OutOrStderr(), user)
 		}
 
 		// For JSON output, print as-is
@@ -231,18 +232,18 @@ Examples:
 		}
 
 		if output.Format(outputFormat) == output.JSON {
-			encoder := json.NewEncoder(os.Stdout)
+			encoder := json.NewEncoder(cmd.OutOrStdout())
 			encoder.SetIndent("", "  ")
 			return encoder.Encode(result)
 		}
 
-		fmt.Fprintf(os.Stderr, "✅ User created successfully\n\n")
-		fmt.Fprintf(os.Stderr, "Username: %s\n", result.Username)
-		fmt.Fprintf(os.Stderr, "Email:    %s\n", result.Email)
-		fmt.Fprintf(os.Stderr, "Admin:    %t\n", result.Admin)
-		fmt.Fprintf(os.Stderr, "Type:     %s\n", result.UserType)
+		fmt.Fprintf(cmd.OutOrStderr(), "✅ User created successfully\n\n")
+		fmt.Fprintf(cmd.OutOrStderr(), "Username: %s\n", result.Username)
+		fmt.Fprintf(cmd.OutOrStderr(), "Email:    %s\n", result.Email)
+		fmt.Fprintf(cmd.OutOrStderr(), "Admin:    %t\n", result.Admin)
+		fmt.Fprintf(cmd.OutOrStderr(), "Type:     %s\n", result.UserType)
 		if result.DefaultTenant != nil && *result.DefaultTenant != "" {
-			fmt.Fprintf(os.Stderr, "Default Tenant: %s\n", *result.DefaultTenant)
+			fmt.Fprintf(cmd.OutOrStderr(), "Default Tenant: %s\n", *result.DefaultTenant)
 		}
 
 		return nil
@@ -292,7 +293,7 @@ Examples:
 			return err
 		}
 
-		fmt.Fprintf(os.Stderr, "✅ User updated successfully\n")
+		fmt.Fprintf(cmd.OutOrStderr(), "✅ User updated successfully\n")
 		return nil
 	},
 }
@@ -322,7 +323,7 @@ var usersDeleteCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Fprintf(os.Stderr, "✅ User deleted successfully\n")
+		fmt.Fprintf(cmd.OutOrStderr(), "✅ User deleted successfully\n")
 		return nil
 	},
 }
@@ -395,7 +396,7 @@ Examples:
 			return err
 		}
 
-		fmt.Fprintf(os.Stderr, "✅ User rights updated successfully\n")
+		fmt.Fprintf(cmd.OutOrStderr(), "✅ User rights updated successfully\n")
 		return nil
 	},
 }
@@ -420,7 +421,7 @@ var usersSearchCmd = &cobra.Command{
 		}
 
 		if len(usernames) == 0 {
-			fmt.Fprintln(os.Stderr, "No users found")
+			fmt.Fprintln(cmd.OutOrStderr(), "No users found")
 			return nil
 		}
 
@@ -453,7 +454,7 @@ var usersListForTenantCmd = &cobra.Command{
 		}
 
 		if len(users) == 0 {
-			fmt.Fprintln(os.Stderr, "No users found for this tenant")
+			fmt.Fprintln(cmd.OutOrStderr(), "No users found for this tenant")
 			return nil
 		}
 
@@ -540,7 +541,7 @@ Examples:
 			return err
 		}
 
-		fmt.Fprintf(os.Stderr, "✅ User tenant rights updated successfully\n")
+		fmt.Fprintf(cmd.OutOrStderr(), "✅ User tenant rights updated successfully\n")
 		return nil
 	},
 }
@@ -591,7 +592,7 @@ Example:
 			return err
 		}
 
-		fmt.Fprintf(os.Stderr, "✅ Users invited to tenant successfully\n")
+		fmt.Fprintf(cmd.OutOrStderr(), "✅ Users invited to tenant successfully\n")
 		return nil
 	},
 }
@@ -624,7 +625,7 @@ var usersListForProjectCmd = &cobra.Command{
 		}
 
 		if len(users) == 0 {
-			fmt.Fprintln(os.Stderr, "No users found for this project")
+			fmt.Fprintln(cmd.OutOrStderr(), "No users found for this project")
 			return nil
 		}
 
@@ -685,7 +686,7 @@ Examples:
 			return err
 		}
 
-		fmt.Fprintf(os.Stderr, "✅ User project rights updated successfully\n")
+		fmt.Fprintf(cmd.OutOrStderr(), "✅ User project rights updated successfully\n")
 		return nil
 	},
 }
@@ -739,7 +740,7 @@ Example:
 			return err
 		}
 
-		fmt.Fprintf(os.Stderr, "✅ Users invited to project successfully\n")
+		fmt.Fprintf(cmd.OutOrStderr(), "✅ Users invited to project successfully\n")
 		return nil
 	},
 }
@@ -807,29 +808,29 @@ func init() {
 }
 
 // printUserDetails displays user information in a fancy table format
-func printUserDetails(user *izanami.User) error {
+func printUserDetails(w io.Writer, user *izanami.User) error {
 	// Print basic user information
-	fmt.Fprintf(os.Stderr, "\n")
-	fmt.Fprintf(os.Stderr, "User: %s\n", user.Username)
-	fmt.Fprintf(os.Stderr, "Email: %s\n", user.Email)
-	fmt.Fprintf(os.Stderr, "Type: %s\n", user.UserType)
-	fmt.Fprintf(os.Stderr, "Admin: %t\n", user.Admin)
+	fmt.Fprintf(w, "\n")
+	fmt.Fprintf(w, "User: %s\n", user.Username)
+	fmt.Fprintf(w, "Email: %s\n", user.Email)
+	fmt.Fprintf(w, "Type: %s\n", user.UserType)
+	fmt.Fprintf(w, "Admin: %t\n", user.Admin)
 	if user.DefaultTenant != nil && *user.DefaultTenant != "" {
-		fmt.Fprintf(os.Stderr, "Default Tenant: %s\n", *user.DefaultTenant)
+		fmt.Fprintf(w, "Default Tenant: %s\n", *user.DefaultTenant)
 	}
 
 	// Print rights details
 	if user.Admin {
-		fmt.Fprintf(os.Stderr, "\n✓ Global Admin (full access to all resources)\n")
+		fmt.Fprintf(w, "\n✓ Global Admin (full access to all resources)\n")
 	}
 
 	if len(user.Rights.Tenants) == 0 {
-		fmt.Fprintf(os.Stderr, "\nNo tenant rights assigned.\n")
+		fmt.Fprintf(w, "\nNo tenant rights assigned.\n")
 		return nil
 	}
 
-	fmt.Fprintf(os.Stderr, "\nTenant Rights:\n")
-	fmt.Fprintf(os.Stderr, "%s\n", strings.Repeat("=", 80))
+	fmt.Fprintf(w, "\nTenant Rights:\n")
+	fmt.Fprintf(w, "%s\n", strings.Repeat("=", 80))
 
 	// Sort tenant names for consistent output
 	tenantNames := make([]string, 0, len(user.Rights.Tenants))
@@ -840,23 +841,23 @@ func printUserDetails(user *izanami.User) error {
 
 	for _, tenant := range tenantNames {
 		rights := user.Rights.Tenants[tenant]
-		fmt.Fprintf(os.Stderr, "\n┌─ Tenant: %s\n", tenant)
-		fmt.Fprintf(os.Stderr, "│  Level: %s\n", rights.Level)
+		fmt.Fprintf(w, "\n┌─ Tenant: %s\n", tenant)
+		fmt.Fprintf(w, "│  Level: %s\n", rights.Level)
 
 		// Display default rights if set
 		if rights.DefaultProjectRight != nil {
-			fmt.Fprintf(os.Stderr, "│  Default Project Right: %s\n", *rights.DefaultProjectRight)
+			fmt.Fprintf(w, "│  Default Project Right: %s\n", *rights.DefaultProjectRight)
 		}
 		if rights.DefaultKeyRight != nil {
-			fmt.Fprintf(os.Stderr, "│  Default Key Right: %s\n", *rights.DefaultKeyRight)
+			fmt.Fprintf(w, "│  Default Key Right: %s\n", *rights.DefaultKeyRight)
 		}
 		if rights.DefaultWebhookRight != nil {
-			fmt.Fprintf(os.Stderr, "│  Default Webhook Right: %s\n", *rights.DefaultWebhookRight)
+			fmt.Fprintf(w, "│  Default Webhook Right: %s\n", *rights.DefaultWebhookRight)
 		}
 
 		// Display projects
 		if len(rights.Projects) > 0 {
-			fmt.Fprintf(os.Stderr, "│\n│  Projects:\n")
+			fmt.Fprintf(w, "│\n│  Projects:\n")
 			projectNames := make([]string, 0, len(rights.Projects))
 			for proj := range rights.Projects {
 				projectNames = append(projectNames, proj)
@@ -866,16 +867,16 @@ func printUserDetails(user *izanami.User) error {
 			displayCount := min(3, len(projectNames))
 			for i := 0; i < displayCount; i++ {
 				proj := projectNames[i]
-				fmt.Fprintf(os.Stderr, "│    • %s: %s\n", proj, rights.Projects[proj].Level)
+				fmt.Fprintf(w, "│    • %s: %s\n", proj, rights.Projects[proj].Level)
 			}
 			if len(projectNames) > 3 {
-				fmt.Fprintf(os.Stderr, "│    ... and %d more projects\n", len(projectNames)-3)
+				fmt.Fprintf(w, "│    ... and %d more projects\n", len(projectNames)-3)
 			}
 		}
 
 		// Display keys
 		if len(rights.Keys) > 0 {
-			fmt.Fprintf(os.Stderr, "│\n│  Keys:\n")
+			fmt.Fprintf(w, "│\n│  Keys:\n")
 			keyNames := make([]string, 0, len(rights.Keys))
 			for key := range rights.Keys {
 				keyNames = append(keyNames, key)
@@ -885,16 +886,16 @@ func printUserDetails(user *izanami.User) error {
 			displayCount := min(3, len(keyNames))
 			for i := 0; i < displayCount; i++ {
 				key := keyNames[i]
-				fmt.Fprintf(os.Stderr, "│    • %s: %s\n", key, rights.Keys[key].Level)
+				fmt.Fprintf(w, "│    • %s: %s\n", key, rights.Keys[key].Level)
 			}
 			if len(keyNames) > 3 {
-				fmt.Fprintf(os.Stderr, "│    ... and %d more keys\n", len(keyNames)-3)
+				fmt.Fprintf(w, "│    ... and %d more keys\n", len(keyNames)-3)
 			}
 		}
 
 		// Display webhooks
 		if len(rights.Webhooks) > 0 {
-			fmt.Fprintf(os.Stderr, "│\n│  Webhooks:\n")
+			fmt.Fprintf(w, "│\n│  Webhooks:\n")
 			webhookNames := make([]string, 0, len(rights.Webhooks))
 			for wh := range rights.Webhooks {
 				webhookNames = append(webhookNames, wh)
@@ -904,14 +905,14 @@ func printUserDetails(user *izanami.User) error {
 			displayCount := min(3, len(webhookNames))
 			for i := 0; i < displayCount; i++ {
 				wh := webhookNames[i]
-				fmt.Fprintf(os.Stderr, "│    • %s: %s\n", wh, rights.Webhooks[wh].Level)
+				fmt.Fprintf(w, "│    • %s: %s\n", wh, rights.Webhooks[wh].Level)
 			}
 			if len(webhookNames) > 3 {
-				fmt.Fprintf(os.Stderr, "│    ... and %d more webhooks\n", len(webhookNames)-3)
+				fmt.Fprintf(w, "│    ... and %d more webhooks\n", len(webhookNames)-3)
 			}
 		}
 
-		fmt.Fprintf(os.Stderr, "%s\n", "└"+strings.Repeat("─", 79))
+		fmt.Fprintf(w, "%s\n", "└"+strings.Repeat("─", 79))
 	}
 
 	return nil
