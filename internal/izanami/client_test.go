@@ -258,7 +258,7 @@ func TestClient_CheckFeature(t *testing.T) {
 		user := r.URL.Query().Get("user")
 		context := r.URL.Query().Get("context")
 		assert.Equal(t, "user123", user)
-		assert.Equal(t, "prod", context)
+		assert.Equal(t, "/prod", context) // context paths are normalized to have leading slash
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(expectedResult)
@@ -276,7 +276,7 @@ func TestClient_CheckFeature(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	result, err := client.CheckFeature(ctx, "my-feature", "user123", "prod")
+	result, err := client.CheckFeature(ctx, "my-feature", "user123", "prod", "")
 
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
