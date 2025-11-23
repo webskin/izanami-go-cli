@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -32,7 +33,7 @@ var profileConfigKeys = map[string]string{
 }
 
 // printValidConfigKeys prints all valid configuration keys categorized
-func printValidConfigKeys() {
+func printValidConfigKeys(w io.Writer) {
 	// Sort keys for consistent output
 	globalKeys := make([]string, 0, len(globalConfigKeys))
 	for key := range globalConfigKeys {
@@ -47,24 +48,24 @@ func printValidConfigKeys() {
 	sort.Strings(profileKeys)
 
 	// Print global keys
-	fmt.Println("Global configuration keys (apply to all profiles):")
+	fmt.Fprintln(w, "Global configuration keys (apply to all profiles):")
 	for _, key := range globalKeys {
-		fmt.Printf("  %-33s - %s\n", key, globalConfigKeys[key])
+		fmt.Fprintf(w, "  %-33s - %s\n", key, globalConfigKeys[key])
 	}
-	fmt.Println()
+	fmt.Fprintln(w)
 
 	// Print profile-specific keys
-	fmt.Println("Profile-specific keys (use 'iz profiles set' for active profile):")
+	fmt.Fprintln(w, "Profile-specific keys (use 'iz profiles set' for active profile):")
 	for _, key := range profileKeys {
-		fmt.Printf("  %-33s - %s\n", key, profileConfigKeys[key])
+		fmt.Fprintf(w, "  %-33s - %s\n", key, profileConfigKeys[key])
 	}
-	fmt.Println()
+	fmt.Fprintln(w)
 
 	// Print usage
-	fmt.Println("Usage:")
-	fmt.Println("  iz config set <key> <value>           - Set global config")
-	fmt.Println("  iz profiles set <key> <value>         - Set in active profile")
-	fmt.Println("  iz profiles client-keys add           - Add client credentials")
+	fmt.Fprintln(w, "Usage:")
+	fmt.Fprintln(w, "  iz config set <key> <value>           - Set global config")
+	fmt.Fprintln(w, "  iz profiles set <key> <value>         - Set in active profile")
+	fmt.Fprintln(w, "  iz profiles client-keys add           - Add client credentials")
 }
 
 // configCmd represents the config command
@@ -131,7 +132,7 @@ var configSetCmd = &cobra.Command{
 	Args: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
 			// No arguments provided - show valid keys categorized
-			printValidConfigKeys()
+			printValidConfigKeys(cmd.OutOrStdout())
 			return fmt.Errorf("missing required arguments")
 		}
 		if len(args) == 1 {
@@ -149,21 +150,21 @@ var configSetCmd = &cobra.Command{
 		if err := izanami.SetConfigValue(key, value); err != nil {
 			// If invalid key, show valid keys
 			if strings.Contains(err.Error(), "invalid config key") {
-				fmt.Fprintf(os.Stderr, "Error: %v\n\n", err)
-				printValidConfigKeys()
+				fmt.Fprintf(cmd.OutOrStderr(), "Error: %v\n\n", err)
+				printValidConfigKeys(cmd.OutOrStdout())
 				return fmt.Errorf("") // Return empty error since we already printed the message
 			}
 			return err
 		}
 
-		fmt.Printf("✓ Set %s = %s\n", key, value)
+		fmt.Fprintf(cmd.OutOrStdout(), "✓ Set %s = %s\n", key, value)
 
 		// Warn about sensitive data storage
 		if izanami.SensitiveKeys[key] {
-			fmt.Println("\n⚠️  SECURITY WARNING:")
-			fmt.Println("   Tokens are stored in plaintext in the config file.")
-			fmt.Println("   File permissions are set to 0600 (owner read/write only).")
-			fmt.Println("   Never commit config.yaml to version control.")
+			fmt.Fprintln(cmd.OutOrStdout(), "\n⚠️  SECURITY WARNING:")
+			fmt.Fprintln(cmd.OutOrStdout(), "   Tokens are stored in plaintext in the config file.")
+			fmt.Fprintln(cmd.OutOrStdout(), "   File permissions are set to 0600 (owner read/write only).")
+			fmt.Fprintln(cmd.OutOrStdout(), "   Never commit config.yaml to version control.")
 		}
 
 		return nil
@@ -200,9 +201,9 @@ Example:
 		}
 
 		if configValue.Source == "not set" {
-			fmt.Printf("%s: (not set)\n", key)
+			fmt.Fprintf(cmd.OutOrStdout(), "%s: (not set)\n", key)
 		} else {
-			fmt.Printf("%s: %s (source: %s)\n", key, value, configValue.Source)
+			fmt.Fprintf(cmd.OutOrStdout(), "%s: %s (source: %s)\n", key, value, configValue.Source)
 		}
 
 		return nil
@@ -228,7 +229,7 @@ Example:
 			return err
 		}
 
-		fmt.Printf("✓ Removed %s from config file\n", key)
+		fmt.Fprintf(cmd.OutOrStdout(), "✓ Removed %s from config file\n", key)
 		return nil
 	},
 }
@@ -254,7 +255,7 @@ Use --show-secrets to display sensitive values.`,
 		}
 
 		// Create table
-		table := tablewriter.NewWriter(os.Stdout)
+		table := tablewriter.NewWriter(cmd.OutOrStdout())
 		table.SetHeader([]string{"KEY", "VALUE", "SOURCE"})
 		table.SetBorder(false)
 		table.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
@@ -294,7 +295,7 @@ Use --show-secrets to display sensitive values.`,
 		table.Render()
 
 		// Add note about profile-specific settings
-		fmt.Fprintln(os.Stderr, "\nNote: Client keys are profile-specific. Use 'iz profiles client-keys' to manage them.")
+		fmt.Fprintln(cmd.OutOrStderr(), "\nNote: Client keys are profile-specific. Use 'iz profiles client-keys' to manage them.")
 		return nil
 	},
 }
@@ -310,20 +311,20 @@ This is useful for troubleshooting configuration issues.`,
 		configPath := izanami.GetConfigPath()
 		configDir := izanami.GetConfigDirPath()
 
-		fmt.Printf("Config file: %s\n", configPath)
-		fmt.Printf("Config directory: %s\n", configDir)
+		fmt.Fprintf(cmd.OutOrStdout(), "Config file: %s\n", configPath)
+		fmt.Fprintf(cmd.OutOrStdout(), "Config directory: %s\n", configDir)
 
 		// Check if config file exists
 		if izanami.ConfigExists() {
-			fmt.Printf("Status: exists\n")
+			fmt.Fprintln(cmd.OutOrStdout(), "Status: exists")
 		} else {
-			fmt.Printf("Status: not created (run 'iz config init' to create)\n")
+			fmt.Fprintln(cmd.OutOrStdout(), "Status: not created (run 'iz config init' to create)")
 		}
 
 		// Show search paths
-		fmt.Printf("\nConfig file search paths:\n")
-		fmt.Printf("  1. %s\n", configPath)
-		fmt.Printf("  2. ./config.yaml (current directory)\n")
+		fmt.Fprintln(cmd.OutOrStdout(), "\nConfig file search paths:")
+		fmt.Fprintf(cmd.OutOrStdout(), "  1. %s\n", configPath)
+		fmt.Fprintln(cmd.OutOrStdout(), "  2. ./config.yaml (current directory)")
 
 		return nil
 	},
@@ -359,16 +360,16 @@ Use --defaults to create a config file with only default values (non-interactive
 		configDir := getConfigDirForDisplay()
 		configPath := filepath.Join(configDir, "config.yaml")
 
-		fmt.Printf("✓ Configuration file created at: %s\n", configPath)
-		fmt.Println("\nNext steps:")
-		fmt.Println("  1. Edit the config file and uncomment/set your values")
-		fmt.Println("  2. Or use environment variables (IZ_BASE_URL, IZ_CLIENT_ID, etc.)")
-		fmt.Println("  3. Or use command-line flags (--url, --client-id, etc.)")
+		fmt.Fprintf(cmd.OutOrStdout(), "✓ Configuration file created at: %s\n", configPath)
+		fmt.Fprintln(cmd.OutOrStdout(), "\nNext steps:")
+		fmt.Fprintln(cmd.OutOrStdout(), "  1. Edit the config file and uncomment/set your values")
+		fmt.Fprintln(cmd.OutOrStdout(), "  2. Or use environment variables (IZ_BASE_URL, IZ_CLIENT_ID, etc.)")
+		fmt.Fprintln(cmd.OutOrStdout(), "  3. Or use command-line flags (--url, --client-id, etc.)")
 
-		fmt.Println("\n⚠️  SECURITY NOTICE:")
-		fmt.Println("   - File permissions set to 0600 (owner read/write only)")
-		fmt.Println("   - Tokens stored in plaintext - never commit to version control")
-		fmt.Println("   - Add config.yaml to .gitignore if using git")
+		fmt.Fprintln(cmd.OutOrStdout(), "\n⚠️  SECURITY NOTICE:")
+		fmt.Fprintln(cmd.OutOrStdout(), "   - File permissions set to 0600 (owner read/write only)")
+		fmt.Fprintln(cmd.OutOrStdout(), "   - Tokens stored in plaintext - never commit to version control")
+		fmt.Fprintln(cmd.OutOrStdout(), "   - Add config.yaml to .gitignore if using git")
 
 		return nil
 	},
@@ -390,24 +391,24 @@ Exit codes:
   1 - Configuration has errors`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if !izanami.ConfigExists() {
-			fmt.Println("No configuration file found")
-			fmt.Printf("Run 'iz config init' to create one at: %s\n", izanami.GetConfigPath())
+			fmt.Fprintln(cmd.OutOrStdout(), "No configuration file found")
+			fmt.Fprintf(cmd.OutOrStdout(), "Run 'iz config init' to create one at: %s\n", izanami.GetConfigPath())
 			os.Exit(1)
 		}
 
 		errors := izanami.ValidateConfigFile()
 
 		if len(errors) == 0 {
-			fmt.Println("✓ Configuration is valid")
+			fmt.Fprintln(cmd.OutOrStdout(), "✓ Configuration is valid")
 			return nil
 		}
 
-		fmt.Printf("✗ Configuration has %d error(s):\n\n", len(errors))
+		fmt.Fprintf(cmd.OutOrStdout(), "✗ Configuration has %d error(s):\n\n", len(errors))
 		for _, err := range errors {
 			if err.Field == "general" {
-				fmt.Printf("  - %s\n", err.Message)
+				fmt.Fprintf(cmd.OutOrStdout(), "  - %s\n", err.Message)
 			} else {
-				fmt.Printf("  - %s: %s\n", err.Field, err.Message)
+				fmt.Fprintf(cmd.OutOrStdout(), "  - %s: %s\n", err.Field, err.Message)
 			}
 		}
 
@@ -432,15 +433,15 @@ Note: This does not affect environment variables or command-line flags.`,
 		}
 
 		// Ask for confirmation
-		fmt.Printf("This will delete: %s\n", izanami.GetConfigPath())
-		fmt.Print("Are you sure? (y/N): ")
+		fmt.Fprintf(cmd.OutOrStdout(), "This will delete: %s\n", izanami.GetConfigPath())
+		fmt.Fprint(cmd.OutOrStdout(), "Are you sure? (y/N): ")
 
 		var response string
 		fmt.Scanln(&response)
 		response = strings.ToLower(strings.TrimSpace(response))
 
 		if response != "y" && response != "yes" {
-			fmt.Println("Cancelled")
+			fmt.Fprintln(cmd.OutOrStdout(), "Cancelled")
 			return nil
 		}
 
@@ -448,8 +449,8 @@ Note: This does not affect environment variables or command-line flags.`,
 			return err
 		}
 
-		fmt.Println("✓ Configuration file deleted")
-		fmt.Printf("Run 'iz config init' to create a new config file\n")
+		fmt.Fprintln(cmd.OutOrStdout(), "✓ Configuration file deleted")
+		fmt.Fprintln(cmd.OutOrStdout(), "Run 'iz config init' to create a new config file")
 
 		return nil
 	},
