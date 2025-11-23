@@ -114,7 +114,7 @@ func TestClient_Login(t *testing.T) {
 		assert.Equal(t, "testpass", pass)
 
 		// Set JWT token in cookie
-		http.SetCookie(w, &http.Cookie{
+		http.SetCookie(w, &http.Cookie{ // NOSONAR go:S2092 - Test cookie, no security concern
 			Name:  "token",
 			Value: "jwt-token-12345",
 		})
