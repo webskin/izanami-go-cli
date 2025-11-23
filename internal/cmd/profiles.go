@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"syscall"
@@ -54,15 +55,15 @@ Example:
 		}
 
 		if len(profiles) == 0 {
-			fmt.Println("No profiles configured")
-			fmt.Println("\nCreate a profile with:")
-			fmt.Println("  iz profiles add <name>")
-			fmt.Println("  iz profiles init sandbox|build|prod")
+			fmt.Fprintln(cmd.OutOrStdout(), "No profiles configured")
+			fmt.Fprintln(cmd.OutOrStdout(), "\nCreate a profile with:")
+			fmt.Fprintln(cmd.OutOrStdout(), "  iz profiles add <name>")
+			fmt.Fprintln(cmd.OutOrStdout(), "  iz profiles init sandbox|build|prod")
 			return nil
 		}
 
 		// Create table
-		table := tablewriter.NewWriter(os.Stdout)
+		table := tablewriter.NewWriter(cmd.OutOrStdout())
 		table.SetHeader([]string{"", "Name", "Session", "URL", "Tenant", "Project"})
 		table.SetBorder(false)
 		table.SetColumnSeparator("")
@@ -128,10 +129,10 @@ Example:
 		table.Render()
 
 		if activeProfile != "" {
-			fmt.Printf("\nActive profile: %s\n", activeProfile)
+			fmt.Fprintf(cmd.OutOrStdout(), "\nActive profile: %s\n", activeProfile)
 		} else {
-			fmt.Println("\nNo active profile set")
-			fmt.Println("Switch to a profile with: iz profiles use <name>")
+			fmt.Fprintln(cmd.OutOrStdout(), "\nNo active profile set")
+			fmt.Fprintln(cmd.OutOrStdout(), "Switch to a profile with: iz profiles use <name>")
 		}
 
 		return nil
@@ -153,9 +154,9 @@ Example:
 		}
 
 		if activeProfileName == "" {
-			fmt.Println("No active profile set")
-			fmt.Println("\nSet a profile with:")
-			fmt.Println("  iz profiles use <name>")
+			fmt.Fprintln(cmd.OutOrStdout(), "No active profile set")
+			fmt.Fprintln(cmd.OutOrStdout(), "\nSet a profile with:")
+			fmt.Fprintln(cmd.OutOrStdout(), "  iz profiles use <name>")
 			return nil
 		}
 
@@ -164,8 +165,8 @@ Example:
 			return err
 		}
 
-		fmt.Printf("Active Profile: %s\n\n", activeProfileName)
-		printProfile(profile, false)
+		fmt.Fprintf(cmd.OutOrStdout(), "Active Profile: %s\n\n", activeProfileName)
+		printProfile(cmd.OutOrStdout(), profile, false)
 
 		return nil
 	},
@@ -190,8 +191,8 @@ Example:
 
 		showSecrets, _ := cmd.Flags().GetBool("show-secrets")
 
-		fmt.Printf("Profile: %s\n\n", profileName)
-		printProfile(profile, showSecrets)
+		fmt.Fprintf(cmd.OutOrStdout(), "Profile: %s\n\n", profileName)
+		printProfile(cmd.OutOrStdout(), profile, showSecrets)
 
 		return nil
 	},
@@ -215,20 +216,20 @@ Example:
 			return err
 		}
 
-		fmt.Printf("✓ Switched to profile '%s'\n", profileName)
+		fmt.Fprintf(cmd.OutOrStdout(), "✓ Switched to profile '%s'\n", profileName)
 
 		// Show brief profile info
 		profile, err := izanami.GetProfile(profileName)
 		if err == nil {
-			fmt.Println()
+			fmt.Fprintln(cmd.OutOrStdout())
 			if profile.Session != "" {
-				fmt.Printf("  Session: %s\n", profile.Session)
+				fmt.Fprintf(cmd.OutOrStdout(), "  Session: %s\n", profile.Session)
 			}
 			if profile.BaseURL != "" {
-				fmt.Printf("  URL:     %s\n", profile.BaseURL)
+				fmt.Fprintf(cmd.OutOrStdout(), "  URL:     %s\n", profile.BaseURL)
 			}
 			if profile.Tenant != "" {
-				fmt.Printf("  Tenant:  %s\n", profile.Tenant)
+				fmt.Fprintf(cmd.OutOrStdout(), "  Tenant:  %s\n", profile.Tenant)
 			}
 		}
 
@@ -271,46 +272,46 @@ Examples:
 
 		// Interactive prompts if --interactive or no flags provided
 		if interactive || (session == "" && url == "" && tenant == "" && project == "" && context == "" && clientID == "" && clientSecret == "") {
-			fmt.Printf("Creating profile '%s'\n\n", profileName)
+			fmt.Fprintf(cmd.OutOrStdout(), "Creating profile '%s'\n\n", profileName)
 
 			// Session or URL
-			fmt.Print("Session name (or leave empty to specify URL): ")
+			fmt.Fprint(cmd.OutOrStdout(), "Session name (or leave empty to specify URL): ")
 			fmt.Scanln(&session)
 			session = strings.TrimSpace(session)
 
 			if session == "" {
-				fmt.Print("Server URL: ")
+				fmt.Fprint(cmd.OutOrStdout(), "Server URL: ")
 				fmt.Scanln(&url)
 				url = strings.TrimSpace(url)
 			}
 
 			// Tenant
-			fmt.Print("Default tenant (optional): ")
+			fmt.Fprint(cmd.OutOrStdout(), "Default tenant (optional): ")
 			fmt.Scanln(&tenant)
 			tenant = strings.TrimSpace(tenant)
 
 			// Project
-			fmt.Print("Default project (optional): ")
+			fmt.Fprint(cmd.OutOrStdout(), "Default project (optional): ")
 			fmt.Scanln(&project)
 			project = strings.TrimSpace(project)
 
 			// Context
-			fmt.Print("Default context (optional): ")
+			fmt.Fprint(cmd.OutOrStdout(), "Default context (optional): ")
 			fmt.Scanln(&context)
 			context = strings.TrimSpace(context)
 
 			// Client credentials
-			fmt.Print("\nConfigure client credentials for feature checks? (y/N): ")
+			fmt.Fprint(cmd.OutOrStdout(), "\nConfigure client credentials for feature checks? (y/N): ")
 			var addCreds string
 			fmt.Scanln(&addCreds)
 			if strings.ToLower(strings.TrimSpace(addCreds)) == "y" {
-				fmt.Print("Client ID: ")
+				fmt.Fprint(cmd.OutOrStdout(), "Client ID: ")
 				fmt.Scanln(&clientID)
 				clientID = strings.TrimSpace(clientID)
 
-				fmt.Print("Client Secret: ")
+				fmt.Fprint(cmd.OutOrStdout(), "Client Secret: ")
 				secretBytes, err := term.ReadPassword(int(syscall.Stdin))
-				fmt.Println()
+				fmt.Fprintln(cmd.OutOrStdout())
 				if err != nil {
 					return fmt.Errorf("failed to read client secret: %w", err)
 				}
@@ -337,22 +338,22 @@ Examples:
 			return fmt.Errorf("failed to add profile: %w", err)
 		}
 
-		fmt.Printf("\n✓ Profile '%s' created successfully\n", profileName)
+		fmt.Fprintf(cmd.OutOrStdout(), "\n✓ Profile '%s' created successfully\n", profileName)
 
 		// Check if this is the first/only profile
 		profiles, _, err := izanami.ListProfiles()
 		if err == nil && len(profiles) == 1 {
-			fmt.Printf("✓ Set as active profile (first profile created)\n")
+			fmt.Fprintln(cmd.OutOrStdout(), "✓ Set as active profile (first profile created)")
 		}
 
-		fmt.Printf("\nSwitch to this profile with:\n")
-		fmt.Printf("  iz profiles use %s\n", profileName)
+		fmt.Fprintf(cmd.OutOrStdout(), "\nSwitch to this profile with:\n")
+		fmt.Fprintf(cmd.OutOrStdout(), "  iz profiles use %s\n", profileName)
 
 		if clientSecret != "" {
-			fmt.Println("\n⚠️  SECURITY WARNING:")
-			fmt.Println("   Credentials are stored in plaintext in the config file.")
-			fmt.Println("   File permissions are set to 0600 (owner read/write only).")
-			fmt.Println("   Never commit config.yaml to version control.")
+			fmt.Fprintln(cmd.OutOrStdout(), "\n⚠️  SECURITY WARNING:")
+			fmt.Fprintln(cmd.OutOrStdout(), "   Credentials are stored in plaintext in the config file.")
+			fmt.Fprintln(cmd.OutOrStdout(), "   File permissions are set to 0600 (owner read/write only).")
+			fmt.Fprintln(cmd.OutOrStdout(), "   Never commit config.yaml to version control.")
 		}
 
 		return nil
@@ -403,7 +404,7 @@ Examples:
 
 		case "build":
 			// User needs to provide URL
-			fmt.Print("Build server URL: ")
+			fmt.Fprint(cmd.OutOrStdout(), "Build server URL: ")
 			var url string
 			fmt.Scanln(&url)
 			profile.BaseURL = strings.TrimSpace(url)
@@ -413,7 +414,7 @@ Examples:
 
 		case "prod":
 			// User needs to provide URL
-			fmt.Print("Production server URL: ")
+			fmt.Fprint(cmd.OutOrStdout(), "Production server URL: ")
 			var url string
 			fmt.Scanln(&url)
 			profile.BaseURL = strings.TrimSpace(url)
@@ -423,7 +424,7 @@ Examples:
 		}
 
 		// Allow override with session
-		fmt.Printf("\nUse existing session instead of URL? (leave empty to use URL): ")
+		fmt.Fprintf(cmd.OutOrStdout(), "\nUse existing session instead of URL? (leave empty to use URL): ")
 		var session string
 		fmt.Scanln(&session)
 		if strings.TrimSpace(session) != "" {
@@ -436,19 +437,19 @@ Examples:
 			return fmt.Errorf("failed to create profile: %w", err)
 		}
 
-		fmt.Printf("\n✓ Profile '%s' created from template '%s'\n", profileName, template)
+		fmt.Fprintf(cmd.OutOrStdout(), "\n✓ Profile '%s' created from template '%s'\n", profileName, template)
 
 		// Check if this is the first profile
 		profiles, _, err := izanami.ListProfiles()
 		if err == nil && len(profiles) == 1 {
-			fmt.Printf("✓ Set as active profile (first profile created)\n")
+			fmt.Fprintln(cmd.OutOrStdout(), "✓ Set as active profile (first profile created)")
 		}
 
-		fmt.Printf("\nProfile details:\n")
-		printProfile(profile, false)
+		fmt.Fprintln(cmd.OutOrStdout(), "\nProfile details:")
+		printProfile(cmd.OutOrStdout(), profile, false)
 
-		fmt.Printf("\nSwitch to this profile with:\n")
-		fmt.Printf("  iz profiles use %s\n", profileName)
+		fmt.Fprintf(cmd.OutOrStdout(), "\nSwitch to this profile with:\n")
+		fmt.Fprintf(cmd.OutOrStdout(), "  iz profiles use %s\n", profileName)
 
 		return nil
 	},
@@ -518,7 +519,7 @@ Examples:
 			return fmt.Errorf("failed to update profile: %w", err)
 		}
 
-		fmt.Printf("✓ Updated %s.%s = %s\n", profileName, key, value)
+		fmt.Fprintf(cmd.OutOrStdout(), "✓ Updated %s.%s = %s\n", profileName, key, value)
 
 		return nil
 	},
@@ -541,7 +542,7 @@ Example:
 		// Get active profile to warn if deleting it
 		activeProfile, err := izanami.GetActiveProfileName()
 		if err == nil && activeProfile == profileName {
-			fmt.Printf("⚠️  Warning: '%s' is currently the active profile\n", profileName)
+			fmt.Fprintf(cmd.OutOrStdout(), "⚠️  Warning: '%s' is currently the active profile\n", profileName)
 		}
 
 		// Confirm deletion unless --force is used
@@ -555,11 +556,11 @@ Example:
 			return err
 		}
 
-		fmt.Printf("✓ Profile '%s' deleted\n", profileName)
+		fmt.Fprintf(cmd.OutOrStdout(), "✓ Profile '%s' deleted\n", profileName)
 
 		if activeProfile == profileName {
-			fmt.Println("\nNo active profile set. Switch to another profile with:")
-			fmt.Println("  iz profiles use <name>")
+			fmt.Fprintln(cmd.OutOrStdout(), "\nNo active profile set. Switch to another profile with:")
+			fmt.Fprintln(cmd.OutOrStdout(), "  iz profiles use <name>")
 		}
 
 		return nil
@@ -758,9 +759,9 @@ func init() {
 }
 
 // printProfile prints profile details in a formatted way
-func printProfile(profile *izanami.Profile, showSecrets bool) {
+func printProfile(w io.Writer, profile *izanami.Profile, showSecrets bool) {
 	if profile.Session != "" {
-		fmt.Printf("  Session:       %s\n", profile.Session)
+		fmt.Fprintf(w, "  Session:       %s\n", profile.Session)
 	}
 
 	// Resolve URL: try profile.BaseURL first, then session.URL
@@ -776,25 +777,25 @@ func printProfile(profile *izanami.Profile, showSecrets bool) {
 		}
 	}
 	if url != "" {
-		fmt.Printf("  URL:           %s\n", url)
+		fmt.Fprintf(w, "  URL:           %s\n", url)
 	}
 	if profile.Tenant != "" {
-		fmt.Printf("  Tenant:        %s\n", profile.Tenant)
+		fmt.Fprintf(w, "  Tenant:        %s\n", profile.Tenant)
 	}
 	if profile.Project != "" {
-		fmt.Printf("  Project:       %s\n", profile.Project)
+		fmt.Fprintf(w, "  Project:       %s\n", profile.Project)
 	}
 	if profile.Context != "" {
-		fmt.Printf("  Context:       %s\n", profile.Context)
+		fmt.Fprintf(w, "  Context:       %s\n", profile.Context)
 	}
 	if profile.ClientID != "" {
-		fmt.Printf("  Client ID:     %s\n", profile.ClientID)
+		fmt.Fprintf(w, "  Client ID:     %s\n", profile.ClientID)
 	}
 	if profile.ClientSecret != "" {
 		if showSecrets {
-			fmt.Printf("  Client Secret: %s\n", profile.ClientSecret)
+			fmt.Fprintf(w, "  Client Secret: %s\n", profile.ClientSecret)
 		} else {
-			fmt.Printf("  Client Secret: <redacted>\n")
+			fmt.Fprintf(w, "  Client Secret: <redacted>\n")
 		}
 	}
 }
