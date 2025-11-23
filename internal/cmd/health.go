@@ -42,23 +42,23 @@ Exit codes:
 		ctx := context.Background()
 		health, err := client.Health(ctx)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			fmt.Fprintf(cmd.OutOrStderr(), "Error: %v\n", err)
 			os.Exit(1)
 		}
 
 		if !health.Database {
-			fmt.Fprintf(os.Stderr, "Server is unhealthy: database check failed\n")
+			fmt.Fprintf(cmd.OutOrStderr(), "Server is unhealthy: database check failed\n")
 			output.Print(health, output.Format(outputFormat))
 			os.Exit(1)
 		}
 
 		if outputFormat == "table" {
-			fmt.Printf("Status:  UP\n")
-			fmt.Printf("Database: %v\n", health.Database)
+			fmt.Fprintf(cmd.OutOrStdout(), "Status:  UP\n")
+			fmt.Fprintf(cmd.OutOrStdout(), "Database: %v\n", health.Database)
 			if health.Version != "" {
-				fmt.Printf("Version: %s\n", health.Version)
+				fmt.Fprintf(cmd.OutOrStdout(), "Version: %s\n", health.Version)
 			}
-			fmt.Printf("URL:     %s\n", cfg.BaseURL)
+			fmt.Fprintf(cmd.OutOrStdout(), "URL:     %s\n", cfg.BaseURL)
 		} else {
 			output.Print(health, output.Format(outputFormat))
 		}

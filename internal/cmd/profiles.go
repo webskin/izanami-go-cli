@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"syscall"
 
@@ -633,10 +632,10 @@ Security:
 			return fmt.Errorf("no active profile. Use 'iz profiles use <name>' to select a profile first")
 		}
 
-		fmt.Fprintf(os.Stderr, "Adding credentials to profile: %s\n\n", profileName)
+		fmt.Fprintf(cmd.OutOrStderr(), "Adding credentials to profile: %s\n\n", profileName)
 
 		// Prompt for client-id
-		fmt.Fprintf(os.Stderr, "Client ID: ")
+		fmt.Fprintf(cmd.OutOrStderr(), "Client ID: ")
 		var clientID string
 		if _, err := fmt.Scanln(&clientID); err != nil {
 			return fmt.Errorf("failed to read client ID: %w", err)
@@ -647,9 +646,9 @@ Security:
 		}
 
 		// Prompt for client-secret (hidden)
-		fmt.Fprintf(os.Stderr, "Client Secret: ")
+		fmt.Fprintf(cmd.OutOrStderr(), "Client Secret: ")
 		secretBytes, err := term.ReadPassword(int(syscall.Stdin))
-		fmt.Fprintln(os.Stderr) // New line after password input
+		fmt.Fprintln(cmd.OutOrStderr()) // New line after password input
 		if err != nil {
 			return fmt.Errorf("failed to read client secret: %w", err)
 		}
@@ -665,12 +664,12 @@ Security:
 				if len(projects) == 0 {
 					// Check tenant-level credentials
 					if tenantConfig.ClientID != "" {
-						fmt.Fprintf(os.Stderr, "\n⚠️  Profile '%s' already has credentials for tenant '%s'.\n", profileName, tenant)
-						fmt.Fprintf(os.Stderr, "Overwrite existing credentials? (y/N): ")
+						fmt.Fprintf(cmd.OutOrStderr(), "\n⚠️  Profile '%s' already has credentials for tenant '%s'.\n", profileName, tenant)
+						fmt.Fprintf(cmd.OutOrStderr(), "Overwrite existing credentials? (y/N): ")
 						var response string
 						fmt.Scanln(&response)
 						if strings.ToLower(strings.TrimSpace(response)) != "y" {
-							fmt.Fprintln(os.Stderr, "Aborted.")
+							fmt.Fprintln(cmd.OutOrStderr(), "Aborted.")
 							return nil
 						}
 					}
@@ -679,12 +678,12 @@ Security:
 					if tenantConfig.Projects != nil {
 						for _, project := range projects {
 							if projConfig, projExists := tenantConfig.Projects[project]; projExists && projConfig.ClientID != "" {
-								fmt.Fprintf(os.Stderr, "\n⚠️  Profile '%s' already has credentials for '%s/%s'.\n", profileName, tenant, project)
-								fmt.Fprintf(os.Stderr, "Overwrite existing credentials? (y/N): ")
+								fmt.Fprintf(cmd.OutOrStderr(), "\n⚠️  Profile '%s' already has credentials for '%s/%s'.\n", profileName, tenant, project)
+								fmt.Fprintf(cmd.OutOrStderr(), "Overwrite existing credentials? (y/N): ")
 								var response string
 								fmt.Scanln(&response)
 								if strings.ToLower(strings.TrimSpace(response)) != "y" {
-									fmt.Fprintln(os.Stderr, "Aborted.")
+									fmt.Fprintln(cmd.OutOrStderr(), "Aborted.")
 									return nil
 								}
 								break
@@ -702,18 +701,18 @@ Security:
 
 		// Success message
 		if len(projects) == 0 {
-			fmt.Fprintf(os.Stderr, "\n✓ Client credentials saved to profile '%s' for tenant '%s'\n", profileName, tenant)
+			fmt.Fprintf(cmd.OutOrStderr(), "\n✓ Client credentials saved to profile '%s' for tenant '%s'\n", profileName, tenant)
 		} else {
-			fmt.Fprintf(os.Stderr, "\n✓ Client credentials saved to profile '%s' for tenant '%s', projects: %s\n", profileName, tenant, strings.Join(projects, ", "))
+			fmt.Fprintf(cmd.OutOrStderr(), "\n✓ Client credentials saved to profile '%s' for tenant '%s', projects: %s\n", profileName, tenant, strings.Join(projects, ", "))
 		}
 
-		fmt.Fprintln(os.Stderr, "\n⚠️  SECURITY WARNING:")
-		fmt.Fprintln(os.Stderr, "   Credentials are stored in plaintext in the config file.")
-		fmt.Fprintln(os.Stderr, "   File permissions are set to 0600 (owner read/write only).")
-		fmt.Fprintln(os.Stderr, "   Never commit config.yaml to version control.")
+		fmt.Fprintln(cmd.OutOrStderr(), "\n⚠️  SECURITY WARNING:")
+		fmt.Fprintln(cmd.OutOrStderr(), "   Credentials are stored in plaintext in the config file.")
+		fmt.Fprintln(cmd.OutOrStderr(), "   File permissions are set to 0600 (owner read/write only).")
+		fmt.Fprintln(cmd.OutOrStderr(), "   Never commit config.yaml to version control.")
 
-		fmt.Fprintf(os.Stderr, "\nYou can now use these credentials with:\n")
-		fmt.Fprintf(os.Stderr, "  iz features check --tenant %s <feature-id>\n", tenant)
+		fmt.Fprintf(cmd.OutOrStderr(), "\nYou can now use these credentials with:\n")
+		fmt.Fprintf(cmd.OutOrStderr(), "  iz features check --tenant %s <feature-id>\n", tenant)
 
 		return nil
 	},

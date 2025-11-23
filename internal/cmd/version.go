@@ -22,11 +22,11 @@ var versionCmd = &cobra.Command{
 	Short: "Show version information",
 	Long:  `Display the version of the Izanami CLI, along with build information.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Printf("iz version %s\n", Version)
-		fmt.Printf("  Commit:    %s\n", GitCommit)
-		fmt.Printf("  Built:     %s\n", BuildDate)
-		fmt.Printf("  Go:        %s\n", runtime.Version())
-		fmt.Printf("  Platform:  %s/%s\n", runtime.GOOS, runtime.GOARCH)
+		fmt.Fprintf(cmd.OutOrStdout(), "iz version %s\n", Version)
+		fmt.Fprintf(cmd.OutOrStdout(), "  Commit:    %s\n", GitCommit)
+		fmt.Fprintf(cmd.OutOrStdout(), "  Built:     %s\n", BuildDate)
+		fmt.Fprintf(cmd.OutOrStdout(), "  Go:        %s\n", runtime.Version())
+		fmt.Fprintf(cmd.OutOrStdout(), "  Platform:  %s/%s\n", runtime.GOOS, runtime.GOARCH)
 	},
 }
 

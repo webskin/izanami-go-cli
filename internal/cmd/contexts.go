@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/webskin/izanami-go-cli/internal/izanami"
@@ -200,7 +199,7 @@ Examples:
 			return err
 		}
 
-		fmt.Fprintf(os.Stderr, "Context created successfully: %s\n", contextName)
+		fmt.Fprintf(cmd.OutOrStderr(), "Context created successfully: %s\n", contextName)
 		return nil
 	},
 }
@@ -249,7 +248,7 @@ The context path should be the full hierarchical path.`,
 			return err
 		}
 
-		fmt.Fprintf(os.Stderr, "Context deleted successfully: %s\n", contextPath)
+		fmt.Fprintf(cmd.OutOrStderr(), "Context deleted successfully: %s\n", contextPath)
 		return nil
 	},
 }
