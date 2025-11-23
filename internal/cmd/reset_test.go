@@ -116,29 +116,19 @@ func setupTestPaths(t *testing.T) *testPaths {
 }
 
 // Test helper: Override izanami path functions to use test paths
-func overridePathFunctions(t *testing.T, paths *testPaths) func() {
+func overridePathFunctions(t *testing.T, paths *testPaths) {
 	t.Helper()
 
-	// Save original functions (we'll need to use reflection or global vars)
-	// For now, we'll use environment variable override pattern
-	oldHome := os.Getenv("HOME")
-	oldUserProfile := os.Getenv("USERPROFILE")
-
-	os.Setenv("HOME", paths.homeDir)
-	os.Setenv("USERPROFILE", paths.homeDir)
-
-	// Return cleanup function
-	return func() {
-		os.Setenv("HOME", oldHome)
-		os.Setenv("USERPROFILE", oldUserProfile)
-	}
+	// Use t.Setenv() which automatically handles cleanup and prevents parallel execution
+	// This is critical to avoid race conditions when multiple tests modify HOME/USERPROFILE
+	t.Setenv("HOME", paths.homeDir)
+	t.Setenv("USERPROFILE", paths.homeDir)
 }
 
 func TestResetCommand_BothFilesExist_UserConfirmsWithY(t *testing.T) {
 	// Setup
 	paths := setupTestPaths(t)
-	cleanup := overridePathFunctions(t, paths)
-	defer cleanup()
+	overridePathFunctions(t, paths)
 
 	configContent := "timeout: 30\nverbose: true\n"
 	sessionsContent := "active: test-session\n"
@@ -181,8 +171,7 @@ func TestResetCommand_BothFilesExist_UserConfirmsWithY(t *testing.T) {
 func TestResetCommand_BothFilesExist_UserConfirmsWithYes(t *testing.T) {
 	// Setup
 	paths := setupTestPaths(t)
-	cleanup := overridePathFunctions(t, paths)
-	defer cleanup()
+	overridePathFunctions(t, paths)
 
 	createTestFile(t, paths.configPath, "config content", 0600)
 	createTestFile(t, paths.sessionsPath, "sessions content", 0600)
@@ -210,8 +199,7 @@ func TestResetCommand_BothFilesExist_UserConfirmsWithYes(t *testing.T) {
 func TestResetCommand_WithForceFlag_NoPrompt(t *testing.T) {
 	// Setup
 	paths := setupTestPaths(t)
-	cleanup := overridePathFunctions(t, paths)
-	defer cleanup()
+	overridePathFunctions(t, paths)
 
 	configContent := "timeout: 60\n"
 	createTestFile(t, paths.configPath, configContent, 0600)
@@ -243,8 +231,7 @@ func TestResetCommand_WithForceFlag_NoPrompt(t *testing.T) {
 func TestResetCommand_OnlyConfigExists(t *testing.T) {
 	// Setup
 	paths := setupTestPaths(t)
-	cleanup := overridePathFunctions(t, paths)
-	defer cleanup()
+	overridePathFunctions(t, paths)
 
 	createTestFile(t, paths.configPath, "config only", 0600)
 	// Don't create sessions file
@@ -275,8 +262,7 @@ func TestResetCommand_OnlyConfigExists(t *testing.T) {
 func TestResetCommand_OnlySessionsExists(t *testing.T) {
 	// Setup
 	paths := setupTestPaths(t)
-	cleanup := overridePathFunctions(t, paths)
-	defer cleanup()
+	overridePathFunctions(t, paths)
 
 	createTestFile(t, paths.sessionsPath, "sessions only", 0600)
 	// Don't create config file
@@ -307,8 +293,7 @@ func TestResetCommand_OnlySessionsExists(t *testing.T) {
 func TestResetCommand_NoFilesExist_ReturnsError(t *testing.T) {
 	// Setup
 	paths := setupTestPaths(t)
-	cleanup := overridePathFunctions(t, paths)
-	defer cleanup()
+	overridePathFunctions(t, paths)
 
 	// Don't create any files
 
@@ -328,8 +313,7 @@ func TestResetCommand_NoFilesExist_ReturnsError(t *testing.T) {
 func TestResetCommand_BackupTimestampFormat(t *testing.T) {
 	// Setup
 	paths := setupTestPaths(t)
-	cleanup := overridePathFunctions(t, paths)
-	defer cleanup()
+	overridePathFunctions(t, paths)
 
 	createTestFile(t, paths.configPath, "config", 0600)
 	createTestFile(t, paths.sessionsPath, "sessions", 0600)
@@ -365,8 +349,7 @@ func TestResetCommand_BackupTimestampFormat(t *testing.T) {
 func TestResetCommand_PreservesFilePermissions(t *testing.T) {
 	// Setup
 	paths := setupTestPaths(t)
-	cleanup := overridePathFunctions(t, paths)
-	defer cleanup()
+	overridePathFunctions(t, paths)
 
 	// Create files with specific permissions
 	createTestFile(t, paths.configPath, "config", 0600)
