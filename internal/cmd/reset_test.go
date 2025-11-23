@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/webskin/izanami-go-cli/internal/izanami"
 )
 
 // Test helper: Create a test file with specific content and permissions
@@ -119,10 +120,23 @@ func setupTestPaths(t *testing.T) *testPaths {
 func overridePathFunctions(t *testing.T, paths *testPaths) {
 	t.Helper()
 
-	// Use t.Setenv() which automatically handles cleanup and prevents parallel execution
-	// This is critical to avoid race conditions when multiple tests modify HOME/USERPROFILE
-	t.Setenv("HOME", paths.homeDir)
-	t.Setenv("USERPROFILE", paths.homeDir)
+	// Save original functions
+	originalGetConfigDir := izanami.GetConfigDir
+	originalGetSessionsPath := izanami.GetSessionsPath
+
+	// Override with test-specific paths
+	izanami.SetGetConfigDirFunc(func() string {
+		return paths.configDir
+	})
+	izanami.SetGetSessionsPathFunc(func() string {
+		return paths.sessionsPath
+	})
+
+	// Restore on cleanup
+	t.Cleanup(func() {
+		izanami.SetGetConfigDirFunc(originalGetConfigDir)
+		izanami.SetGetSessionsPathFunc(originalGetSessionsPath)
+	})
 }
 
 func TestResetCommand_BothFilesExist_UserConfirmsWithY(t *testing.T) {

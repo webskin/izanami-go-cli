@@ -24,8 +24,9 @@ type Sessions struct {
 	Sessions map[string]*Session `yaml:"sessions"`
 }
 
-// GetSessionsPath returns the path to the sessions file
-func GetSessionsPath() string {
+// getSessionsPath is a variable that returns the path to the sessions file
+// It's a variable (not a function) to allow tests to override it
+var getSessionsPath = func() string {
 	var sessionsPath string
 
 	switch runtime.GOOS {
@@ -36,6 +37,16 @@ func GetSessionsPath() string {
 	}
 
 	return sessionsPath
+}
+
+// GetSessionsPath returns the path to the sessions file
+func GetSessionsPath() string {
+	return getSessionsPath()
+}
+
+// SetGetSessionsPathFunc allows tests to override the sessions path resolution
+func SetGetSessionsPathFunc(fn func() string) {
+	getSessionsPath = fn
 }
 
 // LoadSessions loads sessions from the sessions file

@@ -264,6 +264,16 @@ var getConfigDir = func() string {
 	return configDir
 }
 
+// SetGetConfigDirFunc allows tests to override the config directory resolution
+func SetGetConfigDirFunc(fn func() string) {
+	getConfigDir = fn
+}
+
+// GetConfigDir returns the platform-specific config directory
+func GetConfigDir() string {
+	return getConfigDir()
+}
+
 // InitConfigFile creates a sample config file at the default location
 func InitConfigFile() error {
 	configDir := getConfigDir()
