@@ -30,6 +30,7 @@ const (
 	MsgFailedToUpdateFeature = "failed to update feature"
 	MsgFailedToDeleteFeature = "failed to delete feature"
 	MsgFailedToCheckFeature  = "failed to check feature"
+	MsgFailedToCheckFeatures = "failed to check features"
 
 	// Context error messages
 	MsgFailedToListContexts  = "failed to list contexts"
@@ -58,6 +59,7 @@ const (
 
 	// Tag error messages
 	MsgFailedToListTags  = "failed to list tags"
+	MsgFailedToGetTag    = "failed to get tag"
 	MsgFailedToCreateTag = "failed to create tag"
 	MsgFailedToDeleteTag = "failed to delete tag"
 

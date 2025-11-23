@@ -25,8 +25,11 @@ const (
 
 // Client represents an Izanami HTTP client
 type Client struct {
-	http   *resty.Client
-	config *Config
+	http              *resty.Client
+	config            *Config
+	beforeRequest     []func(*resty.Request) error
+	afterResponse     []func(*resty.Response) error
+	structuredLogger  func(level, message string, fields map[string]interface{})
 }
 
 // APIError represents a structured API error with status code and message
@@ -83,8 +86,10 @@ func newClientInternal(config *Config) (*Client, error) {
 		SetRetryWaitTime(1 * time.Second).
 		SetRetryMaxWaitTime(5 * time.Second).
 		AddRetryCondition(func(r *resty.Response, err error) bool {
-			// Only retry on network errors or 5xx for idempotent methods (GET, HEAD)
-			// This prevents duplicate operations from POST/PUT/DELETE retries
+			// IMPORTANT: Only retry on network errors or 5xx for idempotent methods (GET, HEAD)
+			// This prevents duplicate operations from POST/PUT/DELETE retries.
+			// Non-idempotent methods (POST, PUT, DELETE, PATCH) are NOT retried to avoid
+			// creating duplicate resources or applying the same modification multiple times.
 			if r == nil {
 				// Network error, safe to retry
 				return err != nil
@@ -94,8 +99,16 @@ func newClientInternal(config *Config) (*Client, error) {
 			return isIdempotent && (err != nil || r.StatusCode() >= 500)
 		})
 
+	izClient := &Client{
+		http:             client,
+		config:           configCopy,
+		beforeRequest:    []func(*resty.Request) error{},
+		afterResponse:    []func(*resty.Response) error{},
+		structuredLogger: nil,
+	}
+
 	if configCopy.Verbose {
-		enableSecureDebugMode(client)
+		enableSecureDebugMode(client, izClient)
 	}
 
 	// Note: Authentication is NOT set at client level
@@ -103,13 +116,76 @@ func newClientInternal(config *Config) (*Client, error) {
 	// - Admin APIs: Use setAdminAuth() to set PAT or JWT
 	// - Client APIs: Use setClientAuth() to set client-id/secret headers
 
-	return &Client{
-		http:   client,
-		config: configCopy,
-	}, nil
+	return izClient, nil
 }
 
 const maxBodyLogLength = 2048 // Maximum length for logged request/response bodies
+
+// AddBeforeRequestHook adds a middleware function that runs before each request
+func (c *Client) AddBeforeRequestHook(hook func(*resty.Request) error) {
+	c.beforeRequest = append(c.beforeRequest, hook)
+}
+
+// AddAfterResponseHook adds a middleware function that runs after each response
+func (c *Client) AddAfterResponseHook(hook func(*resty.Response) error) {
+	c.afterResponse = append(c.afterResponse, hook)
+}
+
+// SetStructuredLogger sets a structured logging function
+// The logger receives: level ("info", "warn", "error"), message, and optional fields
+func (c *Client) SetStructuredLogger(logger func(level, message string, fields map[string]interface{})) {
+	c.structuredLogger = logger
+}
+
+// executeBeforeRequestHooks runs all before-request middleware hooks
+func (c *Client) executeBeforeRequestHooks(req *resty.Request) error {
+	for _, hook := range c.beforeRequest {
+		if err := hook(req); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// executeAfterResponseHooks runs all after-response middleware hooks
+func (c *Client) executeAfterResponseHooks(resp *resty.Response) error {
+	for _, hook := range c.afterResponse {
+		if err := hook(resp); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// log writes a log message using structured logger if available, otherwise falls back to stderr
+func (c *Client) log(level, message string, fields map[string]interface{}) {
+	if c.structuredLogger != nil {
+		c.structuredLogger(level, message, fields)
+	} else if c.config.Verbose {
+		// Fallback to stderr for verbose mode
+		fmt.Fprintf(os.Stderr, "[%s] %s", level, message)
+		if len(fields) > 0 {
+			fmt.Fprintf(os.Stderr, " %v", fields)
+		}
+		fmt.Fprintf(os.Stderr, "\n")
+	}
+}
+
+// normalizeContextPath ensures context path has a leading slash if not empty
+func normalizeContextPath(contextPath string) string {
+	if contextPath != "" && !strings.HasPrefix(contextPath, "/") {
+		return "/" + contextPath
+	}
+	return contextPath
+}
+
+// truncateString truncates a string to maxLength and adds a truncation notice
+func truncateString(s string, maxLength int) string {
+	if len(s) <= maxLength {
+		return s
+	}
+	return fmt.Sprintf("%s... [TRUNCATED: %d more bytes]", s[:maxLength], len(s)-maxLength)
+}
 
 // setAdminAuth sets authentication for admin API requests (PAT or JWT)
 func (c *Client) setAdminAuth(req *resty.Request) {
@@ -137,7 +213,7 @@ func (c *Client) setClientAuth(req *resty.Request) error {
 }
 
 // enableSecureDebugMode enables verbose logging with sensitive data redaction
-func enableSecureDebugMode(client *resty.Client) {
+func enableSecureDebugMode(httpClient *resty.Client, izClient *Client) {
 	// Sensitive headers that should be redacted in both requests and responses
 	sensitiveHeaders := map[string]bool{
 		"cookie":                true,
@@ -153,72 +229,93 @@ func enableSecureDebugMode(client *resty.Client) {
 	// Log response details (after receiving)
 	// We log both request and response here because the request details
 	// are only fully available after the request is sent
-	client.OnAfterResponse(func(c *resty.Client, resp *resty.Response) error {
-		logRequest(resp, sensitiveHeaders)
-		logResponse(resp, sensitiveHeaders)
+	httpClient.OnAfterResponse(func(c *resty.Client, resp *resty.Response) error {
+		logRequest(resp, sensitiveHeaders, izClient)
+		logResponse(resp, sensitiveHeaders, izClient)
 		return nil
 	})
 }
 
 // logRequest logs HTTP request details with sensitive data redaction
-func logRequest(resp *resty.Response, sensitiveHeaders map[string]bool) {
+func logRequest(resp *resty.Response, sensitiveHeaders map[string]bool, izClient *Client) {
 	req := resp.Request.RawRequest
 
-	fmt.Fprintf(os.Stderr, "==============================================================================\n")
-	fmt.Fprintf(os.Stderr, "~~~ REQUEST ~~~\n")
-	// Log full URL including query parameters
-	url := req.URL.Path
-	if req.URL.RawQuery != "" {
-		url += "?" + req.URL.RawQuery
-	}
-	fmt.Fprintf(os.Stderr, "%s  %s  %s\n", req.Method, url, req.Proto)
-	fmt.Fprintf(os.Stderr, "HOST   : %s\n", req.Host)
-	fmt.Fprintf(os.Stderr, "HEADERS:\n")
-	for key, values := range req.Header {
-		keyLower := strings.ToLower(key)
-		if sensitiveHeaders[keyLower] {
-			fmt.Fprintf(os.Stderr, "\t%s: [REDACTED]\n", key)
-		} else {
-			for _, value := range values {
-				fmt.Fprintf(os.Stderr, "\t%s: %s\n", key, value)
+	// Use structured logging if available
+	if izClient != nil && izClient.structuredLogger != nil {
+		url := req.URL.Path
+		if req.URL.RawQuery != "" {
+			url += "?" + req.URL.RawQuery
+		}
+		izClient.structuredLogger("info", "HTTP Request", map[string]interface{}{
+			"method": req.Method,
+			"url":    url,
+			"host":   req.Host,
+		})
+	} else {
+		fmt.Fprintf(os.Stderr, "==============================================================================\n")
+		fmt.Fprintf(os.Stderr, "~~~ REQUEST ~~~\n")
+		// Log full URL including query parameters
+		url := req.URL.Path
+		if req.URL.RawQuery != "" {
+			url += "?" + req.URL.RawQuery
+		}
+		fmt.Fprintf(os.Stderr, "%s  %s  %s\n", req.Method, url, req.Proto)
+		fmt.Fprintf(os.Stderr, "HOST   : %s\n", req.Host)
+		fmt.Fprintf(os.Stderr, "HEADERS:\n")
+		for key, values := range req.Header {
+			keyLower := strings.ToLower(key)
+			if sensitiveHeaders[keyLower] {
+				fmt.Fprintf(os.Stderr, "\t%s: [REDACTED]\n", key)
+			} else {
+				for _, value := range values {
+					fmt.Fprintf(os.Stderr, "\t%s: %s\n", key, value)
+				}
 			}
 		}
+		fmt.Fprintf(os.Stderr, "BODY   :\n")
+		logBody(os.Stderr, resp.Request.Body)
+		fmt.Fprintf(os.Stderr, "------------------------------------------------------------------------------\n")
 	}
-	fmt.Fprintf(os.Stderr, "BODY   :\n")
-	logBody(os.Stderr, resp.Request.Body)
-	fmt.Fprintf(os.Stderr, "------------------------------------------------------------------------------\n")
 }
 
 // logResponse logs HTTP response details with sensitive data redaction
-func logResponse(resp *resty.Response, sensitiveHeaders map[string]bool) {
-	fmt.Fprintf(os.Stderr, "~~~ RESPONSE ~~~\n")
-	fmt.Fprintf(os.Stderr, "STATUS       : %s\n", resp.Status())
-	fmt.Fprintf(os.Stderr, "PROTO        : %s\n", resp.Proto())
-	fmt.Fprintf(os.Stderr, "RECEIVED AT  : %v\n", time.Now().Format(time.RFC3339Nano))
-	fmt.Fprintf(os.Stderr, "TIME DURATION: %v\n", resp.Time())
-	fmt.Fprintf(os.Stderr, "HEADERS      :\n")
-	for key, values := range resp.Header() {
-		keyLower := strings.ToLower(key)
-		if sensitiveHeaders[keyLower] {
-			fmt.Fprintf(os.Stderr, "\t%s: [REDACTED]\n", key)
-		} else {
-			for _, value := range values {
-				fmt.Fprintf(os.Stderr, "\t%s: %s\n", key, value)
+func logResponse(resp *resty.Response, sensitiveHeaders map[string]bool, izClient *Client) {
+	// Use structured logging if available
+	if izClient != nil && izClient.structuredLogger != nil {
+		fields := map[string]interface{}{
+			"status":   resp.Status(),
+			"duration": resp.Time().String(),
+		}
+		if len(resp.Body()) > 0 {
+			fields["body_size"] = len(resp.Body())
+		}
+		izClient.structuredLogger("info", "HTTP Response", fields)
+	} else {
+		fmt.Fprintf(os.Stderr, "~~~ RESPONSE ~~~\n")
+		fmt.Fprintf(os.Stderr, "STATUS       : %s\n", resp.Status())
+		fmt.Fprintf(os.Stderr, "PROTO        : %s\n", resp.Proto())
+		fmt.Fprintf(os.Stderr, "RECEIVED AT  : %v\n", time.Now().Format(time.RFC3339Nano))
+		fmt.Fprintf(os.Stderr, "TIME DURATION: %v\n", resp.Time())
+		fmt.Fprintf(os.Stderr, "HEADERS      :\n")
+		for key, values := range resp.Header() {
+			keyLower := strings.ToLower(key)
+			if sensitiveHeaders[keyLower] {
+				fmt.Fprintf(os.Stderr, "\t%s: [REDACTED]\n", key)
+			} else {
+				for _, value := range values {
+					fmt.Fprintf(os.Stderr, "\t%s: %s\n", key, value)
+				}
 			}
 		}
-	}
-	fmt.Fprintf(os.Stderr, "BODY         :\n")
-	if len(resp.Body()) > 0 {
-		body := string(resp.Body())
-		if len(body) > maxBodyLogLength {
-			fmt.Fprintf(os.Stderr, "%s... [TRUNCATED: %d more bytes]\n", body[:maxBodyLogLength], len(body)-maxBodyLogLength)
+		fmt.Fprintf(os.Stderr, "BODY         :\n")
+		if len(resp.Body()) > 0 {
+			body := string(resp.Body())
+			fmt.Fprintf(os.Stderr, "%s\n", truncateString(body, maxBodyLogLength))
 		} else {
-			fmt.Fprintf(os.Stderr, "%s\n", body)
+			fmt.Fprintf(os.Stderr, "***** NO CONTENT *****\n")
 		}
-	} else {
-		fmt.Fprintf(os.Stderr, "***** NO CONTENT *****\n")
+		fmt.Fprintf(os.Stderr, "==============================================================================\n")
 	}
-	fmt.Fprintf(os.Stderr, "==============================================================================\n")
 }
 
 // logBody safely logs a request body with truncation and type handling
@@ -243,11 +340,7 @@ func logBody(w io.Writer, body interface{}) {
 		}
 	}
 
-	if len(bodyStr) > maxBodyLogLength {
-		fmt.Fprintf(w, "%s... [TRUNCATED: %d more bytes]\n", bodyStr[:maxBodyLogLength], len(bodyStr)-maxBodyLogLength)
-	} else {
-		fmt.Fprintf(w, "%s\n", bodyStr)
-	}
+	fmt.Fprintf(w, "%s\n", truncateString(bodyStr, maxBodyLogLength))
 }
 
 // handleError parses error responses from the API and returns a structured APIError
@@ -447,7 +540,7 @@ func (c *Client) CheckFeature(ctx context.Context, featureID, user, contextPath,
 		req.SetQueryParam("user", user)
 	}
 	if contextPath != "" {
-		req.SetQueryParam("context", contextPath)
+		req.SetQueryParam("context", normalizeContextPath(contextPath))
 	}
 
 	var resp *resty.Response
@@ -491,7 +584,7 @@ func (c *Client) CheckFeatures(ctx context.Context, request CheckFeaturesRequest
 		req.SetQueryParam("user", request.User)
 	}
 	if request.Context != "" {
-		req.SetQueryParam("context", request.Context)
+		req.SetQueryParam("context", normalizeContextPath(request.Context))
 	}
 	if len(request.Features) > 0 {
 		req.SetQueryParam("features", strings.Join(request.Features, ","))
@@ -527,7 +620,7 @@ func (c *Client) CheckFeatures(ctx context.Context, request CheckFeaturesRequest
 	}
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to check features: %w", err)
+		return nil, fmt.Errorf("%s: %w", errmsg.MsgFailedToCheckFeatures, err)
 	}
 
 	if resp.StatusCode() != http.StatusOK {
@@ -971,7 +1064,7 @@ func (c *Client) ListTags(ctx context.Context, tenant string) ([]Tag, error) {
 // GetTag retrieves a specific tag by name using the dedicated endpoint
 // GET /api/admin/tenants/:tenant/tags/:name
 func (c *Client) GetTag(ctx context.Context, tenant, tagName string) (*Tag, error) {
-	path := fmt.Sprintf("/api/admin/tenants/%s/tags/%s", tenant, tagName)
+	path := apiAdminTenants + buildPath(tenant, "tags", tagName)
 
 	var tag Tag
 	req := c.http.R().SetContext(ctx).SetResult(&tag)
@@ -979,7 +1072,7 @@ func (c *Client) GetTag(ctx context.Context, tenant, tagName string) (*Tag, erro
 	resp, err := req.Get(path)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to get tag: %w", err)
+		return nil, fmt.Errorf("%s: %w", errmsg.MsgFailedToGetTag, err)
 	}
 
 	if resp.StatusCode() != http.StatusOK {
@@ -1117,7 +1210,7 @@ func (c *Client) streamEvents(ctx context.Context, request EventsWatchRequest, l
 		req.SetQueryParam("user", request.User)
 	}
 	if request.Context != "" {
-		req.SetQueryParam("context", request.Context)
+		req.SetQueryParam("context", normalizeContextPath(request.Context))
 	}
 	if len(request.Features) > 0 {
 		req.SetQueryParam("features", strings.Join(request.Features, ","))
