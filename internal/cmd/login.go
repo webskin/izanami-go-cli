@@ -3,7 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"os"
+	"io"
 	"strings"
 	"syscall"
 	"time"
@@ -42,9 +42,9 @@ Examples:
 		// Get password
 		password := loginPassword
 		if password == "" {
-			fmt.Fprintf(os.Stderr, "Password: ")
+			fmt.Fprintf(cmd.OutOrStderr(), "Password: ")
 			passwordBytes, err := term.ReadPassword(int(syscall.Stdin))
-			fmt.Fprintln(os.Stderr) // New line after password input
+			fmt.Fprintln(cmd.OutOrStderr()) // New line after password input
 			if err != nil {
 				return fmt.Errorf("failed to read password: %w", err)
 			}
@@ -56,7 +56,7 @@ Examples:
 		}
 
 		// Login to Izanami
-		fmt.Fprintf(os.Stderr, "Authenticating with %s...\n", baseURL)
+		fmt.Fprintf(cmd.OutOrStderr(), "Authenticating with %s...\n", baseURL)
 
 		token, err := performLogin(baseURL, username, password)
 		if err != nil {
@@ -64,7 +64,7 @@ Examples:
 		}
 
 		// Determine profile name first (create or find existing)
-		profileName, profileCreated, profileUpdated := determineProfileName(baseURL, username)
+		profileName, profileCreated, profileUpdated := determineProfileName(cmd.OutOrStderr(), baseURL, username)
 
 		// Generate deterministic session name: <profile-name>-<username>-session
 		sessionName := fmt.Sprintf("%s-%s-session", profileName, username)
@@ -88,7 +88,7 @@ Examples:
 				// Delete old session if it has a different name
 				if name != sessionName {
 					delete(sessions.Sessions, name)
-					fmt.Fprintf(os.Stderr, "   Replacing existing session: %s\n", name)
+					fmt.Fprintf(cmd.OutOrStderr(), "   Replacing existing session: %s\n", name)
 				}
 				break
 			}
@@ -102,30 +102,30 @@ Examples:
 
 		// Update profile with session reference
 		if err := updateProfileWithSession(profileName, baseURL, username, sessionName); err != nil {
-			fmt.Fprintf(os.Stderr, "\n   Warning: failed to update profile: %v\n", err)
+			fmt.Fprintf(cmd.OutOrStderr(), "\n   Warning: failed to update profile: %v\n", err)
 		}
 
 		// Success messages
-		fmt.Fprintf(os.Stderr, "✅ Successfully logged in as %s\n", username)
-		fmt.Fprintf(os.Stderr, "   Session saved as: %s\n", sessionName)
+		fmt.Fprintf(cmd.OutOrStderr(), "✅ Successfully logged in as %s\n", username)
+		fmt.Fprintf(cmd.OutOrStderr(), "   Session saved as: %s\n", sessionName)
 
 		// Profile messages
 		if profileCreated {
-			fmt.Fprintf(os.Stderr, "\n✓ Profile '%s' created\n", profileName)
+			fmt.Fprintf(cmd.OutOrStderr(), "\n✓ Profile '%s' created\n", profileName)
 		} else if profileUpdated {
-			fmt.Fprintf(os.Stderr, "\n   Using existing profile: %s (session updated)\n", profileName)
+			fmt.Fprintf(cmd.OutOrStderr(), "\n   Using existing profile: %s (session updated)\n", profileName)
 		}
 
 		if profileName != "" {
 			activeProfile, _ := izanami.GetActiveProfileName()
 			if activeProfile == profileName {
-				fmt.Fprintf(os.Stderr, "   Active profile: %s\n", profileName)
+				fmt.Fprintf(cmd.OutOrStderr(), "   Active profile: %s\n", profileName)
 			}
 		}
 
-		fmt.Fprintf(os.Stderr, "\nYou can now run commands like:\n")
-		fmt.Fprintf(os.Stderr, "  iz admin tenants list\n")
-		fmt.Fprintf(os.Stderr, "  iz features list --tenant <tenant>\n")
+		fmt.Fprintf(cmd.OutOrStderr(), "\nYou can now run commands like:\n")
+		fmt.Fprintf(cmd.OutOrStderr(), "  iz admin tenants list\n")
+		fmt.Fprintf(cmd.OutOrStderr(), "  iz features list --tenant <tenant>\n")
 
 		return nil
 	},
@@ -179,9 +179,9 @@ func extractSessionName(url, username string) string {
 
 // promptForProfileName prompts the user to enter a profile name
 // Shows suggestions and uses suggestedName as default
-func promptForProfileName(suggestedName string) string {
-	fmt.Fprintf(os.Stderr, "\nProfile name suggestions: local, sandbox, build, prod\n")
-	fmt.Fprintf(os.Stderr, "Enter profile name [%s]: ", suggestedName)
+func promptForProfileName(w io.Writer, suggestedName string) string {
+	fmt.Fprintf(w, "\nProfile name suggestions: local, sandbox, build, prod\n")
+	fmt.Fprintf(w, "Enter profile name [%s]: ", suggestedName)
 
 	var input string
 	fmt.Scanln(&input)
@@ -196,12 +196,12 @@ func promptForProfileName(suggestedName string) string {
 
 // determineProfileName determines the profile name to use for login
 // Returns (profileName, wasCreated, wasUpdated)
-func determineProfileName(baseURL, username string) (string, bool, bool) {
+func determineProfileName(w io.Writer, baseURL, username string) (string, bool, bool) {
 	// Check if any profiles exist
 	profiles, _, err := izanami.ListProfiles()
 	if err != nil {
 		// If we can't load profiles, use default name
-		fmt.Fprintf(os.Stderr, "\n   Warning: could not load profiles: %v\n", err)
+		fmt.Fprintf(w, "\n   Warning: could not load profiles: %v\n", err)
 		return extractSessionName(baseURL, username), false, false
 	}
 
@@ -211,15 +211,15 @@ func determineProfileName(baseURL, username string) (string, bool, bool) {
 
 	if !hasProfiles {
 		// First time - no profiles exist yet
-		fmt.Fprintf(os.Stderr, "\nNo profiles exist yet. Let's create one!\n")
+		fmt.Fprintf(w, "\nNo profiles exist yet. Let's create one!\n")
 		suggestedName := extractSessionName(baseURL, username)
-		profileName = promptForProfileName(suggestedName)
+		profileName = promptForProfileName(w, suggestedName)
 		wasCreated = true
 	} else {
 		// Check if URL matches existing profile
 		existingProfileName, _, err := izanami.FindProfileByBaseURL(baseURL)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "\n   Warning: could not check for existing profiles: %v\n", err)
+			fmt.Fprintf(w, "\n   Warning: could not check for existing profiles: %v\n", err)
 			return extractSessionName(baseURL, username), false, false
 		}
 
@@ -230,7 +230,7 @@ func determineProfileName(baseURL, username string) (string, bool, bool) {
 		} else {
 			// New URL - prompt for profile name
 			suggestedName := extractSessionName(baseURL, username)
-			profileName = promptForProfileName(suggestedName)
+			profileName = promptForProfileName(w, suggestedName)
 			wasCreated = true
 		}
 	}
