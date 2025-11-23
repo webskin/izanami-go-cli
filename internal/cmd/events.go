@@ -99,9 +99,9 @@ Press Ctrl+C to stop watching.`,
 				cfg.ClientSecret = clientSecret
 				if cfg.Verbose {
 					if len(projects) > 0 {
-						fmt.Fprintf(os.Stderr, "Using client credentials from config (tenant: %s, projects: %v)\n", tenant, projects)
+						fmt.Fprintf(cmd.OutOrStderr(), "Using client credentials from config (tenant: %s, projects: %v)\n", tenant, projects)
 					} else {
-						fmt.Fprintf(os.Stderr, "Using client credentials from config (tenant: %s)\n", tenant)
+						fmt.Fprintf(cmd.OutOrStderr(), "Using client credentials from config (tenant: %s)\n", tenant)
 					}
 				}
 			}
@@ -120,7 +120,7 @@ Press Ctrl+C to stop watching.`,
 		signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 		go func() {
 			<-sigCh
-			fmt.Fprintln(os.Stderr, "\n\nStopping event stream...")
+			fmt.Fprintln(cmd.OutOrStderr(), "\n\nStopping event stream...")
 			cancel()
 		}()
 
@@ -160,8 +160,8 @@ Press Ctrl+C to stop watching.`,
 			Payload:           payload,
 		}
 
-		fmt.Fprintf(os.Stderr, "🔄 Connecting to Izanami event stream...\n")
-		fmt.Fprintf(os.Stderr, "   Press Ctrl+C to stop\n\n")
+		fmt.Fprintf(cmd.OutOrStderr(), "🔄 Connecting to Izanami event stream...\n")
+		fmt.Fprintf(cmd.OutOrStderr(), "   Press Ctrl+C to stop\n\n")
 
 		startTime := time.Now()
 		eventCount := 0
@@ -172,18 +172,18 @@ Press Ctrl+C to stop watching.`,
 			if eventsRaw {
 				// Raw SSE format
 				if event.ID != "" {
-					fmt.Fprintf(os.Stdout, "id: %s\n", event.ID)
+					fmt.Fprintf(cmd.OutOrStdout(), "id: %s\n", event.ID)
 				}
 				if event.Type != "" {
-					fmt.Fprintf(os.Stdout, "event: %s\n", event.Type)
+					fmt.Fprintf(cmd.OutOrStdout(), "event: %s\n", event.Type)
 				}
-				fmt.Fprintf(os.Stdout, "data: %s\n\n", event.Data)
+				fmt.Fprintf(cmd.OutOrStdout(), "data: %s\n\n", event.Data)
 			} else {
 				// Parse and display as JSON
 				var data interface{}
 				if err := json.Unmarshal([]byte(event.Data), &data); err != nil {
 					// If not JSON, just print the raw data
-					fmt.Fprintln(os.Stdout, event.Data)
+					fmt.Fprintln(cmd.OutOrStdout(), event.Data)
 					return nil
 				}
 
@@ -197,7 +197,7 @@ Press Ctrl+C to stop watching.`,
 					output["id"] = event.ID
 				}
 
-				encoder := json.NewEncoder(os.Stdout)
+				encoder := json.NewEncoder(cmd.OutOrStdout())
 				if eventsPretty {
 					encoder.SetIndent("", "  ")
 				}
@@ -211,9 +211,9 @@ Press Ctrl+C to stop watching.`,
 
 		// Show statistics when stopping
 		duration := time.Since(startTime)
-		fmt.Fprintf(os.Stderr, "\n📊 Statistics:\n")
-		fmt.Fprintf(os.Stderr, "   Events received: %d\n", eventCount)
-		fmt.Fprintf(os.Stderr, "   Duration: %s\n", duration.Round(time.Second))
+		fmt.Fprintf(cmd.OutOrStderr(), "\n📊 Statistics:\n")
+		fmt.Fprintf(cmd.OutOrStderr(), "   Events received: %d\n", eventCount)
+		fmt.Fprintf(cmd.OutOrStderr(), "   Duration: %s\n", duration.Round(time.Second))
 
 		if err != nil && err != context.Canceled {
 			return fmt.Errorf("event stream error: %w", err)
