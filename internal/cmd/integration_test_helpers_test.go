@@ -1,10 +1,13 @@
 package cmd
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/require"
 	"github.com/webskin/izanami-go-cli/internal/izanami"
 )
 
@@ -93,4 +96,75 @@ func (env *IntegrationTestEnv) ReadConfigFile(t *testing.T) string {
 		t.Fatalf("Failed to read config file: %v", err)
 	}
 	return string(content)
+}
+
+// Login performs login and sets up profile/session for authenticated tests.
+// Returns the JWT token. Skips the test if credentials are not configured.
+func (env *IntegrationTestEnv) Login(t *testing.T) string {
+	t.Helper()
+
+	if env.Username == "" || env.Password == "" {
+		t.Skip("IZ_TEST_USERNAME or IZ_TEST_PASSWORD not set")
+	}
+
+	var buf bytes.Buffer
+	input := bytes.NewBufferString("default\n") // Profile name
+
+	cmd := &cobra.Command{Use: "iz"}
+	cmd.AddCommand(loginCmd)
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetIn(input)
+	loginCmd.SetOut(&buf)
+	loginCmd.SetErr(&buf)
+	loginCmd.SetIn(input)
+
+	cmd.SetArgs([]string{"login", env.BaseURL, env.Username, "--password", env.Password})
+	err := cmd.Execute()
+
+	// Cleanup command state
+	loginCmd.SetIn(nil)
+	loginCmd.SetOut(nil)
+	loginCmd.SetErr(nil)
+
+	require.NoError(t, err, "Login should succeed: %s", buf.String())
+
+	// Return the JWT token
+	return env.GetJwtToken(t)
+}
+
+// GetJwtToken retrieves the JWT token from the saved session
+func (env *IntegrationTestEnv) GetJwtToken(t *testing.T) string {
+	t.Helper()
+
+	sessions, err := izanami.LoadSessions()
+	require.NoError(t, err, "Should load sessions")
+
+	for _, session := range sessions.Sessions {
+		if session.URL == env.BaseURL && session.Username == env.Username {
+			return session.JwtToken
+		}
+	}
+
+	t.Fatalf("No session found for %s@%s", env.Username, env.BaseURL)
+	return ""
+}
+
+// NewAuthenticatedClient creates an Izanami client with JWT authentication
+func (env *IntegrationTestEnv) NewAuthenticatedClient(t *testing.T) *izanami.Client {
+	t.Helper()
+
+	token := env.GetJwtToken(t)
+
+	config := &izanami.Config{
+		BaseURL:  env.BaseURL,
+		Username: env.Username,
+		JwtToken: token,
+		Timeout:  30,
+	}
+
+	client, err := izanami.NewClient(config)
+	require.NoError(t, err, "Should create authenticated client")
+
+	return client
 }
