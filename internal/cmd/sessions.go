@@ -104,7 +104,7 @@ var sessionsDeleteCmd = &cobra.Command{
 			return fmt.Errorf("%s: %w", errors.MsgFailedToSaveSessions, err)
 		}
 
-		fmt.Fprintf(os.Stderr, "✅ Deleted session: %s\n", sessionName)
+		fmt.Fprintf(cmd.OutOrStderr(), "✅ Deleted session: %s\n", sessionName)
 
 		return nil
 	},
@@ -156,8 +156,8 @@ You will need to login again to use this session.`,
 			return fmt.Errorf("%s: %w", errors.MsgFailedToSaveSessions, err)
 		}
 
-		fmt.Fprintf(os.Stderr, "✅ Logged out from session: %s\n", profile.Session)
-		fmt.Fprintf(os.Stderr, "   Use 'iz login %s %s' to login again\n", session.URL, session.Username)
+		fmt.Fprintf(cmd.OutOrStderr(), "✅ Logged out from session: %s\n", profile.Session)
+		fmt.Fprintf(cmd.OutOrStderr(), "   Use 'iz login %s %s' to login again\n", session.URL, session.Username)
 
 		return nil
 	},

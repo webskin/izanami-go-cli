@@ -49,6 +49,12 @@ test:
 	@echo "Running tests..."
 	$(GOTEST) -v -race -coverprofile=coverage.out ./...
 
+# Run integration tests
+.PHONY: integration-test
+integration-test:
+	@echo "Running integration tests against local Izanami server..."
+	./runIntegrationTests.sh
+
 # Run tests with coverage report
 .PHONY: test-coverage
 test-coverage: test
@@ -146,13 +152,14 @@ help:
 	@echo "Izanami Go CLI - Make targets:"
 	@echo ""
 	@echo "Daily Development:"
-	@echo "  make build          - Build binary for current platform (fast)"
-	@echo "  make install        - Install binary to \$$GOPATH/bin"
-	@echo "  make test           - Run tests"
-	@echo "  make test-coverage  - Run tests with coverage report"
-	@echo "  make fmt            - Format code"
-	@echo "  make lint           - Lint code (requires golangci-lint)"
-	@echo "  make run            - Build and run the binary"
+	@echo "  make build            - Build binary for current platform (fast)"
+	@echo "  make install          - Install binary to \$$GOPATH/bin"
+	@echo "  make test             - Run tests"
+	@echo "  make integration-test - Run integration tests (requires local Izanami)"
+	@echo "  make test-coverage    - Run tests with coverage report"
+	@echo "  make fmt              - Format code"
+	@echo "  make lint             - Lint code (requires golangci-lint)"
+	@echo "  make run              - Build and run the binary"
 	@echo ""
 	@echo "Multi-platform Builds:"
 	@echo "  make build-all      - Build binaries for all platforms (Make)"

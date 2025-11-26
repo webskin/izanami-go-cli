@@ -43,6 +43,8 @@ alias iz='./build/iz'
 alias izt='make test'
 alias iztest='make test'
 
+alias izit='make integration-test'
+
 # Run tests with coverage
 alias iztc='make test-coverage'
 alias iztest-coverage='make test-coverage'
@@ -243,6 +245,7 @@ izaliases() {
 
     echo -e "\n${GREEN}Testing:${NC}"
     echo "  izt, iztest            - Run tests"
+    echo "  izit,                  - Run integration tests"
     echo "  iztc, iztest-coverage  - Run tests with coverage"
     echo "  iztco                  - Run tests and open coverage"
 
