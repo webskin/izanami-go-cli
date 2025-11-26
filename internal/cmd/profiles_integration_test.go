@@ -212,3 +212,163 @@ func TestIntegration_ProfileSetTenantPersists(t *testing.T) {
 
 	t.Logf("Successfully set and persisted tenant: %s", testTenant)
 }
+
+// TestIntegration_ProfileClientKeysAddMultipleTenants tests adding client keys for multiple tenants
+func TestIntegration_ProfileClientKeysAddMultipleTenants(t *testing.T) {
+	env := setupIntegrationTest(t)
+
+	// Login to create profile
+	env.Login(t)
+
+	// Define test credentials for multiple tenants
+	tenants := []struct {
+		name         string
+		clientID     string
+		clientSecret string
+	}{
+		{"tenant-alpha", "client-id-alpha", "secret-alpha"},
+		{"tenant-beta", "client-id-beta", "secret-beta"},
+		{"tenant-gamma", "client-id-gamma", "secret-gamma"},
+	}
+
+	// Add credentials for each tenant
+	for _, tenant := range tenants {
+		err := izanami.AddClientKeys(tenant.name, nil, tenant.clientID, tenant.clientSecret)
+		require.NoError(t, err, "Should add client keys for tenant %s", tenant.name)
+	}
+
+	// Verify credentials were persisted for each tenant
+	activeProfileName, err := izanami.GetActiveProfileName()
+	require.NoError(t, err)
+
+	profile, err := izanami.GetProfile(activeProfileName)
+	require.NoError(t, err)
+	require.NotNil(t, profile.ClientKeys, "Profile should have client keys")
+
+	for _, tenant := range tenants {
+		tenantConfig, exists := profile.ClientKeys[tenant.name]
+		require.True(t, exists, "Should have client keys for tenant %s", tenant.name)
+		assert.Equal(t, tenant.clientID, tenantConfig.ClientID, "Client ID should match for tenant %s", tenant.name)
+		assert.Equal(t, tenant.clientSecret, tenantConfig.ClientSecret, "Client secret should match for tenant %s", tenant.name)
+		t.Logf("Verified client keys for tenant '%s': client-id=%s", tenant.name, tenant.clientID)
+	}
+
+	t.Logf("Successfully added and verified client keys for %d tenants", len(tenants))
+}
+
+// TestIntegration_ProfileClientKeysAddProjectsInTenants tests adding client keys for specific projects within tenants
+func TestIntegration_ProfileClientKeysAddProjectsInTenants(t *testing.T) {
+	env := setupIntegrationTest(t)
+
+	// Login to create profile
+	env.Login(t)
+
+	// Define test credentials for projects in tenants
+	testCases := []struct {
+		tenant       string
+		projects     []string
+		clientID     string
+		clientSecret string
+	}{
+		{"prod-tenant", []string{"project-api"}, "api-client-id", "api-secret"},
+		{"prod-tenant", []string{"project-web"}, "web-client-id", "web-secret"},
+		{"staging-tenant", []string{"project-backend", "project-frontend"}, "staging-client-id", "staging-secret"},
+	}
+
+	// Add credentials for each project configuration
+	for _, tc := range testCases {
+		err := izanami.AddClientKeys(tc.tenant, tc.projects, tc.clientID, tc.clientSecret)
+		require.NoError(t, err, "Should add client keys for tenant %s projects %v", tc.tenant, tc.projects)
+	}
+
+	// Verify credentials were persisted correctly
+	activeProfileName, err := izanami.GetActiveProfileName()
+	require.NoError(t, err)
+
+	profile, err := izanami.GetProfile(activeProfileName)
+	require.NoError(t, err)
+	require.NotNil(t, profile.ClientKeys, "Profile should have client keys")
+
+	// Verify prod-tenant project credentials
+	prodConfig, exists := profile.ClientKeys["prod-tenant"]
+	require.True(t, exists, "Should have config for prod-tenant")
+	require.NotNil(t, prodConfig.Projects, "prod-tenant should have project configs")
+
+	apiProject, exists := prodConfig.Projects["project-api"]
+	require.True(t, exists, "Should have project-api config")
+	assert.Equal(t, "api-client-id", apiProject.ClientID)
+	assert.Equal(t, "api-secret", apiProject.ClientSecret)
+
+	webProject, exists := prodConfig.Projects["project-web"]
+	require.True(t, exists, "Should have project-web config")
+	assert.Equal(t, "web-client-id", webProject.ClientID)
+	assert.Equal(t, "web-secret", webProject.ClientSecret)
+
+	// Verify staging-tenant project credentials (multiple projects share same credentials)
+	stagingConfig, exists := profile.ClientKeys["staging-tenant"]
+	require.True(t, exists, "Should have config for staging-tenant")
+	require.NotNil(t, stagingConfig.Projects, "staging-tenant should have project configs")
+
+	backendProject, exists := stagingConfig.Projects["project-backend"]
+	require.True(t, exists, "Should have project-backend config")
+	assert.Equal(t, "staging-client-id", backendProject.ClientID)
+
+	frontendProject, exists := stagingConfig.Projects["project-frontend"]
+	require.True(t, exists, "Should have project-frontend config")
+	assert.Equal(t, "staging-client-id", frontendProject.ClientID)
+
+	t.Log("Successfully added and verified project-level client keys")
+	t.Logf("  prod-tenant: project-api, project-web")
+	t.Logf("  staging-tenant: project-backend, project-frontend")
+
+	// Print config.yaml content for inspection
+	configContent := env.ReadConfigFile(t)
+	t.Logf("\nConfig file content:\n%s", configContent)
+}
+
+// TestIntegration_ProfileClientKeysTenantAndProjectLevels tests mixing tenant-level and project-level credentials
+func TestIntegration_ProfileClientKeysTenantAndProjectLevels(t *testing.T) {
+	env := setupIntegrationTest(t)
+
+	// Login to create profile
+	env.Login(t)
+
+	tenant := "mixed-tenant"
+
+	// Add tenant-level credentials (fallback for all projects)
+	err := izanami.AddClientKeys(tenant, nil, "tenant-default-id", "tenant-default-secret")
+	require.NoError(t, err, "Should add tenant-level credentials")
+
+	// Add project-specific credentials (override for specific project)
+	err = izanami.AddClientKeys(tenant, []string{"special-project"}, "special-project-id", "special-project-secret")
+	require.NoError(t, err, "Should add project-level credentials")
+
+	// Verify both levels exist
+	activeProfileName, err := izanami.GetActiveProfileName()
+	require.NoError(t, err)
+
+	profile, err := izanami.GetProfile(activeProfileName)
+	require.NoError(t, err)
+
+	tenantConfig, exists := profile.ClientKeys[tenant]
+	require.True(t, exists, "Should have tenant config")
+
+	// Verify tenant-level credentials
+	assert.Equal(t, "tenant-default-id", tenantConfig.ClientID, "Tenant-level client ID should be set")
+	assert.Equal(t, "tenant-default-secret", tenantConfig.ClientSecret, "Tenant-level client secret should be set")
+
+	// Verify project-level credentials
+	require.NotNil(t, tenantConfig.Projects, "Should have project configs")
+	specialProject, exists := tenantConfig.Projects["special-project"]
+	require.True(t, exists, "Should have special-project config")
+	assert.Equal(t, "special-project-id", specialProject.ClientID, "Project-level client ID should be set")
+	assert.Equal(t, "special-project-secret", specialProject.ClientSecret, "Project-level client secret should be set")
+
+	t.Logf("Successfully configured mixed tenant/project credentials for '%s'", tenant)
+	t.Log("  Tenant-level: tenant-default-id (fallback)")
+	t.Log("  Project-level: special-project -> special-project-id (override)")
+
+	// Print config.yaml content for inspection
+	configContent := env.ReadConfigFile(t)
+	t.Logf("\nConfig file content:\n%s", configContent)
+}
