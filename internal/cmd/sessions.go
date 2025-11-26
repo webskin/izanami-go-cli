@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -46,7 +45,7 @@ var sessionsListCmd = &cobra.Command{
 		}
 
 		if len(sessions.Sessions) == 0 {
-			fmt.Fprintln(os.Stderr, errors.MsgNoSavedSessions)
+			fmt.Fprintln(cmd.OutOrStderr(), errors.MsgNoSavedSessions)
 			return nil
 		}
 

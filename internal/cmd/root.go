@@ -104,14 +104,14 @@ For more information, visit: https://github.com/MAIF/izanami`,
 
 		// Log authentication mode in verbose mode
 		if cfg.Verbose {
-			logAuthenticationMode(cfg)
+			logAuthenticationMode(cmd, cfg)
 			// Also log active profile if any
 			if profileName != "" {
-				fmt.Fprintf(os.Stderr, "[verbose] Using profile: %s (from --profile flag)\n", profileName)
+				fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Using profile: %s (from --profile flag)\n", profileName)
 			} else {
 				activeProfile, err := izanami.GetActiveProfileName()
 				if err == nil && activeProfile != "" {
-					fmt.Fprintf(os.Stderr, "[verbose] Using profile: %s (active profile)\n", activeProfile)
+					fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Using profile: %s (active profile)\n", activeProfile)
 				}
 			}
 		}
@@ -153,7 +153,7 @@ func GetOutputFormat() izanami.OutputFormat {
 }
 
 // logAuthenticationMode logs the available authentication modes
-func logAuthenticationMode(cfg *izanami.Config) {
+func logAuthenticationMode(cmd *cobra.Command, cfg *izanami.Config) {
 	var adminAuth, clientAuth string
 
 	// Check admin authentication (for admin operations)
@@ -172,7 +172,7 @@ func logAuthenticationMode(cfg *izanami.Config) {
 		clientAuth = "none"
 	}
 
-	fmt.Fprintf(os.Stderr, "[verbose] Authentication - Admin operations: %s, Feature checks: %s\n", adminAuth, clientAuth)
+	fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Authentication - Admin operations: %s, Feature checks: %s\n", adminAuth, clientAuth)
 }
 
 // configureColorOutput configures color output based on the color setting

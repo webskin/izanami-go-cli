@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 
@@ -16,9 +17,10 @@ var commandsCmd = &cobra.Command{
 
 This shows the complete command tree in an easy-to-read format.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("Available commands:")
-		fmt.Println()
-		printCommandTree(rootCmd, "", true)
+		w := cmd.OutOrStdout()
+		fmt.Fprintln(w, "Available commands:")
+		fmt.Fprintln(w)
+		printCommandTree(w, rootCmd, "", true)
 	},
 }
 
@@ -56,7 +58,7 @@ func getChildPrefix(prefix string, isRoot, isLast bool) string {
 }
 
 // printCommandTree recursively prints all commands in a tree structure
-func printCommandTree(cmd *cobra.Command, prefix string, isRoot bool) {
+func printCommandTree(w io.Writer, cmd *cobra.Command, prefix string, isRoot bool) {
 	commands := cmd.Commands()
 	visibleCommands := filterVisibleCommands(commands)
 
@@ -72,17 +74,17 @@ func printCommandTree(cmd *cobra.Command, prefix string, isRoot bool) {
 		// Print command with tree structure
 		branch := getBranchPrefix(isRoot, isLast)
 		fullCommand := getFullCommandPath(c)
-		fmt.Printf("%s%s%s", prefix, branch, fullCommand)
+		fmt.Fprintf(w, "%s%s%s", prefix, branch, fullCommand)
 
 		if c.Short != "" {
-			fmt.Printf(" - %s", c.Short)
+			fmt.Fprintf(w, " - %s", c.Short)
 		}
-		fmt.Println()
+		fmt.Fprintln(w)
 
 		// Print subcommands recursively
 		if c.HasSubCommands() {
 			newPrefix := getChildPrefix(prefix, isRoot, isLast)
-			printCommandTree(c, newPrefix, false)
+			printCommandTree(w, c, newPrefix, false)
 		}
 	}
 }

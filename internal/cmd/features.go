@@ -228,7 +228,7 @@ Examples:
 			return err
 		}
 
-		fmt.Fprintf(os.Stderr, "Feature created successfully: %s\n", created.ID)
+		fmt.Fprintf(cmd.OutOrStderr(), "Feature created successfully: %s\n", created.ID)
 		return output.Print(created, output.Format(outputFormat))
 	},
 }
@@ -326,10 +326,10 @@ Examples:
 				}
 
 				// Print current feature structure
-				fmt.Fprintf(os.Stderr, "❌ Missing required fields: %v\n\n", missingFields)
-				fmt.Fprintf(os.Stderr, "Current feature structure:\n")
+				fmt.Fprintf(cmd.OutOrStderr(), "❌ Missing required fields: %v\n\n", missingFields)
+				fmt.Fprintf(cmd.OutOrStderr(), "Current feature structure:\n")
 				output.Print(currentFeature, output.JSON)
-				fmt.Fprintf(os.Stderr, "\nPlease include all required fields in your update.\n")
+				fmt.Fprintf(cmd.OutOrStderr(), "\nPlease include all required fields in your update.\n")
 				return fmt.Errorf("missing required fields: %v", missingFields)
 			}
 		}
@@ -339,7 +339,7 @@ Examples:
 			return err
 		}
 
-		fmt.Fprintf(os.Stderr, "Feature updated successfully: %s\n", featureID)
+		fmt.Fprintf(cmd.OutOrStderr(), "Feature updated successfully: %s\n", featureID)
 		return nil
 	},
 }
@@ -377,7 +377,7 @@ var featuresDeleteCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Fprintf(os.Stderr, "Feature deleted successfully: %s\n", featureID)
+		fmt.Fprintf(cmd.OutOrStderr(), "Feature deleted successfully: %s\n", featureID)
 		return nil
 	},
 }
@@ -435,7 +435,7 @@ Examples:
 			projects = append(projects, featureProject)
 		}
 
-		resolveClientCredentials(cfg, checkClientID, checkClientSecret, projects)
+		resolveClientCredentials(cmd, cfg, checkClientID, checkClientSecret, projects)
 
 		if err := cfg.Validate(); err != nil {
 			return err
@@ -455,7 +455,7 @@ Examples:
 			// UUID mode: use directly
 			featureID = featureIDOrName
 			if cfg.Verbose {
-				fmt.Fprintf(os.Stderr, "Using feature UUID: %s\n", featureID)
+				fmt.Fprintf(cmd.OutOrStderr(), "Using feature UUID: %s\n", featureID)
 			}
 		} else {
 			if err := cfg.ValidateTenant(); err != nil {
@@ -463,7 +463,7 @@ Examples:
 			}
 
 			if cfg.Verbose {
-				fmt.Fprintf(os.Stderr, "Resolving feature name '%s' in tenant '%s'...\n", featureIDOrName, cfg.Tenant)
+				fmt.Fprintf(cmd.OutOrStderr(), "Resolving feature name '%s' in tenant '%s'...\n", featureIDOrName, cfg.Tenant)
 			}
 
 			// List all features for the tenant
@@ -505,7 +505,7 @@ Examples:
 			// Use the resolved UUID
 			featureID = matches[0].ID
 			if cfg.Verbose {
-				fmt.Fprintf(os.Stderr, "Found feature ID: %s\n", featureID)
+				fmt.Fprintf(cmd.OutOrStderr(), "Found feature ID: %s\n", featureID)
 			}
 		}
 
@@ -602,7 +602,7 @@ Examples:
 			projects = append(projects, cfg.Project)
 		}
 
-		resolveClientCredentials(cfg, checkClientID, checkClientSecret, projects)
+		resolveClientCredentials(cmd, cfg, checkClientID, checkClientSecret, projects)
 
 		if err := cfg.Validate(); err != nil {
 			return err
@@ -655,7 +655,7 @@ Examples:
 			}
 
 			if cfg.Verbose {
-				fmt.Fprintf(os.Stderr, "Resolving project names %v in tenant '%s'...\n", projectsToResolve, cfg.Tenant)
+				fmt.Fprintf(cmd.OutOrStderr(), "Resolving project names %v in tenant '%s'...\n", projectsToResolve, cfg.Tenant)
 			}
 
 			// List all projects for the tenant
@@ -675,7 +675,7 @@ Examples:
 				if id, found := nameToID[name]; found {
 					resolvedProjects = append(resolvedProjects, id)
 					if cfg.Verbose {
-						fmt.Fprintf(os.Stderr, "Resolved project '%s' to ID: %s\n", name, id)
+						fmt.Fprintf(cmd.OutOrStderr(), "Resolved project '%s' to ID: %s\n", name, id)
 					}
 				} else {
 					return fmt.Errorf("no project named '%s' found in tenant '%s'", name, cfg.Tenant)
@@ -705,7 +705,7 @@ Examples:
 			}
 
 			if cfg.Verbose {
-				fmt.Fprintf(os.Stderr, "Resolving feature names %v in tenant '%s'...\n", featuresToResolve, cfg.Tenant)
+				fmt.Fprintf(cmd.OutOrStderr(), "Resolving feature names %v in tenant '%s'...\n", featuresToResolve, cfg.Tenant)
 			}
 
 			// List all features for the tenant
@@ -753,7 +753,7 @@ Examples:
 				// Use the resolved UUID
 				resolvedFeatures = append(resolvedFeatures, matches[0].ID)
 				if cfg.Verbose {
-					fmt.Fprintf(os.Stderr, "Resolved feature '%s' to ID: %s\n", name, matches[0].ID)
+					fmt.Fprintf(cmd.OutOrStderr(), "Resolved feature '%s' to ID: %s\n", name, matches[0].ID)
 				}
 			}
 		}
@@ -846,7 +846,7 @@ func resolveTagNames(ctx context.Context, client *izanami.Client, tenant string,
 // 1. Command-specific flags (--client-id/--client-secret)
 // 2. Environment variables (IZ_CLIENT_ID/IZ_CLIENT_SECRET) - already in cfg via viper
 // 3. Config file (client-keys section) - fallback if both are empty
-func resolveClientCredentials(cfg *izanami.Config, flagClientID, flagClientSecret string, projects []string) {
+func resolveClientCredentials(cmd *cobra.Command, cfg *izanami.Config, flagClientID, flagClientSecret string, projects []string) {
 	// First, apply command-specific flags if provided
 	if flagClientID != "" {
 		cfg.ClientID = flagClientID
@@ -865,9 +865,9 @@ func resolveClientCredentials(cfg *izanami.Config, flagClientID, flagClientSecre
 			cfg.ClientSecret = clientSecret
 			if cfg.Verbose {
 				if len(projects) > 0 {
-					fmt.Fprintf(os.Stderr, "Using client credentials from config (tenant: %s, projects: %v)\n", tenant, projects)
+					fmt.Fprintf(cmd.OutOrStderr(), "Using client credentials from config (tenant: %s, projects: %v)\n", tenant, projects)
 				} else {
-					fmt.Fprintf(os.Stderr, "Using client credentials from config (tenant: %s)\n", tenant)
+					fmt.Fprintf(cmd.OutOrStderr(), "Using client credentials from config (tenant: %s)\n", tenant)
 				}
 			}
 		}
