@@ -16,6 +16,7 @@ To load completions:
 
 Bash:
 
+  # To test the completion once without permanently installing it:
   $ source <(iz completion bash)
 
   # To load completions for each session, execute once:
@@ -36,8 +37,16 @@ Zsh:
 
   # You will need to start a new shell for this setup to take effect.
 
+  # To test the completion once without permanently installing it:
+  # Generate and source the completion script directly
+  $ source <(iz completion zsh)
+
+  # After running this, you can immediately test iz <TAB> in the current shell session. The completion will be lost when you close
+  # the terminal.
+
 Fish:
 
+  # To test the completion once without permanently installing it:
   $ iz completion fish | source
 
   # To load completions for each session, execute once:
@@ -45,6 +54,7 @@ Fish:
 
 PowerShell:
 
+  # To test the completion once without permanently installing it:
   PS> iz completion powershell | Out-String | Invoke-Expression
 
   # To load completions for every new session, run:
