@@ -18,6 +18,8 @@ You are creating or updating CLI subcommands for the Izanami Go CLI based on an 
 
 Read `docs/unsafe-izanami-openapi.yaml` and find the endpoint definition for `{{api_path}}`.
 
+> **Note**: This OpenAPI spec is AI-generated and may contain inaccuracies. Use it as a starting point, but always verify against actual server responses in Step 7.
+
 Extract:
 - **HTTP methods** supported (GET, POST, PUT, DELETE)
 - **Operation ID** and description
@@ -567,22 +569,128 @@ path := apiAdminTenants + buildPath(tenant, "resources", name)
 - Admin APIs (`/api/admin/`): Use `c.setAdminAuth(req)`
 - Client APIs (`/api/v2/`): Use `c.setClientAuth(req)` with error check
 
-## Step 7: Verification
+## Step 7: Verify Against Live Server
 
-After generating code:
+**IMPORTANT**: The OpenAPI spec (`docs/unsafe-izanami-openapi.yaml`) is AI-generated and may have inaccuracies. Always verify against the actual server response.
+
+### 7.1 Test with Verbose Mode
+
+After implementing the command, test it against a live Izanami server with `--verbose` to see the raw HTTP response:
+
+```bash
+# For GET operations - use verbose and JSON output to see raw response
+iz admin resources list --verbose -o json 2>&1 | head -50
+
+# Or capture just the response body
+iz admin resources get my-resource -o json --compact
+```
+
+The verbose output shows:
+- Request URL and method
+- Request headers
+- Response status code
+- Response headers
+- Response body (raw JSON)
+
+### 7.2 Compare Response with OpenAPI Spec
+
+Compare the actual JSON response structure with the schema defined in `docs/unsafe-izanami-openapi.yaml`.
+
+Check for discrepancies:
+- **Missing fields**: Fields in the response not in the spec
+- **Extra fields**: Fields in the spec not in the response
+- **Type mismatches**: Different data types (string vs number, array vs object)
+- **Naming differences**: camelCase vs snake_case, different field names
+- **Nested structure**: Different nesting or wrapper objects
+
+### 7.3 Update OpenAPI Spec if Needed
+
+If the actual response differs from the spec, **update `docs/unsafe-izanami-openapi.yaml`**:
+
+1. Locate the endpoint's response schema in the spec
+2. Update the schema to match the actual server response
+3. Add any missing fields with correct types
+4. Remove fields that don't exist in actual responses
+5. Fix any type mismatches
+
+Example fix:
+```yaml
+# Before (incorrect)
+ResponseSchema:
+  type: object
+  properties:
+    id:
+      type: string
+    name:
+      type: string
+
+# After (matches actual response)
+ResponseSchema:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    name:
+      type: string
+    description:
+      type: string
+    createdAt:
+      type: string
+      format: date-time
+```
+
+### 7.4 Update Go Types
+
+After updating the OpenAPI spec, ensure Go types in `internal/izanami/types.go` match:
+
+```go
+// Update struct to match actual response
+type Resource struct {
+    ID          string    `json:"id"`
+    Name        string    `json:"name"`
+    Description string    `json:"description,omitempty"`
+    CreatedAt   time.Time `json:"createdAt,omitempty"`  // Added field
+}
+```
+
+### 7.5 Re-run Tests
+
+After any schema updates:
+```bash
+make build  # Verify compilation
+make test   # Verify tests pass
+```
+
+## Step 8: Final Verification
+
+After generating code and verifying against live server:
 1. Run `make build` to verify compilation
 2. Run `make test` to verify tests pass
-3. Test the new command manually
+3. Test the new command manually with various inputs
+4. Verify JSON output matches server response exactly
+5. Verify table output displays correctly
 
 ## Reference Files
 
 Read these files for patterns:
-- `docs/unsafe-izanami-openapi.yaml` - API specification
+- `docs/unsafe-izanami-openapi.yaml` - API specification (AI-generated, verify against live server)
 - `internal/izanami/mappers.go` - Mapper definitions and factories
 - `internal/cmd/admin.go` - Command hierarchy and CRUD patterns with mappers
 - `internal/cmd/features.go` - Feature command patterns
 - `internal/izanami/tenants.go` - API client methods with mapper pattern
 - `internal/izanami/features.go` - Complex API client methods
 - `internal/izanami/client.go` - Client structure and helpers
+
+## Workflow Summary
+
+1. **Look up** endpoint in OpenAPI spec (Step 1)
+2. **Determine** command hierarchy (Step 2)
+3. **Check** existing implementations (Step 3)
+4. **Generate** API client method with mapper pattern (Step 4)
+5. **Generate** CLI command (Step 5)
+6. **Follow** important patterns (Step 6)
+7. **Verify** against live server and update OpenAPI spec if needed (Step 7)
+8. **Final** verification with build and tests (Step 8)
 
 Now analyze `{{api_path}}` in the OpenAPI spec and generate the appropriate code.
