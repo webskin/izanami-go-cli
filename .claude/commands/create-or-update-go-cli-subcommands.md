@@ -42,12 +42,12 @@ Based on the path structure, determine:
 | `/api/v2/features` | `iz features [action]` | `features.go` |
 
 **Action mapping from HTTP method:**
-- `GET` (collection) ’ `list`
-- `GET` (single item) ’ `get`
-- `POST` ’ `create`
-- `PUT` ’ `update`
-- `DELETE` ’ `delete`
-- Special paths like `/logs` ’ `logs`
+- `GET` (collection) â†’ `list`
+- `GET` (single item) â†’ `get`
+- `POST` â†’ `create`
+- `PUT` â†’ `update`
+- `DELETE` â†’ `delete`
+- Special paths like `/logs` â†’ `logs`
 
 ## Step 3: Check Existing Implementations
 
@@ -61,23 +61,30 @@ Before writing code, search for existing implementations:
 
 Add/update method in appropriate file under `internal/izanami/`.
 
-### Pattern for GET (List)
+**IMPORTANT**: Use the functional mapper pattern for all GET operations that return data. This allows:
+- Raw JSON passthrough with `Identity` mapper for `-o json` output
+- Typed parsing with `Parse*` mapper for table output
+
+### Pattern for GET (List) - With Mapper
 
 ```go
-func (c *Client) ListResources(ctx context.Context, tenant string, opts *ListOptions) ([]Resource, error) {
+// ListResources lists all resources and applies the given mapper.
+// Use Identity mapper for raw JSON output, or ParseResources for typed structs.
+func ListResources[T any](c *Client, ctx context.Context, tenant string, mapper Mapper[T]) (T, error) {
+	var zero T
+	raw, err := c.listResourcesRaw(ctx, tenant)
+	if err != nil {
+		return zero, err
+	}
+	return mapper(raw)
+}
+
+// listResourcesRaw fetches resources and returns raw JSON bytes
+func (c *Client) listResourcesRaw(ctx context.Context, tenant string) ([]byte, error) {
 	path := apiAdminTenants + buildPath(tenant, "resources")
 
-	var result []Resource
-	req := c.http.R().
-		SetContext(ctx).
-		SetResult(&result)
+	req := c.http.R().SetContext(ctx)
 	c.setAdminAuth(req)
-
-	if opts != nil {
-		if opts.Filter != "" {
-			req.SetQueryParam("filter", opts.Filter)
-		}
-	}
 
 	resp, err := req.Get(path)
 	if err != nil {
@@ -88,20 +95,29 @@ func (c *Client) ListResources(ctx context.Context, tenant string, opts *ListOpt
 		return nil, c.handleError(resp)
 	}
 
-	return result, nil
+	return resp.Body(), nil
 }
 ```
 
-### Pattern for GET (Single)
+### Pattern for GET (Single) - With Mapper
 
 ```go
-func (c *Client) GetResource(ctx context.Context, tenant, name string) (*Resource, error) {
+// GetResource retrieves a specific resource and applies the given mapper.
+// Use Identity mapper for raw JSON output, or ParseResource for typed struct.
+func GetResource[T any](c *Client, ctx context.Context, tenant, name string, mapper Mapper[T]) (T, error) {
+	var zero T
+	raw, err := c.getResourceRaw(ctx, tenant, name)
+	if err != nil {
+		return zero, err
+	}
+	return mapper(raw)
+}
+
+// getResourceRaw fetches a resource and returns raw JSON bytes
+func (c *Client) getResourceRaw(ctx context.Context, tenant, name string) ([]byte, error) {
 	path := apiAdminTenants + buildPath(tenant, "resources", name)
 
-	var result Resource
-	req := c.http.R().
-		SetContext(ctx).
-		SetResult(&result)
+	req := c.http.R().SetContext(ctx)
 	c.setAdminAuth(req)
 
 	resp, err := req.Get(path)
@@ -113,11 +129,13 @@ func (c *Client) GetResource(ctx context.Context, tenant, name string) (*Resourc
 		return nil, c.handleError(resp)
 	}
 
-	return &result, nil
+	return resp.Body(), nil
 }
 ```
 
 ### Pattern for POST (Create)
+
+Note: POST/PUT/DELETE don't typically need the mapper pattern as they don't return raw JSON for display.
 
 ```go
 func (c *Client) CreateResource(ctx context.Context, tenant string, data interface{}) (*Resource, error) {
@@ -175,8 +193,7 @@ func (c *Client) UpdateResource(ctx context.Context, tenant, name string, data i
 func (c *Client) DeleteResource(ctx context.Context, tenant, name string) error {
 	path := apiAdminTenants + buildPath(tenant, "resources", name)
 
-	req := c.http.R().
-		SetContext(ctx)
+	req := c.http.R().SetContext(ctx)
 	c.setAdminAuth(req)
 
 	resp, err := req.Delete(path)
@@ -194,6 +211,22 @@ func (c *Client) DeleteResource(ctx context.Context, tenant, name string) error 
 	return nil
 }
 ```
+
+### Add Mappers in mappers.go
+
+Add mapper definitions using the generic factories:
+
+```go
+var (
+	// In the var block in internal/izanami/mappers.go
+	ParseResources = Unmarshal[[]Resource]()
+	ParseResource  = UnmarshalPtr[Resource]()
+)
+```
+
+The mapper factories are:
+- `Unmarshal[T]()` - for values and slices (e.g., `[]Resource`)
+- `UnmarshalPtr[T]()` - for single objects as pointers (e.g., `*Resource`)
 
 ### Add Types if Needed
 
@@ -214,7 +247,7 @@ type ResourceSummary struct {
 
 ### Add Error Messages
 
-Add error message constants in `internal/izanami/errmsg/messages.go`:
+Add error message constants in `internal/errors/messages.go`:
 
 ```go
 const (
@@ -230,7 +263,7 @@ const (
 
 Add/update command in appropriate file under `internal/cmd/`.
 
-### Pattern for List Command
+### Pattern for List Command - With Mapper
 
 ```go
 var adminResourcesListCmd = &cobra.Command{
@@ -241,7 +274,8 @@ var adminResourcesListCmd = &cobra.Command{
 Examples:
   iz admin resources list
   iz admin resources list --tenant my-tenant
-  iz admin resources list -o json`,
+  iz admin resources list -o json
+  iz admin resources list -o json --compact`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := cfg.ValidateTenant(); err != nil {
 			return err
@@ -253,26 +287,33 @@ Examples:
 		}
 
 		ctx := context.Background()
-		resources, err := client.ListResources(ctx, cfg.Tenant, nil)
+
+		// For JSON output, use Identity mapper for raw JSON passthrough
+		if outputFormat == "json" {
+			raw, err := izanami.ListResources(client, ctx, cfg.Tenant, izanami.Identity)
+			if err != nil {
+				return err
+			}
+			return output.PrintRawJSON(cmd.OutOrStdout(), raw, compactJSON)
+		}
+
+		// For table output, use ParseResources mapper
+		resources, err := izanami.ListResources(client, ctx, cfg.Tenant, izanami.ParseResources)
 		if err != nil {
 			return err
 		}
 
-		// Convert to summaries for cleaner output
-		summaries := make([]izanami.ResourceSummary, len(resources))
-		for i, r := range resources {
-			summaries[i] = izanami.ResourceSummary{
-				Name:        r.Name,
-				Description: r.Description,
-			}
+		if len(resources) == 0 {
+			fmt.Fprintln(cmd.OutOrStderr(), "No resources found")
+			return nil
 		}
 
-		return output.Print(summaries, output.Format(outputFormat))
+		return output.Print(resources, output.Format(outputFormat))
 	},
 }
 ```
 
-### Pattern for Get Command
+### Pattern for Get Command - With Mapper
 
 ```go
 var adminResourcesGetCmd = &cobra.Command{
@@ -295,7 +336,18 @@ Examples:
 		}
 
 		ctx := context.Background()
-		resource, err := client.GetResource(ctx, cfg.Tenant, args[0])
+
+		// For JSON output, use Identity mapper for raw JSON passthrough
+		if outputFormat == "json" {
+			raw, err := izanami.GetResource(client, ctx, cfg.Tenant, args[0], izanami.Identity)
+			if err != nil {
+				return err
+			}
+			return output.PrintRawJSON(cmd.OutOrStdout(), raw, compactJSON)
+		}
+
+		// For table output, use ParseResource mapper
+		resource, err := izanami.GetResource(client, ctx, cfg.Tenant, args[0], izanami.ParseResource)
 		if err != nil {
 			return err
 		}
@@ -354,7 +406,7 @@ Examples:
 			return err
 		}
 
-		fmt.Fprintf(cmd.OutOrStderr(), "Resource created successfully: %s\n", name)
+		fmt.Fprintf(cmd.OutOrStderr(), "âœ… Resource created successfully: %s\n", name)
 		return output.Print(result, output.Format(outputFormat))
 	},
 }
@@ -393,7 +445,7 @@ Examples:
 			return err
 		}
 
-		fmt.Fprintf(cmd.OutOrStderr(), "Resource updated successfully: %s\n", name)
+		fmt.Fprintf(cmd.OutOrStderr(), "âœ… Resource updated successfully: %s\n", name)
 		return nil
 	},
 }
@@ -436,7 +488,7 @@ Examples:
 			return err
 		}
 
-		fmt.Fprintf(cmd.OutOrStderr(), "Resource deleted successfully: %s\n", name)
+		fmt.Fprintf(cmd.OutOrStderr(), "âœ… Resource deleted successfully: %s\n", name)
 		return nil
 	},
 }
@@ -469,6 +521,13 @@ func init() {
 
 ## Step 6: Important Patterns to Follow
 
+### Mapper Pattern (Critical)
+All GET operations that return data MUST use the mapper pattern:
+- Generic function `ListResources[T any](..., mapper Mapper[T])` as public API
+- Private `*Raw` method returns `[]byte`
+- CLI checks `outputFormat == "json"` to choose between `Identity` and `Parse*` mappers
+- Use `output.PrintRawJSON()` for raw JSON output (supports `--compact` flag)
+
 ### Cobra Best Practices
 - Use `RunE` (not `Run`) for error handling
 - Use `cmd.OutOrStdout()` and `cmd.OutOrStderr()` for testability
@@ -482,9 +541,17 @@ Support flexible JSON input using `parseJSONData()`:
 - Stdin: `--data -`
 
 ### Output Formatting
-Support both JSON and table output:
+Support both JSON and table output with the mapper pattern:
 ```go
-return output.Print(result, output.Format(outputFormat))
+// JSON output - raw passthrough
+if outputFormat == "json" {
+    raw, err := izanami.ListResources(client, ctx, tenant, izanami.Identity)
+    return output.PrintRawJSON(cmd.OutOrStdout(), raw, compactJSON)
+}
+
+// Table output - typed parsing
+resources, err := izanami.ListResources(client, ctx, tenant, izanami.ParseResources)
+return output.Print(resources, output.Format(outputFormat))
 ```
 
 ### Error Messages
@@ -511,9 +578,10 @@ After generating code:
 
 Read these files for patterns:
 - `docs/unsafe-izanami-openapi.yaml` - API specification
-- `internal/cmd/admin.go` - Command hierarchy and CRUD patterns
+- `internal/izanami/mappers.go` - Mapper definitions and factories
+- `internal/cmd/admin.go` - Command hierarchy and CRUD patterns with mappers
 - `internal/cmd/features.go` - Feature command patterns
-- `internal/izanami/tenants.go` - Simple API client methods
+- `internal/izanami/tenants.go` - API client methods with mapper pattern
 - `internal/izanami/features.go` - Complex API client methods
 - `internal/izanami/client.go` - Client structure and helpers
 
