@@ -35,12 +35,15 @@ Based on the path structure, determine:
 
 | Path Pattern | Command Structure | File |
 |--------------|-------------------|------|
-| `/api/admin/tenants` | `iz admin tenants [action]` | `admin.go` |
-| `/api/admin/tenants/{tenant}/projects` | `iz admin projects [action]` | `admin.go` |
-| `/api/admin/tenants/{tenant}/tags` | `iz admin tags [action]` | `admin.go` |
+| `/api/admin/tenants` | `iz admin tenants [action]` | `tenants.go` |
+| `/api/admin/tenants/{tenant}/projects` | `iz admin projects [action]` | `projects.go` |
+| `/api/admin/tenants/{tenant}/tags` | `iz admin tags [action]` | `tags.go` |
 | `/api/admin/tenants/{tenant}/keys` | `iz admin keys [action]` | `keys.go` |
 | `/api/admin/tenants/{tenant}/contexts` | `iz admin contexts [action]` | `contexts.go` |
 | `/api/admin/users` | `iz admin users [action]` | `users.go` |
+| `/api/admin/_search` | `iz admin search` | `search.go` |
+| `/api/admin/tenants/{tenant}/_export` | `iz admin export` | `import_export.go` |
+| `/api/admin/tenants/{tenant}/_import` | `iz admin import` | `import_export.go` |
 | `/api/v2/features` | `iz features [action]` | `features.go` |
 
 **Action mapping from HTTP method:**
@@ -676,7 +679,12 @@ After generating code and verifying against live server:
 Read these files for patterns:
 - `docs/unsafe-izanami-openapi.yaml` - API specification (AI-generated, verify against live server)
 - `internal/izanami/mappers.go` - Mapper definitions and factories
-- `internal/cmd/admin.go` - Command hierarchy and CRUD patterns with mappers
+- `internal/cmd/admin.go` - Base admin command with authentication
+- `internal/cmd/tenants.go` - Tenant CRUD patterns with mappers
+- `internal/cmd/projects.go` - Project CRUD patterns
+- `internal/cmd/tags.go` - Tag CRUD patterns
+- `internal/cmd/search.go` - Search command pattern
+- `internal/cmd/import_export.go` - Import/export command patterns
 - `internal/cmd/features.go` - Feature command patterns
 - `internal/izanami/tenants.go` - API client methods with mapper pattern
 - `internal/izanami/features.go` - Complex API client methods
