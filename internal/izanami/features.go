@@ -14,11 +14,22 @@ import (
 // FEATURE OPERATIONS
 // ============================================================================
 
-// ListFeatures lists all features in a tenant
-func (c *Client) ListFeatures(ctx context.Context, tenant string, tag string) ([]Feature, error) {
+// ListFeatures lists all features in a tenant and applies the given mapper.
+// Use Identity mapper for raw JSON output, or ParseFeatures for typed structs.
+func ListFeatures[T any](c *Client, ctx context.Context, tenant string, tag string, mapper Mapper[T]) (T, error) {
+	var zero T
+	raw, err := c.listFeaturesRaw(ctx, tenant, tag)
+	if err != nil {
+		return zero, err
+	}
+	return mapper(raw)
+}
+
+// listFeaturesRaw fetches features and returns raw JSON bytes
+func (c *Client) listFeaturesRaw(ctx context.Context, tenant string, tag string) ([]byte, error) {
 	path := apiAdminTenants + buildPath(tenant, "features")
 
-	req := c.http.R().SetContext(ctx).SetResult(&[]Feature{})
+	req := c.http.R().SetContext(ctx)
 	c.setAdminAuth(req)
 
 	// Add tag filter if specified (server-side filtering)
@@ -35,16 +46,25 @@ func (c *Client) ListFeatures(ctx context.Context, tenant string, tag string) ([
 		return nil, c.handleError(resp)
 	}
 
-	features := resp.Result().(*[]Feature)
-	return *features, nil
+	return resp.Body(), nil
 }
 
-// GetFeature retrieves a specific feature
-func (c *Client) GetFeature(ctx context.Context, tenant, featureID string) (*FeatureWithOverloads, error) {
+// GetFeature retrieves a specific feature and applies the given mapper.
+// Use Identity mapper for raw JSON output, or ParseFeature for typed struct.
+func GetFeature[T any](c *Client, ctx context.Context, tenant, featureID string, mapper Mapper[T]) (T, error) {
+	var zero T
+	raw, err := c.getFeatureRaw(ctx, tenant, featureID)
+	if err != nil {
+		return zero, err
+	}
+	return mapper(raw)
+}
+
+// getFeatureRaw fetches a feature and returns raw JSON bytes
+func (c *Client) getFeatureRaw(ctx context.Context, tenant, featureID string) ([]byte, error) {
 	path := apiAdminTenants + buildPath(tenant, "features", featureID)
 
-	var feature FeatureWithOverloads
-	req := c.http.R().SetContext(ctx).SetResult(&feature)
+	req := c.http.R().SetContext(ctx)
 	c.setAdminAuth(req)
 	resp, err := req.Get(path)
 
@@ -56,7 +76,7 @@ func (c *Client) GetFeature(ctx context.Context, tenant, featureID string) (*Fea
 		return nil, c.handleError(resp)
 	}
 
-	return &feature, nil
+	return resp.Body(), nil
 }
 
 // CreateFeature creates a new feature

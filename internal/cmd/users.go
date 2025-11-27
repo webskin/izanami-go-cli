@@ -70,7 +70,18 @@ var usersListCmd = &cobra.Command{
 		}
 
 		ctx := context.Background()
-		users, err := client.ListUsers(ctx)
+
+		// For JSON output, use Identity mapper to get raw JSON
+		if outputFormat == "json" {
+			raw, err := izanami.ListUsers(client, ctx, izanami.Identity)
+			if err != nil {
+				return err
+			}
+			return output.PrintRawJSON(cmd.OutOrStdout(), raw, compactJSON)
+		}
+
+		// For table output, use ParseUserListItems mapper
+		users, err := izanami.ListUsers(client, ctx, izanami.ParseUserListItems)
 		if err != nil {
 			return err
 		}
@@ -98,18 +109,24 @@ var usersGetCmd = &cobra.Command{
 		}
 
 		ctx := context.Background()
-		user, err := client.GetUser(ctx, username)
+
+		// For JSON output, use Identity mapper to get raw JSON
+		if outputFormat == "json" {
+			raw, err := izanami.GetUser(client, ctx, username, izanami.Identity)
+			if err != nil {
+				return err
+			}
+			return output.PrintRawJSON(cmd.OutOrStdout(), raw, compactJSON)
+		}
+
+		// For table output, use ParseUser mapper
+		user, err := izanami.GetUser(client, ctx, username, izanami.ParseUser)
 		if err != nil {
 			return err
 		}
 
 		// For table output, use custom fancy display
-		if output.Format(outputFormat) == output.Table {
-			return printUserDetails(cmd.OutOrStderr(), user)
-		}
-
-		// For JSON output, print as-is
-		return output.Print(user, output.Format(outputFormat))
+		return printUserDetails(cmd.OutOrStderr(), user)
 	},
 }
 

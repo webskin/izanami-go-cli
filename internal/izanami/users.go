@@ -14,12 +14,22 @@ import (
 // USER OPERATIONS
 // ============================================================================
 
-// ListUsers lists all visible users (global admin operation)
-func (c *Client) ListUsers(ctx context.Context) ([]UserListItem, error) {
+// ListUsers lists all visible users (global admin operation) and applies the given mapper.
+// Use Identity mapper for raw JSON output, or ParseUserListItems for typed structs.
+func ListUsers[T any](c *Client, ctx context.Context, mapper Mapper[T]) (T, error) {
+	var zero T
+	raw, err := c.listUsersRaw(ctx)
+	if err != nil {
+		return zero, err
+	}
+	return mapper(raw)
+}
+
+// listUsersRaw fetches users and returns raw JSON bytes
+func (c *Client) listUsersRaw(ctx context.Context) ([]byte, error) {
 	path := "/api/admin/users"
 
-	var users []UserListItem
-	req := c.http.R().SetContext(ctx).SetResult(&users)
+	req := c.http.R().SetContext(ctx)
 	c.setAdminAuth(req)
 	resp, err := req.Get(path)
 
@@ -31,15 +41,25 @@ func (c *Client) ListUsers(ctx context.Context) ([]UserListItem, error) {
 		return nil, c.handleError(resp)
 	}
 
-	return users, nil
+	return resp.Body(), nil
 }
 
-// GetUser retrieves a specific user with complete rights
-func (c *Client) GetUser(ctx context.Context, username string) (*User, error) {
+// GetUser retrieves a specific user with complete rights and applies the given mapper.
+// Use Identity mapper for raw JSON output, or ParseUser for typed struct.
+func GetUser[T any](c *Client, ctx context.Context, username string, mapper Mapper[T]) (T, error) {
+	var zero T
+	raw, err := c.getUserRaw(ctx, username)
+	if err != nil {
+		return zero, err
+	}
+	return mapper(raw)
+}
+
+// getUserRaw fetches a user and returns raw JSON bytes
+func (c *Client) getUserRaw(ctx context.Context, username string) ([]byte, error) {
 	path := "/api/admin/users/" + url.PathEscape(username)
 
-	var user User
-	req := c.http.R().SetContext(ctx).SetResult(&user)
+	req := c.http.R().SetContext(ctx)
 	c.setAdminAuth(req)
 	resp, err := req.Get(path)
 
@@ -51,7 +71,7 @@ func (c *Client) GetUser(ctx context.Context, username string) (*User, error) {
 		return nil, c.handleError(resp)
 	}
 
-	return &user, nil
+	return resp.Body(), nil
 }
 
 // CreateUser creates a new user (global admin operation)

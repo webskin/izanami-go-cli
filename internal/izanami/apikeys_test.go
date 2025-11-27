@@ -46,7 +46,7 @@ func TestClient_ListAPIKeys(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	keys, err := client.ListAPIKeys(ctx, "test-tenant")
+	keys, err := ListAPIKeys(client, ctx, "test-tenant", ParseAPIKeys)
 
 	assert.NoError(t, err)
 	assert.Len(t, keys, 2)

@@ -44,7 +44,7 @@ func TestClient_ListProjects(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	projects, err := client.ListProjects(ctx, "test-tenant")
+	projects, err := ListProjects(client, ctx, "test-tenant", ParseProjects)
 
 	assert.NoError(t, err)
 	assert.Len(t, projects, 2)
@@ -79,7 +79,7 @@ func TestClient_GetProject(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	project, err := client.GetProject(ctx, "test-tenant", "test-project")
+	project, err := GetProject(client, ctx, "test-tenant", "test-project", ParseProject)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, project)

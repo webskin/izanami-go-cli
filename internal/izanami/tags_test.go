@@ -40,7 +40,7 @@ func TestClient_ListTags(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	tags, err := client.ListTags(ctx, "test-tenant")
+	tags, err := ListTags(client, ctx, "test-tenant", ParseTags)
 
 	assert.NoError(t, err)
 	assert.Len(t, tags, 2)
@@ -73,7 +73,7 @@ func TestClient_GetTag(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	tag, err := client.GetTag(ctx, "test-tenant", "test-tag")
+	tag, err := GetTag(client, ctx, "test-tenant", "test-tag", ParseTag)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, tag)

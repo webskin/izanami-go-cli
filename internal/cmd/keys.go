@@ -55,7 +55,18 @@ var keysListCmd = &cobra.Command{
 		}
 
 		ctx := context.Background()
-		keys, err := client.ListAPIKeys(ctx, cfg.Tenant)
+
+		// For JSON output, use Identity mapper to get raw JSON
+		if outputFormat == "json" {
+			raw, err := izanami.ListAPIKeys(client, ctx, cfg.Tenant, izanami.Identity)
+			if err != nil {
+				return err
+			}
+			return output.PrintRawJSON(cmd.OutOrStdout(), raw, compactJSON)
+		}
+
+		// For table output, use ParseAPIKeys mapper
+		keys, err := izanami.ListAPIKeys(client, ctx, cfg.Tenant, izanami.ParseAPIKeys)
 		if err != nil {
 			return err
 		}
@@ -87,6 +98,8 @@ var keysGetCmd = &cobra.Command{
 		}
 
 		ctx := context.Background()
+		// Note: GetAPIKey doesn't have a dedicated endpoint, it filters from list
+		// So raw JSON output isn't available for a single key
 		key, err := client.GetAPIKey(ctx, cfg.Tenant, clientID)
 		if err != nil {
 			return err

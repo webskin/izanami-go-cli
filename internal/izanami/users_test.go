@@ -44,7 +44,7 @@ func TestClient_ListUsers(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	users, err := client.ListUsers(ctx)
+	users, err := ListUsers(client, ctx, ParseUsers)
 
 	assert.NoError(t, err)
 	assert.Len(t, users, 2)
@@ -79,7 +79,7 @@ func TestClient_GetUser(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	user, err := client.GetUser(ctx, "testuser")
+	user, err := GetUser(client, ctx, "testuser", ParseUser)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, user)

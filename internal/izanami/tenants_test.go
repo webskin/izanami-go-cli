@@ -42,7 +42,7 @@ func TestClient_ListTenants(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	tenants, err := client.ListTenants(ctx, nil)
+	tenants, err := ListTenants(client, ctx, nil, ParseTenants)
 
 	assert.NoError(t, err)
 	assert.Len(t, tenants, 2)
@@ -80,7 +80,7 @@ func TestClient_ListTenants_WithRightFilter(t *testing.T) {
 
 	ctx := context.Background()
 	rightLevel := RightLevelAdmin
-	tenants, err := client.ListTenants(ctx, &rightLevel)
+	tenants, err := ListTenants(client, ctx, &rightLevel, ParseTenants)
 
 	assert.NoError(t, err)
 	assert.Len(t, tenants, 1)
@@ -113,7 +113,7 @@ func TestClient_GetTenant(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	tenant, err := client.GetTenant(ctx, "test-tenant")
+	tenant, err := GetTenant(client, ctx, "test-tenant", ParseTenant)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, tenant)

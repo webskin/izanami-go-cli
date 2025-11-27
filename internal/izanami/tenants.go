@@ -12,12 +12,20 @@ import (
 // TENANT OPERATIONS
 // ============================================================================
 
-// ListTenants lists all tenants
-// The right parameter filters tenants by minimum required permission level (Read, Write, or Admin)
-func (c *Client) ListTenants(ctx context.Context, right *RightLevel) ([]Tenant, error) {
-	req := c.http.R().
-		SetContext(ctx).
-		SetResult(&[]Tenant{})
+// ListTenants lists all tenants and applies the given mapper to the response.
+// Use Identity mapper for raw JSON output, or ParseTenants for typed structs.
+func ListTenants[T any](c *Client, ctx context.Context, right *RightLevel, mapper Mapper[T]) (T, error) {
+	var zero T
+	raw, err := c.listTenantsRaw(ctx, right)
+	if err != nil {
+		return zero, err
+	}
+	return mapper(raw)
+}
+
+// listTenantsRaw fetches tenants and returns raw JSON bytes
+func (c *Client) listTenantsRaw(ctx context.Context, right *RightLevel) ([]byte, error) {
+	req := c.http.R().SetContext(ctx)
 	c.setAdminAuth(req)
 
 	// Add right filter if specified
@@ -35,16 +43,25 @@ func (c *Client) ListTenants(ctx context.Context, right *RightLevel) ([]Tenant, 
 		return nil, c.handleError(resp)
 	}
 
-	tenants := resp.Result().(*[]Tenant)
-	return *tenants, nil
+	return resp.Body(), nil
 }
 
-// GetTenant retrieves a specific tenant
-func (c *Client) GetTenant(ctx context.Context, name string) (*Tenant, error) {
+// GetTenant retrieves a specific tenant and applies the given mapper to the response.
+// Use Identity mapper for raw JSON output, or ParseTenant for typed struct.
+func GetTenant[T any](c *Client, ctx context.Context, name string, mapper Mapper[T]) (T, error) {
+	var zero T
+	raw, err := c.getTenantRaw(ctx, name)
+	if err != nil {
+		return zero, err
+	}
+	return mapper(raw)
+}
+
+// getTenantRaw fetches a tenant and returns raw JSON bytes
+func (c *Client) getTenantRaw(ctx context.Context, name string) ([]byte, error) {
 	path := apiAdminTenants + buildPath(name)
 
-	var tenant Tenant
-	req := c.http.R().SetContext(ctx).SetResult(&tenant)
+	req := c.http.R().SetContext(ctx)
 	c.setAdminAuth(req)
 	resp, err := req.Get(path)
 
@@ -56,7 +73,7 @@ func (c *Client) GetTenant(ctx context.Context, name string) (*Tenant, error) {
 		return nil, c.handleError(resp)
 	}
 
-	return &tenant, nil
+	return resp.Body(), nil
 }
 
 // CreateTenant creates a new tenant
@@ -120,4 +137,69 @@ func (c *Client) DeleteTenant(ctx context.Context, name string) error {
 	}
 
 	return nil
+}
+
+// ListTenantLogs retrieves event logs for a tenant and applies the given mapper.
+// Use Identity mapper for raw JSON output, or ParseAuditEvents for typed structs.
+func ListTenantLogs[T any](c *Client, ctx context.Context, tenant string, opts *LogsRequest, mapper Mapper[T]) (T, error) {
+	var zero T
+	raw, err := c.listTenantLogsRaw(ctx, tenant, opts)
+	if err != nil {
+		return zero, err
+	}
+	return mapper(raw)
+}
+
+// listTenantLogsRaw fetches tenant logs and returns raw JSON bytes
+func (c *Client) listTenantLogsRaw(ctx context.Context, tenant string, opts *LogsRequest) ([]byte, error) {
+	path := apiAdminTenants + buildPath(tenant, "logs")
+
+	req := c.http.R().SetContext(ctx)
+	c.setAdminAuth(req)
+
+	// Apply query parameters if provided
+	if opts != nil {
+		if opts.Order != "" {
+			req.SetQueryParam("order", opts.Order)
+		}
+		if opts.Users != "" {
+			req.SetQueryParam("users", opts.Users)
+		}
+		if opts.Types != "" {
+			req.SetQueryParam("types", opts.Types)
+		}
+		if opts.Features != "" {
+			req.SetQueryParam("features", opts.Features)
+		}
+		if opts.Projects != "" {
+			req.SetQueryParam("projects", opts.Projects)
+		}
+		if opts.Start != "" {
+			req.SetQueryParam("start", opts.Start)
+		}
+		if opts.End != "" {
+			req.SetQueryParam("end", opts.End)
+		}
+		if opts.Cursor != 0 {
+			req.SetQueryParam("cursor", fmt.Sprintf("%d", opts.Cursor))
+		}
+		if opts.Count > 0 {
+			req.SetQueryParam("count", fmt.Sprintf("%d", opts.Count))
+		}
+		if opts.Total {
+			req.SetQueryParam("total", "true")
+		}
+	}
+
+	resp, err := req.Get(path)
+
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", errmsg.MsgFailedToListTenantLogs, err)
+	}
+
+	if resp.StatusCode() != http.StatusOK {
+		return nil, c.handleError(resp)
+	}
+
+	return resp.Body(), nil
 }

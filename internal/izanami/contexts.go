@@ -12,8 +12,19 @@ import (
 // CONTEXT OPERATIONS
 // ============================================================================
 
-// ListContexts lists all contexts for a tenant or project
-func (c *Client) ListContexts(ctx context.Context, tenant, project string, all bool) ([]Context, error) {
+// ListContexts lists all contexts for a tenant or project and applies the given mapper.
+// Use Identity mapper for raw JSON output, or ParseContexts for typed structs.
+func ListContexts[T any](c *Client, ctx context.Context, tenant, project string, all bool, mapper Mapper[T]) (T, error) {
+	var zero T
+	raw, err := c.listContextsRaw(ctx, tenant, project, all)
+	if err != nil {
+		return zero, err
+	}
+	return mapper(raw)
+}
+
+// listContextsRaw fetches contexts and returns raw JSON bytes
+func (c *Client) listContextsRaw(ctx context.Context, tenant, project string, all bool) ([]byte, error) {
 	var path string
 	if project != "" {
 		path = apiAdminTenants + buildPath(tenant, "projects", project, "contexts")
@@ -21,7 +32,7 @@ func (c *Client) ListContexts(ctx context.Context, tenant, project string, all b
 		path = apiAdminTenants + buildPath(tenant, "contexts")
 	}
 
-	req := c.http.R().SetContext(ctx).SetResult(&[]Context{})
+	req := c.http.R().SetContext(ctx)
 	c.setAdminAuth(req)
 
 	if all {
@@ -37,8 +48,7 @@ func (c *Client) ListContexts(ctx context.Context, tenant, project string, all b
 		return nil, c.handleError(resp)
 	}
 
-	contexts := resp.Result().(*[]Context)
-	return *contexts, nil
+	return resp.Body(), nil
 }
 
 // CreateContext creates a new context

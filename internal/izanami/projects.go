@@ -12,12 +12,22 @@ import (
 // PROJECT OPERATIONS
 // ============================================================================
 
-// ListProjects lists all projects in a tenant
-func (c *Client) ListProjects(ctx context.Context, tenant string) ([]Project, error) {
+// ListProjects lists all projects in a tenant and applies the given mapper.
+// Use Identity mapper for raw JSON output, or ParseProjects for typed structs.
+func ListProjects[T any](c *Client, ctx context.Context, tenant string, mapper Mapper[T]) (T, error) {
+	var zero T
+	raw, err := c.listProjectsRaw(ctx, tenant)
+	if err != nil {
+		return zero, err
+	}
+	return mapper(raw)
+}
+
+// listProjectsRaw fetches projects and returns raw JSON bytes
+func (c *Client) listProjectsRaw(ctx context.Context, tenant string) ([]byte, error) {
 	path := apiAdminTenants + buildPath(tenant, "projects")
 
-	var projects []Project
-	req := c.http.R().SetContext(ctx).SetResult(&projects)
+	req := c.http.R().SetContext(ctx)
 	c.setAdminAuth(req)
 	resp, err := req.Get(path)
 
@@ -29,15 +39,25 @@ func (c *Client) ListProjects(ctx context.Context, tenant string) ([]Project, er
 		return nil, c.handleError(resp)
 	}
 
-	return projects, nil
+	return resp.Body(), nil
 }
 
-// GetProject retrieves a specific project
-func (c *Client) GetProject(ctx context.Context, tenant, project string) (*Project, error) {
+// GetProject retrieves a specific project and applies the given mapper.
+// Use Identity mapper for raw JSON output, or ParseProject for typed struct.
+func GetProject[T any](c *Client, ctx context.Context, tenant, project string, mapper Mapper[T]) (T, error) {
+	var zero T
+	raw, err := c.getProjectRaw(ctx, tenant, project)
+	if err != nil {
+		return zero, err
+	}
+	return mapper(raw)
+}
+
+// getProjectRaw fetches a project and returns raw JSON bytes
+func (c *Client) getProjectRaw(ctx context.Context, tenant, project string) ([]byte, error) {
 	path := apiAdminTenants + buildPath(tenant, "projects", project)
 
-	var proj Project
-	req := c.http.R().SetContext(ctx).SetResult(&proj)
+	req := c.http.R().SetContext(ctx)
 	c.setAdminAuth(req)
 	resp, err := req.Get(path)
 
@@ -49,7 +69,7 @@ func (c *Client) GetProject(ctx context.Context, tenant, project string) (*Proje
 		return nil, c.handleError(resp)
 	}
 
-	return &proj, nil
+	return resp.Body(), nil
 }
 
 // CreateProject creates a new project

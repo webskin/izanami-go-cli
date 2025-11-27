@@ -12,12 +12,22 @@ import (
 // API KEY OPERATIONS
 // ============================================================================
 
-// ListAPIKeys lists all API keys for a tenant
-func (c *Client) ListAPIKeys(ctx context.Context, tenant string) ([]APIKey, error) {
+// ListAPIKeys lists all API keys for a tenant and applies the given mapper.
+// Use Identity mapper for raw JSON output, or ParseAPIKeys for typed structs.
+func ListAPIKeys[T any](c *Client, ctx context.Context, tenant string, mapper Mapper[T]) (T, error) {
+	var zero T
+	raw, err := c.listAPIKeysRaw(ctx, tenant)
+	if err != nil {
+		return zero, err
+	}
+	return mapper(raw)
+}
+
+// listAPIKeysRaw fetches API keys and returns raw JSON bytes
+func (c *Client) listAPIKeysRaw(ctx context.Context, tenant string) ([]byte, error) {
 	path := apiAdminTenants + buildPath(tenant, "keys")
 
-	var keys []APIKey
-	req := c.http.R().SetContext(ctx).SetResult(&keys)
+	req := c.http.R().SetContext(ctx)
 	c.setAdminAuth(req)
 	resp, err := req.Get(path)
 
@@ -29,14 +39,15 @@ func (c *Client) ListAPIKeys(ctx context.Context, tenant string) ([]APIKey, erro
 		return nil, c.handleError(resp)
 	}
 
-	return keys, nil
+	return resp.Body(), nil
 }
 
-// GetAPIKey retrieves a specific API key by clientID
+// GetAPIKey retrieves a specific API key by clientID.
 // Note: The Izanami API doesn't have a dedicated endpoint for getting a single key,
-// so this method lists all keys and filters by clientID
+// so this method lists all keys and filters by clientID.
+// Because of client-side filtering, this method returns a parsed key rather than raw JSON.
 func (c *Client) GetAPIKey(ctx context.Context, tenant, clientID string) (*APIKey, error) {
-	keys, err := c.ListAPIKeys(ctx, tenant)
+	keys, err := ListAPIKeys(c, ctx, tenant, ParseAPIKeys)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", errmsg.MsgFailedToGetAPIKey, err)
 	}

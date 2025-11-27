@@ -21,6 +21,7 @@ var (
 	timeout      int
 	verbose      bool
 	outputFormat string
+	compactJSON  bool
 
 	// Global config
 	cfg *izanami.Config
@@ -137,6 +138,7 @@ func init() {
 	rootCmd.PersistentFlags().IntVar(&timeout, "timeout", 0, "Request timeout in seconds (default: 30)")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Verbose output")
 	rootCmd.PersistentFlags().StringVarP(&outputFormat, "output", "o", "table", "Output format: json or table")
+	rootCmd.PersistentFlags().BoolVar(&compactJSON, "compact", false, "Output compact JSON (no pretty-printing)")
 }
 
 // GetConfig returns the global configuration

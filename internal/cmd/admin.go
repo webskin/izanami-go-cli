@@ -19,6 +19,17 @@ var (
 	tenantsDeleteForce  bool
 	projectsDeleteForce bool
 	tagsDeleteForce     bool
+	// Logs command flags
+	logsOrder    string
+	logsUsers    string
+	logsTypes    string
+	logsFeatures string
+	logsProjects string
+	logsStart    string
+	logsEnd      string
+	logsCursor   int64
+	logsCount    int
+	logsTotal    bool
 )
 
 // adminCmd represents the admin command
@@ -83,12 +94,23 @@ var adminTenantsListCmd = &cobra.Command{
 		}
 
 		ctx := context.Background()
-		tenants, err := client.ListTenants(ctx, nil)
+
+		// For JSON output, use Identity mapper to get raw JSON
+		if outputFormat == "json" {
+			raw, err := izanami.ListTenants(client, ctx, nil, izanami.Identity)
+			if err != nil {
+				return err
+			}
+			return output.PrintRawJSON(cmd.OutOrStdout(), raw, compactJSON)
+		}
+
+		// For table output, use ParseTenants mapper
+		tenants, err := izanami.ListTenants(client, ctx, nil, izanami.ParseTenants)
 		if err != nil {
 			return err
 		}
 
-		// Convert to summaries (list endpoint doesn't include projects/tags)
+		// Convert to summaries for table output (list endpoint doesn't include projects/tags)
 		summaries := make([]izanami.TenantSummary, len(tenants))
 		for i, t := range tenants {
 			summaries[i] = izanami.TenantSummary{
@@ -112,7 +134,18 @@ var adminTenantsGetCmd = &cobra.Command{
 		}
 
 		ctx := context.Background()
-		tenant, err := client.GetTenant(ctx, args[0])
+
+		// For JSON output, use Identity mapper to get raw JSON
+		if outputFormat == "json" {
+			raw, err := izanami.GetTenant(client, ctx, args[0], izanami.Identity)
+			if err != nil {
+				return err
+			}
+			return output.PrintRawJSON(cmd.OutOrStdout(), raw, compactJSON)
+		}
+
+		// For table output, use ParseTenant mapper
+		tenant, err := izanami.GetTenant(client, ctx, args[0], izanami.ParseTenant)
 		if err != nil {
 			return err
 		}
@@ -259,6 +292,72 @@ var adminTenantsDeleteCmd = &cobra.Command{
 	},
 }
 
+var adminTenantsLogsCmd = &cobra.Command{
+	Use:   "logs",
+	Short: "View tenant event logs",
+	Long: `View event logs for a tenant. Shows audit events like feature changes, user actions, etc.
+
+Examples:
+  # List recent logs for a tenant
+  iz admin tenants logs --tenant my-tenant
+
+  # List logs with filters
+  iz admin tenants logs --tenant my-tenant --users admin,user1
+  iz admin tenants logs --tenant my-tenant --types FEATURE_CREATED,FEATURE_UPDATED
+
+  # List logs in descending order (newest first)
+  iz admin tenants logs --tenant my-tenant --order desc
+
+  # List logs within a time range
+  iz admin tenants logs --tenant my-tenant --start 2024-01-01T00:00:00Z --end 2024-01-31T23:59:59Z
+
+  # Paginate through logs
+  iz admin tenants logs --tenant my-tenant --count 100
+  iz admin tenants logs --tenant my-tenant --count 50 --cursor 12345`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := cfg.ValidateTenant(); err != nil {
+			return err
+		}
+
+		client, err := izanami.NewClient(cfg)
+		if err != nil {
+			return err
+		}
+
+		opts := &izanami.LogsRequest{
+			Order:    logsOrder,
+			Users:    logsUsers,
+			Types:    logsTypes,
+			Features: logsFeatures,
+			Projects: logsProjects,
+			Start:    logsStart,
+			End:      logsEnd,
+			Cursor:   logsCursor,
+			Count:    logsCount,
+			Total:    logsTotal,
+		}
+
+		ctx := context.Background()
+
+		// For JSON output, use Identity mapper to get raw JSON
+		if outputFormat == "json" {
+			raw, err := izanami.ListTenantLogs(client, ctx, cfg.Tenant, opts, izanami.Identity)
+			if err != nil {
+				return err
+			}
+			return output.PrintRawJSON(cmd.OutOrStdout(), raw, compactJSON)
+		}
+
+		// For table output, use ParseLogsResponse mapper
+		logs, err := izanami.ListTenantLogs(client, ctx, cfg.Tenant, opts, izanami.ParseLogsResponse)
+		if err != nil {
+			return err
+		}
+
+		return output.Print(logs.ToTableView(), output.Format(outputFormat))
+	},
+}
+
 // ============================================================================
 // PROJECTS
 // ============================================================================
@@ -283,7 +382,18 @@ var adminProjectsListCmd = &cobra.Command{
 		}
 
 		ctx := context.Background()
-		projects, err := client.ListProjects(ctx, cfg.Tenant)
+
+		// For JSON output, use Identity mapper to get raw JSON
+		if outputFormat == "json" {
+			raw, err := izanami.ListProjects(client, ctx, cfg.Tenant, izanami.Identity)
+			if err != nil {
+				return err
+			}
+			return output.PrintRawJSON(cmd.OutOrStdout(), raw, compactJSON)
+		}
+
+		// For table output, use ParseProjects mapper
+		projects, err := izanami.ListProjects(client, ctx, cfg.Tenant, izanami.ParseProjects)
 		if err != nil {
 			return err
 		}
@@ -307,7 +417,18 @@ var adminProjectsGetCmd = &cobra.Command{
 		}
 
 		ctx := context.Background()
-		project, err := client.GetProject(ctx, cfg.Tenant, args[0])
+
+		// For JSON output, use Identity mapper to get raw JSON
+		if outputFormat == "json" {
+			raw, err := izanami.GetProject(client, ctx, cfg.Tenant, args[0], izanami.Identity)
+			if err != nil {
+				return err
+			}
+			return output.PrintRawJSON(cmd.OutOrStdout(), raw, compactJSON)
+		}
+
+		// For table output, use ParseProject mapper
+		project, err := izanami.GetProject(client, ctx, cfg.Tenant, args[0], izanami.ParseProject)
 		if err != nil {
 			return err
 		}
@@ -417,7 +538,18 @@ var adminTagsListCmd = &cobra.Command{
 		}
 
 		ctx := context.Background()
-		tags, err := client.ListTags(ctx, cfg.Tenant)
+
+		// For JSON output, use Identity mapper to get raw JSON
+		if outputFormat == "json" {
+			raw, err := izanami.ListTags(client, ctx, cfg.Tenant, izanami.Identity)
+			if err != nil {
+				return err
+			}
+			return output.PrintRawJSON(cmd.OutOrStdout(), raw, compactJSON)
+		}
+
+		// For table output, use ParseTags mapper
+		tags, err := izanami.ListTags(client, ctx, cfg.Tenant, izanami.ParseTags)
 		if err != nil {
 			return err
 		}
@@ -441,7 +573,18 @@ var adminTagsGetCmd = &cobra.Command{
 		}
 
 		ctx := context.Background()
-		tag, err := client.GetTag(ctx, cfg.Tenant, args[0])
+
+		// For JSON output, use Identity mapper to get raw JSON
+		if outputFormat == "json" {
+			raw, err := izanami.GetTag(client, ctx, cfg.Tenant, args[0], izanami.Identity)
+			if err != nil {
+				return err
+			}
+			return output.PrintRawJSON(cmd.OutOrStdout(), raw, compactJSON)
+		}
+
+		// For table output, use ParseTag mapper
+		tag, err := izanami.GetTag(client, ctx, cfg.Tenant, args[0], izanami.ParseTag)
 		if err != nil {
 			return err
 		}
@@ -711,6 +854,19 @@ func init() {
 	adminTenantsUpdateCmd.Flags().StringVar(&tenantDesc, "description", "", "Tenant description")
 	adminTenantsUpdateCmd.Flags().StringVar(&tenantData, "data", "", "JSON tenant data")
 	adminTenantsDeleteCmd.Flags().BoolVarP(&tenantsDeleteForce, "force", "f", false, "Skip confirmation prompt")
+
+	// Tenant logs
+	adminTenantsCmd.AddCommand(adminTenantsLogsCmd)
+	adminTenantsLogsCmd.Flags().StringVar(&logsOrder, "order", "", "Sort order: asc or desc")
+	adminTenantsLogsCmd.Flags().StringVar(&logsUsers, "users", "", "Filter by users (comma-separated)")
+	adminTenantsLogsCmd.Flags().StringVar(&logsTypes, "types", "", "Filter by event types (comma-separated)")
+	adminTenantsLogsCmd.Flags().StringVar(&logsFeatures, "features", "", "Filter by features (comma-separated)")
+	adminTenantsLogsCmd.Flags().StringVar(&logsProjects, "projects", "", "Filter by projects (comma-separated)")
+	adminTenantsLogsCmd.Flags().StringVar(&logsStart, "start", "", "Start date-time (ISO 8601)")
+	adminTenantsLogsCmd.Flags().StringVar(&logsEnd, "end", "", "End date-time (ISO 8601)")
+	adminTenantsLogsCmd.Flags().Int64Var(&logsCursor, "cursor", 0, "Cursor for pagination")
+	adminTenantsLogsCmd.Flags().IntVar(&logsCount, "count", 50, "Number of logs to retrieve")
+	adminTenantsLogsCmd.Flags().BoolVar(&logsTotal, "total", false, "Include total count in response")
 
 	// Projects
 	adminCmd.AddCommand(adminProjectsCmd)

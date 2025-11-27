@@ -38,11 +38,12 @@ const (
 	MsgFailedToDeleteContext = "failed to delete context"
 
 	// Tenant error messages
-	MsgFailedToListTenants  = "failed to list tenants"
-	MsgFailedToGetTenant    = "failed to get tenant"
-	MsgFailedToCreateTenant = "failed to create tenant"
-	MsgFailedToUpdateTenant = "failed to update tenant"
-	MsgFailedToDeleteTenant = "failed to delete tenant"
+	MsgFailedToListTenants     = "failed to list tenants"
+	MsgFailedToGetTenant       = "failed to get tenant"
+	MsgFailedToCreateTenant    = "failed to create tenant"
+	MsgFailedToUpdateTenant    = "failed to update tenant"
+	MsgFailedToDeleteTenant    = "failed to delete tenant"
+	MsgFailedToListTenantLogs  = "failed to list tenant logs"
 
 	// Project error messages
 	MsgFailedToListProjects  = "failed to list projects"

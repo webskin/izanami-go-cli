@@ -1,6 +1,7 @@
 package output
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -49,6 +50,37 @@ func printJSON(w io.Writer, data interface{}) error {
 	if err := encoder.Encode(data); err != nil {
 		return fmt.Errorf("failed to encode JSON: %w", err)
 	}
+	return nil
+}
+
+// PrintRawJSON prints raw JSON bytes, optionally pretty-printed
+// If compact is false, the JSON will be pretty-printed with 2-space indentation
+func PrintRawJSON(w io.Writer, rawJSON []byte, compact bool) error {
+	if compact {
+		// Output as-is (compact)
+		_, err := w.Write(rawJSON)
+		if err != nil {
+			return fmt.Errorf("failed to write JSON: %w", err)
+		}
+		// Add newline if not present
+		if len(rawJSON) > 0 && rawJSON[len(rawJSON)-1] != '\n' {
+			fmt.Fprintln(w)
+		}
+		return nil
+	}
+
+	// Pretty-print the JSON
+	var buf bytes.Buffer
+	if err := json.Indent(&buf, rawJSON, "", "  "); err != nil {
+		// If indentation fails, output as-is
+		_, err := w.Write(rawJSON)
+		if err != nil {
+			return fmt.Errorf("failed to write JSON: %w", err)
+		}
+		fmt.Fprintln(w)
+		return nil
+	}
+	fmt.Fprintln(w, buf.String())
 	return nil
 }
 

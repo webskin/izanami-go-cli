@@ -52,7 +52,7 @@ func TestClient_ListFeatures(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	features, err := client.ListFeatures(ctx, "test-tenant", "")
+	features, err := ListFeatures(client, ctx, "test-tenant", "", ParseFeatures)
 
 	assert.NoError(t, err)
 	assert.Len(t, features, 2)
@@ -89,7 +89,7 @@ func TestClient_GetFeature(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	feature, err := client.GetFeature(ctx, "test-tenant", "feature-1")
+	feature, err := GetFeature(client, ctx, "test-tenant", "feature-1", ParseFeature)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, feature)

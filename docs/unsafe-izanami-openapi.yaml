@@ -3517,20 +3517,46 @@ components:
     AuditEvent:
       type: object
       properties:
-        id:
+        eventId:
           type: integer
           format: int64
-        entityType:
+          description: Sequential event ID for pagination
+        id:
           type: string
-        eventType:
+          description: UUID of the affected entity (project, feature, etc.)
+        name:
           type: string
+          description: Name of the affected entity (for project events)
+        tenant:
+          type: string
+          description: Tenant name
+        project:
+          type: string
+          description: Project name (for feature events)
         user:
           type: string
-        entityId:
+          description: User who triggered the event
+        type:
           type: string
-        timestamp:
+          description: Event type (e.g., PROJECT_CREATED, FEATURE_CREATED, FEATURE_UPDATED)
+        origin:
+          type: string
+          description: Origin of the event (e.g., NORMAL)
+        emittedAt:
           type: string
           format: date-time
+          description: Timestamp when the event was emitted
+        authentication:
+          type: string
+          description: Authentication method used (e.g., BACKOFFICE)
+        conditions:
+          type: object
+          additionalProperties: true
+          description: Feature conditions after the change (for feature events)
+        previousConditions:
+          type: object
+          additionalProperties: true
+          description: Feature conditions before the change (for update events)
 
     # Client API responses
     FeatureActivation:

@@ -12,12 +12,22 @@ import (
 // TAG OPERATIONS
 // ============================================================================
 
-// ListTags lists all tags in a tenant
-func (c *Client) ListTags(ctx context.Context, tenant string) ([]Tag, error) {
+// ListTags lists all tags in a tenant and applies the given mapper.
+// Use Identity mapper for raw JSON output, or ParseTags for typed structs.
+func ListTags[T any](c *Client, ctx context.Context, tenant string, mapper Mapper[T]) (T, error) {
+	var zero T
+	raw, err := c.listTagsRaw(ctx, tenant)
+	if err != nil {
+		return zero, err
+	}
+	return mapper(raw)
+}
+
+// listTagsRaw fetches tags and returns raw JSON bytes
+func (c *Client) listTagsRaw(ctx context.Context, tenant string) ([]byte, error) {
 	path := apiAdminTenants + buildPath(tenant, "tags")
 
-	var tags []Tag
-	req := c.http.R().SetContext(ctx).SetResult(&tags)
+	req := c.http.R().SetContext(ctx)
 	c.setAdminAuth(req)
 	resp, err := req.Get(path)
 
@@ -29,16 +39,25 @@ func (c *Client) ListTags(ctx context.Context, tenant string) ([]Tag, error) {
 		return nil, c.handleError(resp)
 	}
 
-	return tags, nil
+	return resp.Body(), nil
 }
 
-// GetTag retrieves a specific tag by name using the dedicated endpoint
-// GET /api/admin/tenants/:tenant/tags/:name
-func (c *Client) GetTag(ctx context.Context, tenant, tagName string) (*Tag, error) {
+// GetTag retrieves a specific tag by name and applies the given mapper.
+// Use Identity mapper for raw JSON output, or ParseTag for typed struct.
+func GetTag[T any](c *Client, ctx context.Context, tenant, tagName string, mapper Mapper[T]) (T, error) {
+	var zero T
+	raw, err := c.getTagRaw(ctx, tenant, tagName)
+	if err != nil {
+		return zero, err
+	}
+	return mapper(raw)
+}
+
+// getTagRaw fetches a tag and returns raw JSON bytes
+func (c *Client) getTagRaw(ctx context.Context, tenant, tagName string) ([]byte, error) {
 	path := apiAdminTenants + buildPath(tenant, "tags", tagName)
 
-	var tag Tag
-	req := c.http.R().SetContext(ctx).SetResult(&tag)
+	req := c.http.R().SetContext(ctx)
 	c.setAdminAuth(req)
 	resp, err := req.Get(path)
 
@@ -50,7 +69,7 @@ func (c *Client) GetTag(ctx context.Context, tenant, tagName string) (*Tag, erro
 		return nil, c.handleError(resp)
 	}
 
-	return &tag, nil
+	return resp.Body(), nil
 }
 
 // CreateTag creates a new tag

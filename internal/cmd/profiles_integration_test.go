@@ -163,7 +163,7 @@ func TestIntegration_AuthenticatedClientFromProfile(t *testing.T) {
 
 	// Make a real API call - list tenants
 	ctx := context.Background()
-	tenants, err := client.ListTenants(ctx, nil)
+	tenants, err := izanami.ListTenants(client, ctx, nil, izanami.ParseTenants)
 	require.NoError(t, err, "Should be able to list tenants with authenticated client")
 
 	t.Logf("Successfully listed %d tenants using authenticated client from profile", len(tenants))

@@ -64,26 +64,32 @@ By default, only shows root-level contexts. Use --all to show all nested context
 		}
 
 		ctx := context.Background()
-		contexts, err := client.ListContexts(ctx, cfg.Tenant, contextProject, contextAll)
+
+		// For JSON output, use Identity mapper to get raw JSON
+		if outputFormat == "json" {
+			raw, err := izanami.ListContexts(client, ctx, cfg.Tenant, contextProject, contextAll, izanami.Identity)
+			if err != nil {
+				return err
+			}
+			return output.PrintRawJSON(cmd.OutOrStdout(), raw, compactJSON)
+		}
+
+		// For table output, use ParseContexts mapper
+		contexts, err := izanami.ListContexts(client, ctx, cfg.Tenant, contextProject, contextAll, izanami.ParseContexts)
 		if err != nil {
 			return err
 		}
 
 		// For table output, convert to table view (PATH first, no CHILDREN)
-		if output.Format(outputFormat) == output.Table {
-			// Hide overload column when listing tenant-level contexts (no --project flag)
-			// Show overload column only when --project flag is provided
-			if contextProject != "" {
-				tableView := izanami.FlattenContextsForTable(contexts)
-				return output.Print(tableView, output.Format(outputFormat))
-			} else {
-				tableView := izanami.FlattenContextsForTableSimple(contexts)
-				return output.Print(tableView, output.Format(outputFormat))
-			}
+		// Hide overload column when listing tenant-level contexts (no --project flag)
+		// Show overload column only when --project flag is provided
+		if contextProject != "" {
+			tableView := izanami.FlattenContextsForTable(contexts)
+			return output.Print(tableView, output.Format(outputFormat))
+		} else {
+			tableView := izanami.FlattenContextsForTableSimple(contexts)
+			return output.Print(tableView, output.Format(outputFormat))
 		}
-
-		// For JSON output, keep the original structure
-		return output.Print(contexts, output.Format(outputFormat))
 	},
 }
 
@@ -121,7 +127,7 @@ The context path should be the full hierarchical path, e.g.:
 
 		// List all contexts (without 'all' to get root + immediate children)
 		ctx := context.Background()
-		contexts, err := client.ListContexts(ctx, cfg.Tenant, proj, false)
+		contexts, err := izanami.ListContexts(client, ctx, cfg.Tenant, proj, false, izanami.ParseContexts)
 		if err != nil {
 			return err
 		}

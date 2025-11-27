@@ -95,7 +95,7 @@ func TestClient_ErrorHandling(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	_, err = client.GetFeature(ctx, "test-tenant", "nonexistent")
+	_, err = GetFeature(client, ctx, "test-tenant", "nonexistent", ParseFeature)
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "404")

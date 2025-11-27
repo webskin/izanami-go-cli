@@ -630,6 +630,79 @@ type ErrorResponse struct {
 	Message string `json:"message"`
 }
 
+// AuditEvent represents an audit log event in Izanami
+type AuditEvent struct {
+	EventID            int64                  `json:"eventId"`
+	ID                 string                 `json:"id"`
+	Name               string                 `json:"name,omitempty"`
+	Tenant             string                 `json:"tenant"`
+	Project            string                 `json:"project,omitempty"`
+	User               string                 `json:"user"`
+	Type               string                 `json:"type"`
+	Origin             string                 `json:"origin"`
+	EmittedAt          string                 `json:"emittedAt"`
+	Authentication     string                 `json:"authentication"`
+	Conditions         map[string]interface{} `json:"conditions,omitempty"`
+	PreviousConditions map[string]interface{} `json:"previousConditions,omitempty"`
+}
+
+// AuditEventTableView represents an audit event for table display
+type AuditEventTableView struct {
+	EventID        int64  `json:"eventId"`
+	Type           string `json:"type"`
+	User           string `json:"user"`
+	Name           string `json:"name"`
+	Project        string `json:"project"`
+	EmittedAt      string `json:"emittedAt"`
+	Authentication string `json:"authentication"`
+}
+
+// ToTableView converts an AuditEvent to a table-friendly view
+func (e *AuditEvent) ToTableView() AuditEventTableView {
+	name := e.Name
+	if name == "" {
+		name = e.ID
+	}
+	return AuditEventTableView{
+		EventID:        e.EventID,
+		Type:           e.Type,
+		User:           e.User,
+		Name:           name,
+		Project:        e.Project,
+		EmittedAt:      e.EmittedAt,
+		Authentication: e.Authentication,
+	}
+}
+
+// LogsResponse represents the response from the logs endpoint
+type LogsResponse struct {
+	Events []AuditEvent `json:"events"`
+	Count  int          `json:"count,omitempty"`
+}
+
+// ToTableView converts LogsResponse events to table-friendly views
+func (r *LogsResponse) ToTableView() []AuditEventTableView {
+	views := make([]AuditEventTableView, len(r.Events))
+	for i, e := range r.Events {
+		views[i] = e.ToTableView()
+	}
+	return views
+}
+
+// LogsRequest represents the query parameters for fetching logs
+type LogsRequest struct {
+	Order    string // asc or desc
+	Users    string // comma-separated user filter
+	Types    string // comma-separated event type filter
+	Features string // comma-separated feature filter
+	Projects string // comma-separated project filter
+	Start    string // ISO 8601 date-time
+	End      string // ISO 8601 date-time
+	Cursor   int64  // cursor for pagination
+	Count    int    // number of results (default 50)
+	Total    bool   // include total count
+}
+
 // OutputFormat represents the output format for CLI commands
 type OutputFormat string
 

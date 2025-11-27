@@ -45,7 +45,7 @@ func TestClient_ListContexts(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	contexts, err := client.ListContexts(ctx, "test-tenant", "", false)
+	contexts, err := ListContexts(client, ctx, "test-tenant", "", false, ParseContexts)
 
 	assert.NoError(t, err)
 	assert.Len(t, contexts, 2)

@@ -81,7 +81,18 @@ The list endpoint supports filtering by:
 		}
 
 		ctx := context.Background()
-		features, err := client.ListFeatures(ctx, cfg.Tenant, featureTag)
+
+		// For JSON output, use Identity mapper to get raw JSON
+		if outputFormat == "json" {
+			raw, err := izanami.ListFeatures(client, ctx, cfg.Tenant, featureTag, izanami.Identity)
+			if err != nil {
+				return err
+			}
+			return output.PrintRawJSON(cmd.OutOrStdout(), raw, compactJSON)
+		}
+
+		// For table output, use ParseFeatures mapper
+		features, err := izanami.ListFeatures(client, ctx, cfg.Tenant, featureTag, izanami.ParseFeatures)
 		if err != nil {
 			return err
 		}
@@ -123,7 +134,18 @@ var featuresGetCmd = &cobra.Command{
 		}
 
 		ctx := context.Background()
-		feature, err := client.GetFeature(ctx, cfg.Tenant, args[0])
+
+		// For JSON output, use Identity mapper to get raw JSON
+		if outputFormat == "json" {
+			raw, err := izanami.GetFeature(client, ctx, cfg.Tenant, args[0], izanami.Identity)
+			if err != nil {
+				return err
+			}
+			return output.PrintRawJSON(cmd.OutOrStdout(), raw, compactJSON)
+		}
+
+		// For table output, use ParseFeature mapper
+		feature, err := izanami.GetFeature(client, ctx, cfg.Tenant, args[0], izanami.ParseFeature)
 		if err != nil {
 			return err
 		}
@@ -320,7 +342,7 @@ Examples:
 			if len(missingFields) > 0 {
 				// Fetch current feature to show the user
 				ctx := context.Background()
-				currentFeature, err := client.GetFeature(ctx, cfg.Tenant, featureID)
+				currentFeature, err := izanami.GetFeature(client, ctx, cfg.Tenant, featureID, izanami.ParseFeature)
 				if err != nil {
 					return fmt.Errorf("missing required fields (%v) and failed to fetch current feature: %w", missingFields, err)
 				}
@@ -467,7 +489,7 @@ Examples:
 			}
 
 			// List all features for the tenant
-			features, err := client.ListFeatures(ctx, cfg.Tenant, "")
+			features, err := izanami.ListFeatures(client, ctx, cfg.Tenant, "", izanami.ParseFeatures)
 			if err != nil {
 				return fmt.Errorf("failed to list features: %w", err)
 			}
@@ -659,7 +681,7 @@ Examples:
 			}
 
 			// List all projects for the tenant
-			projects, err := client.ListProjects(ctx, cfg.Tenant)
+			projects, err := izanami.ListProjects(client, ctx, cfg.Tenant, izanami.ParseProjects)
 			if err != nil {
 				return fmt.Errorf("failed to list projects: %w", err)
 			}
@@ -709,14 +731,14 @@ Examples:
 			}
 
 			// List all features for the tenant
-			features, err := client.ListFeatures(ctx, cfg.Tenant, "")
+			allFeatures, err := izanami.ListFeatures(client, ctx, cfg.Tenant, "", izanami.ParseFeatures)
 			if err != nil {
 				return fmt.Errorf("failed to list features: %w", err)
 			}
 
 			// Build name->ID map
 			nameToID := make(map[string][]izanami.Feature)
-			for _, f := range features {
+			for _, f := range allFeatures {
 				nameToID[f.Name] = append(nameToID[f.Name], f)
 			}
 
@@ -830,7 +852,7 @@ func resolveTagNames(ctx context.Context, client *izanami.Client, tenant string,
 				return nil, fmt.Errorf("tag names require --tenant flag")
 			}
 
-			tagObj, err := client.GetTag(ctx, tenant, tag)
+			tagObj, err := izanami.GetTag(client, ctx, tenant, tag, izanami.ParseTag)
 			if err != nil {
 				return nil, fmt.Errorf("failed to resolve tag '%s': %w", tag, err)
 			}
