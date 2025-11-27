@@ -50,6 +50,43 @@ func TestClient_ListTenants(t *testing.T) {
 	assert.Equal(t, "tenant-2", tenants[1].Name)
 }
 
+func TestClient_ListTenants_WithRightFilter(t *testing.T) {
+	expectedTenants := []Tenant{
+		{
+			Name:        "admin-tenant",
+			Description: "Tenant with admin rights",
+		},
+	}
+
+	server := mockServer(t, func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/admin/tenants", r.URL.Path)
+		assert.Equal(t, "GET", r.Method)
+		assert.Equal(t, "Admin", r.URL.Query().Get("right"))
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(expectedTenants)
+	})
+	defer server.Close()
+
+	config := &Config{
+		BaseURL:  server.URL,
+		Username: "test-user",
+		JwtToken: "test-jwt-token",
+		Timeout:  30,
+	}
+
+	client, err := NewClient(config)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	rightLevel := RightLevelAdmin
+	tenants, err := client.ListTenants(ctx, &rightLevel)
+
+	assert.NoError(t, err)
+	assert.Len(t, tenants, 1)
+	assert.Equal(t, "admin-tenant", tenants[0].Name)
+}
+
 func TestClient_GetTenant(t *testing.T) {
 	expectedTenant := &Tenant{
 		Name:        "test-tenant",
