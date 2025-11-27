@@ -15,163 +15,282 @@ You are generating integration tests for the Izanami Go CLI following establishe
 - Source file: {{target_file}}
 - Test file: `{{target_file | replace: ".go", "_integration_test.go"}}`
 
-## Requirements
+## Test Infrastructure (What Exists)
 
-### Test Infrastructure (Already Exists)
-- Base helper: `integration_test_helpers_test.go`
-- Main struct: `IntegrationTestEnv` with methods:
-    - `setupIntegrationTest(t)` - creates isolated test environment
-    - `Login(t)` - authenticates and returns JWT token
-    - `NewAuthenticatedClient(t)` - returns `*izanami.Client`
-- Environment variables: `IZ_TEST_BASE_URL`, `IZ_TEST_USERNAME`, `IZ_TEST_PASSWORD`
+### Base Helper: `integration_test_helpers_test.go`
 
-### Your Task
-Analyze `{{target_file}}` and create comprehensive integration tests that:
-
-1. **Extend IntegrationTestEnv** with tenant lifecycle:
 ```go
-   // CreateTestTenant creates isolated tenant: it-tenant-<hash>
-   func (env *IntegrationTestEnv) CreateTestTenant(t *testing.T) string
-   
-   // DeleteTestTenant cleans up the test tenant
-   func (env *IntegrationTestEnv) DeleteTestTenant(t *testing.T)
-   
-   // ExecuteCommand runs CLI commands in test context
-   func (env *IntegrationTestEnv) ExecuteCommand(t *testing.T, args ...string) (stdout, stderr string, exitCode int)
+// IntegrationTestEnv holds the test environment configuration
+type IntegrationTestEnv struct {
+    TempDir      string  // Isolated temp directory for test
+    ConfigDir    string  // Path to .config/iz/ in temp
+    ConfigPath   string  // Path to config.yaml
+    SessionsPath string  // Path to .izsessions
+    BaseURL      string  // From IZ_TEST_BASE_URL
+    Username     string  // From IZ_TEST_USERNAME
+    Password     string  // From IZ_TEST_PASSWORD
+    ClientID     string  // From IZ_TEST_CLIENT_ID
+    ClientSecret string  // From IZ_TEST_CLIENT_SECRET
+}
 ```
 
-2. **Use standard test pattern**:
+### Available Helper Methods
+
 ```go
-   func TestSomething(t *testing.T) {
-       env := setupIntegrationTest(t)
-       env.Login(t)
-       env.CreateTestTenant(t)
-       t.Cleanup(func() { env.DeleteTestTenant(t) })
-       
-       // Optional: seed fixtures
-       // env.SeedDefaultData(t, "testdata/fixtures/baseline.json")
-       
-       // Execute CLI commands
-       stdout, stderr, exitCode := env.ExecuteCommand(t, "subcommand", "--flag", "value")
-       
-       // Verify CLI output
-       require.Equal(t, 0, exitCode)
-       require.Contains(t, stdout, "expected output")
-       
-       // Verify server state via API
-       client := env.NewAuthenticatedClient(t)
-       // ... API verification ...
-   }
+// Creates isolated test environment, skips if IZ_TEST_BASE_URL not set
+env := setupIntegrationTest(t)
+
+// Performs login, returns JWT token
+token := env.Login(t)
+
+// Returns authenticated *izanami.Client for API calls
+client := env.NewAuthenticatedClient(t)
+
+// Gets stored JWT token from session
+token := env.GetJwtToken(t)
+
+// File existence checks
+env.SessionsFileExists() bool
+env.ConfigFileExists() bool
+
+// Read file contents
+content := env.ReadSessionsFile(t)
+content := env.ReadConfigFile(t)
 ```
 
-3. **Test Coverage** - Cover these scenarios:
-    - ✅ Happy path (successful operations)
-    - ❌ Error cases (invalid input, auth failures, not found)
-    - 🔍 State verification (CLI output + API state match)
-    - 🔀 Edge cases specific to `{{target_file}}`
+### Environment Variables
+- `IZ_TEST_BASE_URL` - Izanami server URL (required)
+- `IZ_TEST_USERNAME` - Test user username
+- `IZ_TEST_PASSWORD` - Test user password
+- `IZ_TEST_CLIENT_ID` - Client credentials (optional)
+- `IZ_TEST_CLIENT_SECRET` - Client credentials (optional)
 
-4. **Tenant Isolation Strategy**:
-    - Unique name: `it-tenant-<8-char-hash>` from `crypto/sha256`
-    - One tenant per test (enable `t.Parallel()` where safe)
-    - Always cleanup in `t.Cleanup()` even on failure
+## Command Execution Pattern
 
-5. **Fixture Management** (if needed):
-    - Store in `testdata/fixtures/`
-    - JSON format with tenant resources
-    - Load via `SeedDefaultData(t, "path/to/fixture.json")`
+We execute CLI commands using Cobra directly:
 
-6. **CLI Execution**:
-    - Use Cobra command execution pattern from existing `Login()` method
-    - Capture stdout/stderr/exit code
-    - Reset command state after execution
+```go
+func TestIntegration_SomeCommand(t *testing.T) {
+    env := setupIntegrationTest(t)
+    env.Login(t)
 
-7. **Assertions**:
-    - Use `testify/require` for critical checks (fail fast)
-    - Use `testify/assert` for multiple checks
-    - Include helpful messages: `require.NoError(t, err, "Context about what failed")`
+    var buf bytes.Buffer
+    cmd := &cobra.Command{Use: "iz"}
+    cmd.AddCommand(targetCmd)  // The command being tested
+    cmd.SetOut(&buf)
+    cmd.SetErr(&buf)
+    targetCmd.SetOut(&buf)
+    targetCmd.SetErr(&buf)
 
-8. **Cleanup Robustness**:
-    - Wrap cleanup in `t.Cleanup()` for guaranteed execution
-    - Log cleanup errors with `t.Logf()` but don't fail test
-    - Handle "tenant not found" gracefully during cleanup
+    cmd.SetArgs([]string{"subcommand", "--flag", "value"})
+    err := cmd.Execute()
+
+    // IMPORTANT: Reset command state after execution
+    targetCmd.SetOut(nil)
+    targetCmd.SetErr(nil)
+
+    // Assertions
+    require.NoError(t, err)
+    output := buf.String()
+    assert.Contains(t, output, "expected text")
+}
+```
+
+## Standard Test Patterns
+
+### Pattern 1: Command that requires login
+```go
+func TestIntegration_CommandAfterLogin(t *testing.T) {
+    env := setupIntegrationTest(t)
+    env.Login(t)
+
+    var buf bytes.Buffer
+    cmd := &cobra.Command{Use: "iz"}
+    cmd.AddCommand(targetCmd)
+    cmd.SetOut(&buf)
+    cmd.SetErr(&buf)
+    targetCmd.SetOut(&buf)
+    targetCmd.SetErr(&buf)
+
+    cmd.SetArgs([]string{"command", "arg"})
+    err := cmd.Execute()
+
+    targetCmd.SetOut(nil)
+    targetCmd.SetErr(nil)
+
+    require.NoError(t, err)
+    output := buf.String()
+    assert.Contains(t, output, "Success")
+
+    t.Logf("Command output:\n%s", output)
+}
+```
+
+### Pattern 2: Command that should fail without login
+```go
+func TestIntegration_CommandWithoutLogin(t *testing.T) {
+    _ = setupIntegrationTest(t)  // No login
+
+    var buf bytes.Buffer
+    cmd := &cobra.Command{Use: "iz"}
+    cmd.AddCommand(targetCmd)
+    cmd.SetOut(&buf)
+    cmd.SetErr(&buf)
+    targetCmd.SetOut(&buf)
+    targetCmd.SetErr(&buf)
+
+    cmd.SetArgs([]string{"command"})
+    err := cmd.Execute()
+
+    targetCmd.SetOut(nil)
+    targetCmd.SetErr(nil)
+
+    require.Error(t, err)
+    assert.Contains(t, err.Error(), "no active profile")
+}
+```
+
+### Pattern 3: Verify state via API after command
+```go
+func TestIntegration_CommandVerifyState(t *testing.T) {
+    env := setupIntegrationTest(t)
+    env.Login(t)
+
+    // Execute command
+    var buf bytes.Buffer
+    cmd := &cobra.Command{Use: "iz"}
+    cmd.AddCommand(targetCmd)
+    cmd.SetOut(&buf)
+    cmd.SetErr(&buf)
+    targetCmd.SetOut(&buf)
+    targetCmd.SetErr(&buf)
+
+    cmd.SetArgs([]string{"command", "--tenant", "test-tenant"})
+    err := cmd.Execute()
+
+    targetCmd.SetOut(nil)
+    targetCmd.SetErr(nil)
+
+    require.NoError(t, err)
+
+    // Verify via API
+    client := env.NewAuthenticatedClient(t)
+    ctx := context.Background()
+    result, err := client.SomeAPICall(ctx, "test-tenant")
+    require.NoError(t, err)
+    assert.Equal(t, expected, result.Field)
+}
+```
+
+### Pattern 4: Testing izanami package functions directly
+```go
+func TestIntegration_PackageFunction(t *testing.T) {
+    env := setupIntegrationTest(t)
+    env.Login(t)
+
+    // Call izanami package functions directly
+    err := izanami.AddClientKeys("tenant", nil, "client-id", "secret")
+    require.NoError(t, err)
+
+    // Verify persistence
+    profile, err := izanami.GetProfile("default")
+    require.NoError(t, err)
+    assert.NotNil(t, profile.ClientKeys)
+}
+```
+
+### Pattern 5: Commands with interactive input
+```go
+func TestIntegration_CommandWithInput(t *testing.T) {
+    env := setupIntegrationTest(t)
+
+    var buf bytes.Buffer
+    input := bytes.NewBufferString("user-input\n")
+
+    cmd := &cobra.Command{Use: "iz"}
+    cmd.AddCommand(targetCmd)
+    cmd.SetOut(&buf)
+    cmd.SetErr(&buf)
+    cmd.SetIn(input)
+    targetCmd.SetOut(&buf)
+    targetCmd.SetErr(&buf)
+    targetCmd.SetIn(input)
+
+    cmd.SetArgs([]string{"command"})
+    err := cmd.Execute()
+
+    targetCmd.SetIn(nil)
+    targetCmd.SetOut(nil)
+    targetCmd.SetErr(nil)
+
+    require.NoError(t, err)
+}
+```
+
+## Test Coverage Categories
+
+For each command in `{{target_file}}`, create tests for:
+
+1. **Happy Path** - Successful operation with valid input
+2. **Error Cases** - Invalid input, missing auth, not found
+3. **State Verification** - CLI output matches API state
+4. **Edge Cases** - Empty results, special characters, etc.
+
+## Assertions
+
+```go
+// Use require for critical checks (fail fast)
+require.NoError(t, err, "Description of what failed")
+require.NotNil(t, result, "Result should not be nil")
+
+// Use assert for multiple checks
+assert.Contains(t, output, "expected")
+assert.Equal(t, expected, actual)
+assert.True(t, condition, "Condition description")
+```
+
+## Naming Convention
+
+```go
+// Format: TestIntegration_<Command>_<Scenario>
+func TestIntegration_LoginWithValidCredentials(t *testing.T)
+func TestIntegration_LoginWithInvalidCredentials(t *testing.T)
+func TestIntegration_ProfileListShowsSessionURL(t *testing.T)
+func TestIntegration_ResetNoFilesError(t *testing.T)
+```
 
 ## Analysis Steps
 
 1. **Read** `{{target_file}}` to understand:
-    - Public functions/commands exposed
-    - Expected inputs/outputs
-    - Error conditions
-    - State changes in Izanami server
+   - Commands and subcommands defined
+   - Required flags and arguments
+   - Expected outputs and error messages
+   - State changes (files created, API calls made)
 
-2. **Identify** test scenarios:
-    - What CLI commands are being tested?
-    - What server resources are created/modified/deleted?
-    - What fixtures are needed?
+2. **Identify** test scenarios for each command:
+   - What inputs are valid/invalid?
+   - What authentication is required?
+   - What state should be verified after?
 
-3. **Generate** the test file with:
-    - Package declaration matching `{{target_file}}`
-    - Necessary imports
-    - Helper methods (if needed for this specific file)
-    - Test functions following the pattern above
-    - Fixture files in `testdata/fixtures/` (if needed)
+3. **Generate** the test file:
+   - Package: `cmd` (same as source)
+   - Imports: `bytes`, `testing`, `context`, `github.com/spf13/cobra`, `github.com/stretchr/testify/assert`, `github.com/stretchr/testify/require`, `github.com/webskin/izanami-go-cli/internal/izanami`
+   - Test functions following patterns above
 
-4. **Include** these best practices:
-    - Use `t.Helper()` in helper functions
-    - Add descriptive test names: `TestTenantCreate_ValidInput_Success`
-    - Group related tests with subtests: `t.Run("subtest", func(t *testing.T) {...})`
-    - Add comments explaining complex setup or assertions
+## Example: Reference Existing Tests
 
-## Output Structure
-
-Generate these files:
-
-1. **Primary**: `{{target_file | replace: ".go", "_integration_test.go"}}`
-2. **Fixtures** (if needed): `testdata/fixtures/<resource>_fixture.json`
-3. **Helper extensions** (if needed): Add methods to `integration_test_helpers_test.go`
-
-## Example Output
-
-For `cmd/tenant.go`, generate `cmd/tenant_integration_test.go`:
-```go
-package cmd
-
-import (
-    "testing"
-    "github.com/stretchr/testify/require"
-)
-
-func TestTenantCreate_ValidInput_Success(t *testing.T) {
-    env := setupIntegrationTest(t)
-    env.Login(t)
-    env.CreateTestTenant(t)
-    t.Cleanup(func() { env.DeleteTestTenant(t) })
-
-    stdout, _, exitCode := env.ExecuteCommand(t, "tenant", "create", "--name", "test-tenant")
-    require.Equal(t, 0, exitCode)
-    require.Contains(t, stdout, "Tenant created successfully")
-
-    // Verify via API
-    client := env.NewAuthenticatedClient(t)
-    tenant, err := client.GetTenant("test-tenant")
-    require.NoError(t, err)
-    require.Equal(t, "test-tenant", tenant.Name)
-}
-```
+Look at these files for patterns:
+- `internal/cmd/login_logout_integration_test.go` - Login/logout flows
+- `internal/cmd/profiles_integration_test.go` - Profile commands + API verification
+- `internal/cmd/reset_integration_test.go` - Commands modifying local files
+- `internal/cmd/health_integration_test.go` - Commands using global config
 
 ## Important Notes
 
-- Skip tests if `IZ_TEST_BASE_URL` not set (use `setupIntegrationTest` - it handles this)
-- Design for parallel execution where possible
-- Focus on integration (CLI + API state), not unit tests
-- Keep tests fast: avoid unnecessary waits, use minimal fixtures
-- Make tests deterministic: no race conditions, no flaky assertions
-
-## Constraints from Existing Code
-
-- Testing framework: standard `testing` package
-- Assertion library: `testify/require` and `testify/assert`
-- CLI framework: Cobra (`github.com/spf13/cobra`)
-- Client library: `github.com/webskin/izanami-go-cli/internal/izanami`
-- Go version: modern (assume 1.21+)
+- Tests are skipped if `IZ_TEST_BASE_URL` not set (handled by `setupIntegrationTest`)
+- Each test gets isolated temp directory (no cross-test pollution)
+- Always reset command streams after execution (SetOut/SetErr/SetIn to nil)
+- Use `t.Logf()` for helpful debug output
+- Add `t.Helper()` in any helper functions you create
 
 Now analyze `{{target_file}}` and generate the integration tests.
