@@ -1,9 +1,9 @@
 package cmd
 
 import (
+	"bufio"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -14,7 +14,7 @@ import (
 	"github.com/webskin/izanami-go-cli/internal/izanami"
 )
 
-// Global configuration keys and their descriptions
+// Global configuration keys and their descriptions (settable via 'iz config set')
 var globalConfigKeys = map[string]string{
 	"timeout":       "Request timeout in seconds",
 	"verbose":       "Verbose output (true/false)",
@@ -22,7 +22,7 @@ var globalConfigKeys = map[string]string{
 	"color":         "Color output (auto/always/never)",
 }
 
-// Profile-specific configuration keys and their descriptions
+// Profile-specific configuration keys and their descriptions (settable via 'iz profiles set')
 var profileConfigKeys = map[string]string{
 	"base-url":                       "Izanami server URL",
 	"tenant":                         "Default tenant name",
@@ -30,6 +30,8 @@ var profileConfigKeys = map[string]string{
 	"context":                        "Default context path",
 	"personal-access-token-username": "Username for PAT authentication",
 	"personal-access-token":          "Personal access token",
+	"client-id":                      "Client ID for API authentication",
+	"client-secret":                  "Client secret for API authentication",
 }
 
 // printValidConfigKeys prints all valid configuration keys categorized
@@ -48,14 +50,14 @@ func printValidConfigKeys(w io.Writer) {
 	sort.Strings(profileKeys)
 
 	// Print global keys
-	fmt.Fprintln(w, "Global configuration keys (apply to all profiles):")
+	fmt.Fprintln(w, "Global configuration keys (settable via 'iz config set'):")
 	for _, key := range globalKeys {
 		fmt.Fprintf(w, "  %-33s - %s\n", key, globalConfigKeys[key])
 	}
 	fmt.Fprintln(w)
 
 	// Print profile-specific keys
-	fmt.Fprintln(w, "Profile-specific keys (use 'iz profiles set' for active profile):")
+	fmt.Fprintln(w, "Profile-specific keys (settable via 'iz profiles set'):")
 	for _, key := range profileKeys {
 		fmt.Fprintf(w, "  %-33s - %s\n", key, profileConfigKeys[key])
 	}
@@ -63,8 +65,8 @@ func printValidConfigKeys(w io.Writer) {
 
 	// Print usage
 	fmt.Fprintln(w, "Usage:")
-	fmt.Fprintln(w, "  iz config set <key> <value>           - Set global config")
-	fmt.Fprintln(w, "  iz profiles set <key> <value>         - Set in active profile")
+	fmt.Fprintln(w, "  iz config set <key> <value>           - Set global config (only keys above)")
+	fmt.Fprintln(w, "  iz profiles set <key> <value>         - Set profile-specific settings")
 	fmt.Fprintln(w, "  iz profiles client-keys add           - Add client credentials")
 }
 
@@ -85,7 +87,9 @@ Use subcommands to view and modify configuration.`,
 // buildConfigSetLongHelp builds the long help text for config set command
 func buildConfigSetLongHelp() string {
 	var sb strings.Builder
-	sb.WriteString("Set a configuration value and persist it to the config file.\n\n")
+	sb.WriteString("Set a global configuration value and persist it to the config file.\n\n")
+	sb.WriteString("This command only accepts global keys that apply to all profiles.\n")
+	sb.WriteString("For profile-specific settings (base-url, tenant, etc.), use 'iz profiles set'.\n\n")
 
 	// Sort and print global keys
 	globalKeys := make([]string, 0, len(globalConfigKeys))
@@ -94,32 +98,17 @@ func buildConfigSetLongHelp() string {
 	}
 	sort.Strings(globalKeys)
 
-	sb.WriteString("Global configuration keys (apply to all profiles):\n")
+	sb.WriteString("Available keys:\n")
 	for _, key := range globalKeys {
-		sb.WriteString(fmt.Sprintf("  %-33s - %s\n", key, globalConfigKeys[key]))
+		sb.WriteString(fmt.Sprintf("  %-15s - %s\n", key, globalConfigKeys[key]))
 	}
 	sb.WriteString("\n")
-
-	// Sort and print profile-specific keys
-	profileKeys := make([]string, 0, len(profileConfigKeys))
-	for key := range profileConfigKeys {
-		profileKeys = append(profileKeys, key)
-	}
-	sort.Strings(profileKeys)
-
-	sb.WriteString("Profile-specific keys (use 'iz profiles set' for active profile):\n")
-	for _, key := range profileKeys {
-		sb.WriteString(fmt.Sprintf("  %-33s - %s\n", key, profileConfigKeys[key]))
-	}
-	sb.WriteString("\n")
-
-	sb.WriteString("Note: For client credentials, use 'iz profiles client-keys add'\n\n")
 
 	sb.WriteString("Examples:\n")
 	sb.WriteString("  iz config set timeout 60\n")
 	sb.WriteString("  iz config set output-format json\n")
-	sb.WriteString("  iz profiles set base-url http://localhost:9000\n")
-	sb.WriteString("  iz profiles set tenant my-tenant")
+	sb.WriteString("  iz config set verbose true\n")
+	sb.WriteString("  iz config set color never")
 
 	return sb.String()
 }
@@ -378,13 +367,15 @@ Use --defaults to create a config file with only default values (non-interactive
 // configValidateCmd represents the config validate command
 var configValidateCmd = &cobra.Command{
 	Use:   "validate",
-	Short: "Validate current configuration",
-	Long: `Validate the current configuration and check for errors.
+	Short: "Validate global configuration settings",
+	Long: `Validate the global configuration file settings.
 
 This command checks:
   - Configuration file syntax
-  - Required fields
-  - Valid values for fields
+  - Valid values for global settings (timeout, output-format, color, verbose)
+
+Note: Profile-specific settings (base-url, auth, tenant, etc.) are validated
+when using profiles. Use 'iz profiles show' to view profile settings.
 
 Exit codes:
   0 - Configuration is valid
@@ -393,7 +384,7 @@ Exit codes:
 		if !izanami.ConfigExists() {
 			fmt.Fprintln(cmd.OutOrStdout(), "No configuration file found")
 			fmt.Fprintf(cmd.OutOrStdout(), "Run 'iz config init' to create one at: %s\n", izanami.GetConfigPath())
-			os.Exit(1)
+			return fmt.Errorf("no configuration file found")
 		}
 
 		errors := izanami.ValidateConfigFile()
@@ -412,8 +403,7 @@ Exit codes:
 			}
 		}
 
-		os.Exit(1)
-		return nil
+		return fmt.Errorf("configuration has %d error(s)", len(errors))
 	},
 }
 
@@ -436,8 +426,11 @@ Note: This does not affect environment variables or command-line flags.`,
 		fmt.Fprintf(cmd.OutOrStdout(), "This will delete: %s\n", izanami.GetConfigPath())
 		fmt.Fprint(cmd.OutOrStdout(), "Are you sure? (y/N): ")
 
-		var response string
-		fmt.Scanln(&response)
+		reader := bufio.NewReader(cmd.InOrStdin())
+		response, err := reader.ReadString('\n')
+		if err != nil && err.Error() != "EOF" {
+			return fmt.Errorf("failed to read input: %w", err)
+		}
 		response = strings.ToLower(strings.TrimSpace(response))
 
 		if response != "y" && response != "yes" {

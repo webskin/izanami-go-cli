@@ -65,6 +65,24 @@ content := env.ReadConfigFile(t)
 - `IZ_TEST_CLIENT_ID` - Client credentials (optional)
 - `IZ_TEST_CLIENT_SECRET` - Client credentials (optional)
 
+### Local Development Setup
+
+For immediate integration testing with a local Izanami instance:
+
+```bash
+export IZ_TEST_BASE_URL=http://localhost:9000
+export IZ_TEST_USERNAME=RESERVED_ADMIN_USER
+export IZ_TEST_PASSWORD=password
+```
+
+Or run tests inline:
+
+```bash
+IZ_TEST_BASE_URL=http://localhost:9000 IZ_TEST_USERNAME=RESERVED_ADMIN_USER IZ_TEST_PASSWORD=password go test -v ./internal/cmd/ -run "TestIntegration_"
+```
+
+Or use `make integration-test` which uses these defaults.
+
 ## Command Execution Pattern
 
 We execute CLI commands using Cobra directly:

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -64,7 +65,7 @@ Examples:
 		}
 
 		// Determine profile name first (create or find existing)
-		profileName, profileCreated, profileUpdated := determineProfileName(cmd.OutOrStderr(), baseURL, username)
+		profileName, profileCreated, profileUpdated := determineProfileName(cmd.InOrStdin(), cmd.OutOrStderr(), baseURL, username)
 
 		// Generate deterministic session name: <profile-name>-<username>-session
 		sessionName := fmt.Sprintf("%s-%s-session", profileName, username)
@@ -179,12 +180,15 @@ func extractSessionName(url, username string) string {
 
 // promptForProfileName prompts the user to enter a profile name
 // Shows suggestions and uses suggestedName as default
-func promptForProfileName(w io.Writer, suggestedName string) string {
+func promptForProfileName(r io.Reader, w io.Writer, suggestedName string) string {
 	fmt.Fprintf(w, "\nProfile name suggestions: local, sandbox, build, prod\n")
 	fmt.Fprintf(w, "Enter profile name [%s]: ", suggestedName)
 
-	var input string
-	fmt.Scanln(&input)
+	reader := bufio.NewReader(r)
+	input, err := reader.ReadString('\n')
+	if err != nil && err.Error() != "EOF" {
+		return suggestedName
+	}
 	input = strings.TrimSpace(input)
 
 	if input == "" {
@@ -196,7 +200,7 @@ func promptForProfileName(w io.Writer, suggestedName string) string {
 
 // determineProfileName determines the profile name to use for login
 // Returns (profileName, wasCreated, wasUpdated)
-func determineProfileName(w io.Writer, baseURL, username string) (string, bool, bool) {
+func determineProfileName(r io.Reader, w io.Writer, baseURL, username string) (string, bool, bool) {
 	// Check if any profiles exist
 	profiles, _, err := izanami.ListProfiles()
 	if err != nil {
@@ -213,7 +217,7 @@ func determineProfileName(w io.Writer, baseURL, username string) (string, bool, 
 		// First time - no profiles exist yet
 		fmt.Fprintf(w, "\nNo profiles exist yet. Let's create one!\n")
 		suggestedName := extractSessionName(baseURL, username)
-		profileName = promptForProfileName(w, suggestedName)
+		profileName = promptForProfileName(r, w, suggestedName)
 		wasCreated = true
 	} else {
 		// Check if URL matches existing profile
@@ -230,7 +234,7 @@ func determineProfileName(w io.Writer, baseURL, username string) (string, bool, 
 		} else {
 			// New URL - prompt for profile name
 			suggestedName := extractSessionName(baseURL, username)
-			profileName = promptForProfileName(w, suggestedName)
+			profileName = promptForProfileName(r, w, suggestedName)
 			wasCreated = true
 		}
 	}

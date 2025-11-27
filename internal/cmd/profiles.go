@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"strings"
@@ -272,40 +273,40 @@ Examples:
 		// Interactive prompts if --interactive or no flags provided
 		if interactive || (session == "" && url == "" && tenant == "" && project == "" && context == "" && clientID == "" && clientSecret == "") {
 			fmt.Fprintf(cmd.OutOrStdout(), "Creating profile '%s'\n\n", profileName)
+			reader := bufio.NewReader(cmd.InOrStdin())
 
 			// Session or URL
 			fmt.Fprint(cmd.OutOrStdout(), "Session name (or leave empty to specify URL): ")
-			fmt.Scanln(&session)
+			session, _ = reader.ReadString('\n')
 			session = strings.TrimSpace(session)
 
 			if session == "" {
 				fmt.Fprint(cmd.OutOrStdout(), "Server URL: ")
-				fmt.Scanln(&url)
+				url, _ = reader.ReadString('\n')
 				url = strings.TrimSpace(url)
 			}
 
 			// Tenant
 			fmt.Fprint(cmd.OutOrStdout(), "Default tenant (optional): ")
-			fmt.Scanln(&tenant)
+			tenant, _ = reader.ReadString('\n')
 			tenant = strings.TrimSpace(tenant)
 
 			// Project
 			fmt.Fprint(cmd.OutOrStdout(), "Default project (optional): ")
-			fmt.Scanln(&project)
+			project, _ = reader.ReadString('\n')
 			project = strings.TrimSpace(project)
 
 			// Context
 			fmt.Fprint(cmd.OutOrStdout(), "Default context (optional): ")
-			fmt.Scanln(&context)
+			context, _ = reader.ReadString('\n')
 			context = strings.TrimSpace(context)
 
 			// Client credentials
 			fmt.Fprint(cmd.OutOrStdout(), "\nConfigure client credentials for feature checks? (y/N): ")
-			var addCreds string
-			fmt.Scanln(&addCreds)
+			addCreds, _ := reader.ReadString('\n')
 			if strings.ToLower(strings.TrimSpace(addCreds)) == "y" {
 				fmt.Fprint(cmd.OutOrStdout(), "Client ID: ")
-				fmt.Scanln(&clientID)
+				clientID, _ = reader.ReadString('\n')
 				clientID = strings.TrimSpace(clientID)
 
 				fmt.Fprint(cmd.OutOrStdout(), "Client Secret: ")

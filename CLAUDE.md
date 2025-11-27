@@ -61,6 +61,10 @@ See [TODO.md](TODO.md) for pending tasks and features.
 
 ## Izanami swagger
 Izanami server endpoints description can be found here https://maif.github.io/izanami/swagger/swagger.json
-- Follow Cobra best practices by using cmd.OutOrStdout() instead of direct os.Stdout writes, which allows for proper testing while maintaining backward compatibility with normal CLI usage.
-- Prefer the usage of cmd.OutOrStdout() and cmd.OutOrStderr() instead of os.Stdout, os.Stderr, and direct
-   fmt.Print when possible
+
+## Cobra Best Practices
+
+- Follow Cobra best practices by using `cmd.OutOrStdout()` instead of direct `os.Stdout` writes, which allows for proper testing while maintaining backward compatibility with normal CLI usage.
+- Prefer the usage of `cmd.OutOrStdout()` and `cmd.OutOrStderr()` instead of `os.Stdout`, `os.Stderr`, and direct `fmt.Print` when possible.
+- **For input**: Prefer `cmd.InOrStdin()` instead of `os.Stdin` or `fmt.Scanln()`. This allows tests to provide mock input via `cmd.SetIn()`. Use `bufio.NewReader(cmd.InOrStdin())` for reading user input.
+- **Avoid `os.Exit()`**: In command `RunE` functions, return errors instead of calling `os.Exit()`. This allows proper testing and lets Cobra handle the exit code.

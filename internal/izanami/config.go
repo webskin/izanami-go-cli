@@ -347,7 +347,31 @@ type ConfigValue struct {
 	Source string // "file", "env", "default", or "not set"
 }
 
-// ValidConfigKeys defines all valid configuration keys
+// GlobalConfigKeys defines keys that can be set via 'iz config set'
+// These are stored in the top-level config.yaml and apply to all profiles
+var GlobalConfigKeys = map[string]bool{
+	ConfigKeyTimeout:      true,
+	ConfigKeyVerbose:      true,
+	ConfigKeyOutputFormat: true,
+	ConfigKeyColor:        true,
+}
+
+// ProfileConfigKeys defines keys that are profile-specific
+// These should be set via 'iz profiles set' or 'iz profiles add'
+var ProfileConfigKeys = map[string]bool{
+	ConfigKeyBaseURL:                     true,
+	ConfigKeyClientID:                    true,
+	ConfigKeyClientSecret:                true,
+	ConfigKeyPersonalAccessTokenUsername: true,
+	ConfigKeyJwtToken:                    true,
+	ConfigKeyPersonalAccessToken:         true,
+	ConfigKeyTenant:                      true,
+	ConfigKeyProject:                     true,
+	ConfigKeyContext:                     true,
+	ConfigKeyClientKeys:                  true,
+}
+
+// ValidConfigKeys defines all valid configuration keys (for reading/listing)
 var ValidConfigKeys = map[string]bool{
 	ConfigKeyBaseURL:                     true,
 	ConfigKeyClientID:                    true,
@@ -484,9 +508,14 @@ func convertToEnvKey(key string) string {
 	return fmt.Sprintf("%s", result)
 }
 
-// SetConfigValue sets a configuration value and persists it to the config file
+// SetConfigValue sets a global configuration value and persists it to the config file
+// Only global keys (timeout, verbose, output-format, color) can be set via this function.
+// Profile-specific keys should be set via profile commands.
 func SetConfigValue(key, value string) error {
-	if !ValidConfigKeys[key] {
+	if !GlobalConfigKeys[key] {
+		if ProfileConfigKeys[key] {
+			return fmt.Errorf("'%s' is a profile-specific setting. Use 'iz profiles set %s <value>' instead", key, key)
+		}
 		return fmt.Errorf(errors.MsgInvalidConfigKey, key)
 	}
 
@@ -609,7 +638,10 @@ type ValidationError struct {
 	Message string
 }
 
-// ValidateConfigFile validates the current configuration and returns any errors
+// ValidateConfigFile validates the global configuration file settings.
+// Note: Profile-specific settings (base-url, auth, tenant, etc.) are not validated here
+// as they are stored in profiles, not the global config file.
+// Use ValidateProfile to validate profile settings.
 func ValidateConfigFile() []ValidationError {
 	var errs []ValidationError
 
@@ -622,30 +654,11 @@ func ValidateConfigFile() []ValidationError {
 		return errs
 	}
 
-	// Check base URL
-	if config.BaseURL == "" {
+	// Validate timeout (must be positive if set)
+	if config.Timeout < 0 {
 		errs = append(errs, ValidationError{
-			Field:   "base-url",
-			Message: "Base URL is required",
-		})
-	}
-
-	// Check authentication
-	hasClientAuth := config.ClientID != "" && config.ClientSecret != ""
-	hasUserAuth := config.JwtToken != "" || (config.Username != "" && config.PatToken != "")
-
-	if !hasClientAuth && !hasUserAuth {
-		errs = append(errs, ValidationError{
-			Field:   "auth",
-			Message: "Authentication required: either client-id/client-secret, jwt-token, or personal-access-token with personal-access-token-username must be set",
-		})
-	}
-
-	// Personal access token requires username
-	if config.PatToken != "" && config.Username == "" {
-		errs = append(errs, ValidationError{
-			Field:   "personal-access-token-username",
-			Message: "personal-access-token-username is required when using personal-access-token",
+			Field:   "timeout",
+			Message: "Timeout must be a positive number",
 		})
 	}
 
@@ -662,14 +675,6 @@ func ValidateConfigFile() []ValidationError {
 		errs = append(errs, ValidationError{
 			Field:   "color",
 			Message: "Color must be 'auto', 'always', or 'never'",
-		})
-	}
-
-	// Validate timeout
-	if config.Timeout < 0 {
-		errs = append(errs, ValidationError{
-			Field:   "timeout",
-			Message: "Timeout must be a positive number",
 		})
 	}
 
