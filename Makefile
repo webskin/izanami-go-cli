@@ -50,10 +50,11 @@ test:
 	$(GOTEST) -v -race -coverprofile=coverage.out ./...
 
 # Run integration tests
+# Usage: make integration-test [FILTER=Tenants]
 .PHONY: integration-test
 integration-test:
 	@echo "Running integration tests against local Izanami server..."
-	./runIntegrationTests.sh
+	./runIntegrationTests.sh $(FILTER)
 
 # Run tests with coverage report
 .PHONY: test-coverage

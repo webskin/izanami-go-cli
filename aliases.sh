@@ -43,7 +43,8 @@ alias iz='./build/iz'
 alias izt='make test'
 alias iztest='make test'
 
-alias izit='make integration-test'
+# izit [filter] - Run integration tests, optionally filtered (e.g., izit Tenants)
+izit() { make integration-test ${1:+FILTER=$1}; }
 
 # Run tests with coverage
 alias iztc='make test-coverage'
@@ -245,7 +246,7 @@ izaliases() {
 
     echo -e "\n${GREEN}Testing:${NC}"
     echo "  izt, iztest            - Run tests"
-    echo "  izit,                  - Run integration tests"
+    echo "  izit [filter]          - Run integration tests (e.g., izit Tenants)"
     echo "  iztc, iztest-coverage  - Run tests with coverage"
     echo "  iztco                  - Run tests and open coverage"
 
