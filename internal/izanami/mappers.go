@@ -45,4 +45,12 @@ var (
 	ParseContexts      = Unmarshal[[]Context]()
 	ParseAuditEvents   = Unmarshal[[]AuditEvent]()
 	ParseLogsResponse  = UnmarshalPtr[LogsResponse]()
+
+	// Feature check mappers
+	ParseFeatureCheckResult      = UnmarshalPtr[FeatureCheckResult]()
+	ParseActivationsWithConditions = Unmarshal[ActivationsWithConditions]()
+
+	// Utility mappers
+	ParseHealthStatus   = UnmarshalPtr[HealthStatus]()
+	ParseSearchResults  = Unmarshal[[]SearchResult]()
 )

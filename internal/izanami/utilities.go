@@ -14,12 +14,21 @@ import (
 // UTILITY OPERATIONS
 // ============================================================================
 
-// Health checks the health status of Izanami
-func (c *Client) Health(ctx context.Context) (*HealthStatus, error) {
-	var health HealthStatus
+// Health checks the health status of Izanami and applies the given mapper.
+// Use Identity mapper for raw JSON output, or ParseHealthStatus for typed struct.
+func Health[T any](c *Client, ctx context.Context, mapper Mapper[T]) (T, error) {
+	var zero T
+	raw, err := c.healthRaw(ctx)
+	if err != nil {
+		return zero, err
+	}
+	return mapper(raw)
+}
+
+// healthRaw fetches health status and returns raw JSON bytes
+func (c *Client) healthRaw(ctx context.Context) ([]byte, error) {
 	resp, err := c.http.R().
 		SetContext(ctx).
-		SetResult(&health).
 		Get("/api/_health")
 
 	if err != nil {
@@ -30,11 +39,22 @@ func (c *Client) Health(ctx context.Context) (*HealthStatus, error) {
 		return nil, c.handleError(resp)
 	}
 
-	return &health, nil
+	return resp.Body(), nil
 }
 
-// Search performs a global search
-func (c *Client) Search(ctx context.Context, tenant, query string, filters []string) ([]SearchResult, error) {
+// Search performs a global search and applies the given mapper.
+// Use Identity mapper for raw JSON output, or ParseSearchResults for typed slice.
+func Search[T any](c *Client, ctx context.Context, tenant, query string, filters []string, mapper Mapper[T]) (T, error) {
+	var zero T
+	raw, err := c.searchRaw(ctx, tenant, query, filters)
+	if err != nil {
+		return zero, err
+	}
+	return mapper(raw)
+}
+
+// searchRaw fetches search results and returns raw JSON bytes
+func (c *Client) searchRaw(ctx context.Context, tenant, query string, filters []string) ([]byte, error) {
 	var path string
 	if tenant != "" {
 		path = apiAdminTenants + buildPath(tenant, "search")
@@ -44,7 +64,6 @@ func (c *Client) Search(ctx context.Context, tenant, query string, filters []str
 
 	req := c.http.R().
 		SetContext(ctx).
-		SetResult(&[]SearchResult{}).
 		SetQueryParam("query", query)
 	c.setAdminAuth(req)
 
@@ -61,8 +80,7 @@ func (c *Client) Search(ctx context.Context, tenant, query string, filters []str
 		return nil, c.handleError(resp)
 	}
 
-	results := resp.Result().(*[]SearchResult)
-	return *results, nil
+	return resp.Body(), nil
 }
 
 // Export exports tenant data

@@ -701,7 +701,18 @@ Examples:
 		}
 
 		ctx := context.Background()
-		results, err := client.Search(ctx, cfg.Tenant, args[0], searchFilters)
+
+		// For JSON output, use Identity mapper for raw JSON
+		if outputFormat == "json" {
+			raw, err := izanami.Search(client, ctx, cfg.Tenant, args[0], searchFilters, izanami.Identity)
+			if err != nil {
+				return err
+			}
+			return output.PrintRawJSON(cmd.OutOrStdout(), raw, compactJSON)
+		}
+
+		// For table output, use ParseSearchResults mapper
+		results, err := izanami.Search(client, ctx, cfg.Tenant, args[0], searchFilters, izanami.ParseSearchResults)
 		if err != nil {
 			return err
 		}

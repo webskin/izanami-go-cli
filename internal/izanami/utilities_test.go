@@ -34,7 +34,7 @@ func TestClient_Health(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	health, err := client.Health(ctx)
+	health, err := Health(client, ctx, ParseHealthStatus)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, health)
@@ -82,7 +82,7 @@ func TestClient_Search(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	results, err := client.Search(ctx, "test-tenant", "test", []string{"feature", "project"})
+	results, err := Search(client, ctx, "test-tenant", "test", []string{"feature", "project"}, ParseSearchResults)
 
 	assert.NoError(t, err)
 	assert.Len(t, results, 2)
@@ -119,7 +119,7 @@ func TestClient_Search_Global(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	results, err := client.Search(ctx, "", "test", nil)
+	results, err := Search(client, ctx, "", "test", nil, ParseSearchResults)
 
 	assert.NoError(t, err)
 	assert.Len(t, results, 1)

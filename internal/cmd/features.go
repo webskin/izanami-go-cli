@@ -554,7 +554,17 @@ Examples:
 			payload = string(payloadBytes)
 		}
 
-		result, err := client.CheckFeature(ctx, featureID, featureUser, contextPath, payload)
+		// For JSON output, use Identity mapper for raw JSON
+		if outputFormat == "json" {
+			raw, err := izanami.CheckFeature(client, ctx, featureID, featureUser, contextPath, payload, izanami.Identity)
+			if err != nil {
+				return err
+			}
+			return output.PrintRawJSON(cmd.OutOrStdout(), raw, compactJSON)
+		}
+
+		// For table output, use ParseFeatureCheckResult mapper
+		result, err := izanami.CheckFeature(client, ctx, featureID, featureUser, contextPath, payload, izanami.ParseFeatureCheckResult)
 		if err != nil {
 			return err
 		}
@@ -816,19 +826,24 @@ Examples:
 			Payload:    payload,
 		}
 
-		results, err := client.CheckFeatures(ctx, request)
+		// For JSON output, use Identity mapper for raw JSON
+		if outputFormat == "json" {
+			raw, err := izanami.CheckFeatures(client, ctx, request, izanami.Identity)
+			if err != nil {
+				return err
+			}
+			return output.PrintRawJSON(cmd.OutOrStdout(), raw, compactJSON)
+		}
+
+		// For table output, use ParseActivationsWithConditions mapper
+		results, err := izanami.CheckFeatures(client, ctx, request, izanami.ParseActivationsWithConditions)
 		if err != nil {
 			return err
 		}
 
-		// For table format, convert to table view
-		format := output.Format(outputFormat)
-		if format == output.Table {
-			tableView := results.ToTableView()
-			return output.Print(tableView, format)
-		}
-
-		return output.Print(results, format)
+		// Convert to table view for table format
+		tableView := results.ToTableView()
+		return output.Print(tableView, output.Table)
 	},
 }
 

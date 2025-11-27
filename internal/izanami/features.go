@@ -150,13 +150,24 @@ func (c *Client) DeleteFeature(ctx context.Context, tenant, featureID string) er
 	return nil
 }
 
-// CheckFeature checks if a feature is active (client API)
-// Note: Feature check always uses CLIENT_ID/CLIENT_SECRET, not PAT token
-// If payload is provided, uses POST method for script features, otherwise uses GET
-func (c *Client) CheckFeature(ctx context.Context, featureID, user, contextPath, payload string) (*FeatureCheckResult, error) {
+// CheckFeature checks if a feature is active (client API) and applies the given mapper.
+// Use Identity mapper for raw JSON output, or ParseFeatureCheckResult for typed struct.
+// Note: Feature check always uses CLIENT_ID/CLIENT_SECRET, not PAT token.
+// If payload is provided, uses POST method for script features, otherwise uses GET.
+func CheckFeature[T any](c *Client, ctx context.Context, featureID, user, contextPath, payload string, mapper Mapper[T]) (T, error) {
+	var zero T
+	raw, err := c.checkFeatureRaw(ctx, featureID, user, contextPath, payload)
+	if err != nil {
+		return zero, err
+	}
+	return mapper(raw)
+}
+
+// checkFeatureRaw fetches feature check result and returns raw JSON bytes
+func (c *Client) checkFeatureRaw(ctx context.Context, featureID, user, contextPath, payload string) ([]byte, error) {
 	path := "/api/v2/features/" + buildPath(featureID)
 
-	req := c.http.R().SetContext(ctx).SetResult(&FeatureCheckResult{})
+	req := c.http.R().SetContext(ctx)
 
 	// Set client authentication (client-id/secret headers only)
 	if err := c.setClientAuth(req); err != nil {
@@ -189,17 +200,26 @@ func (c *Client) CheckFeature(ctx context.Context, featureID, user, contextPath,
 		return nil, c.handleError(resp)
 	}
 
-	result := resp.Result().(*FeatureCheckResult)
-	return result, nil
+	return resp.Body(), nil
 }
 
-// CheckFeatures checks activation for multiple features (bulk operation)
-// Supports filtering by feature IDs, projects, tags, and returns conditions if requested
-func (c *Client) CheckFeatures(ctx context.Context, request CheckFeaturesRequest) (ActivationsWithConditions, error) {
+// CheckFeatures checks activation for multiple features (bulk operation) and applies the given mapper.
+// Use Identity mapper for raw JSON output, or ParseActivationsWithConditions for typed map.
+// Supports filtering by feature IDs, projects, tags, and returns conditions if requested.
+func CheckFeatures[T any](c *Client, ctx context.Context, request CheckFeaturesRequest, mapper Mapper[T]) (T, error) {
+	var zero T
+	raw, err := c.checkFeaturesRaw(ctx, request)
+	if err != nil {
+		return zero, err
+	}
+	return mapper(raw)
+}
+
+// checkFeaturesRaw fetches feature activations and returns raw JSON bytes
+func (c *Client) checkFeaturesRaw(ctx context.Context, request CheckFeaturesRequest) ([]byte, error) {
 	path := "/api/v2/features"
 
-	result := make(ActivationsWithConditions)
-	req := c.http.R().SetContext(ctx).SetResult(&result)
+	req := c.http.R().SetContext(ctx)
 
 	// Set client authentication
 	if err := c.setClientAuth(req); err != nil {
@@ -254,5 +274,5 @@ func (c *Client) CheckFeatures(ctx context.Context, request CheckFeaturesRequest
 		return nil, c.handleError(resp)
 	}
 
-	return result, nil
+	return resp.Body(), nil
 }

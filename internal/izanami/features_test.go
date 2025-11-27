@@ -244,7 +244,7 @@ func TestClient_CheckFeature(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	result, err := client.CheckFeature(ctx, "my-feature", "user123", "prod", "")
+	result, err := CheckFeature(client, ctx, "my-feature", "user123", "prod", "", ParseFeatureCheckResult)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
@@ -291,7 +291,7 @@ func TestClient_CheckFeatures(t *testing.T) {
 		Context:  "prod",
 		Features: []string{"feature-1", "feature-2"},
 	}
-	result, err := client.CheckFeatures(ctx, request)
+	result, err := CheckFeatures(client, ctx, request, ParseActivationsWithConditions)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, result)

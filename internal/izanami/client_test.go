@@ -241,7 +241,7 @@ func TestClient_Hooks(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	_, err = client.Health(ctx)
+	_, err = Health(client, ctx, ParseHealthStatus)
 	require.NoError(t, err)
 
 	// Note: Hooks are defined but not yet integrated into API methods
@@ -276,7 +276,7 @@ func TestClient_StructuredLogger(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	_, err = client.Health(ctx)
+	_, err = Health(client, ctx, ParseHealthStatus)
 	require.NoError(t, err)
 
 	// With verbose mode enabled, structured logger should be called

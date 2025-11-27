@@ -40,7 +40,19 @@ Exit codes:
 		}
 
 		ctx := context.Background()
-		health, err := client.Health(ctx)
+
+		// For JSON output, use Identity mapper for raw JSON
+		if outputFormat == "json" {
+			raw, err := izanami.Health(client, ctx, izanami.Identity)
+			if err != nil {
+				fmt.Fprintf(cmd.OutOrStderr(), "Error: %v\n", err)
+				os.Exit(1)
+			}
+			return output.PrintRawJSON(cmd.OutOrStdout(), raw, compactJSON)
+		}
+
+		// For table output, use ParseHealthStatus mapper
+		health, err := izanami.Health(client, ctx, izanami.ParseHealthStatus)
 		if err != nil {
 			fmt.Fprintf(cmd.OutOrStderr(), "Error: %v\n", err)
 			os.Exit(1)
@@ -52,16 +64,12 @@ Exit codes:
 			os.Exit(1)
 		}
 
-		if outputFormat == "table" {
-			fmt.Fprintf(cmd.OutOrStdout(), "Status:  UP\n")
-			fmt.Fprintf(cmd.OutOrStdout(), "Database: %v\n", health.Database)
-			if health.Version != "" {
-				fmt.Fprintf(cmd.OutOrStdout(), "Version: %s\n", health.Version)
-			}
-			fmt.Fprintf(cmd.OutOrStdout(), "URL:     %s\n", cfg.BaseURL)
-		} else {
-			output.Print(health, output.Format(outputFormat))
+		fmt.Fprintf(cmd.OutOrStdout(), "Status:  UP\n")
+		fmt.Fprintf(cmd.OutOrStdout(), "Database: %v\n", health.Database)
+		if health.Version != "" {
+			fmt.Fprintf(cmd.OutOrStdout(), "Version: %s\n", health.Version)
 		}
+		fmt.Fprintf(cmd.OutOrStdout(), "URL:     %s\n", cfg.BaseURL)
 
 		return nil
 	},
