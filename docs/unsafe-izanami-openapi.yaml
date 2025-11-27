@@ -1,0 +1,3627 @@
+openapi: 3.0.3
+info:
+  title: Izanami API
+  description: |
+    Complete API specification for Izanami feature flag management system.
+
+    This includes:
+    - **Admin API** - Backoffice endpoints for managing tenants, projects, features, users, etc.
+    - **Client API** - Endpoints for evaluating features from client applications
+    - **Legacy API** - V1 compatibility endpoints
+
+    ## Authentication
+
+    ### Admin API Authentication
+    Admin endpoints support two authentication methods:
+    - **Cookie Auth**: JWT token in `token` cookie (obtained via login)
+    - **Personal Access Token**: `Authorization: Basic base64(username:token)`
+
+    ### Client API Authentication
+    Client endpoints use API key authentication:
+    - `Izanami-Client-Id` header: API key client ID
+    - `Izanami-Client-Secret` header: API key secret
+  version: 2.13.0
+  contact:
+    name: MAIF
+    url: https://github.com/MAIF/izanami
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+
+servers:
+  - url: /
+    description: Current server
+
+tags:
+  - name: Authentication
+    description: Login, logout, and OIDC endpoints
+  - name: Tenants
+    description: Tenant management
+  - name: Projects
+    description: Project management
+  - name: Features
+    description: Feature flag management
+  - name: Feature Contexts
+    description: Feature context and strategy management
+  - name: Tags
+    description: Tag management
+  - name: API Keys
+    description: API key management
+  - name: Users
+    description: User management and rights
+  - name: Personal Access Tokens
+    description: Personal access token management
+  - name: Webhooks
+    description: Webhook management
+  - name: Configuration
+    description: Global configuration
+  - name: Import/Export
+    description: Data import and export
+  - name: Search
+    description: Search functionality
+  - name: Plugins
+    description: WASM plugin management
+  - name: V2 Client API
+    description: Modern feature evaluation endpoints
+  - name: Legacy Client API
+    description: V1 compatibility endpoints
+  - name: Health
+    description: Health check
+
+security:
+  - cookieAuth: []
+  - basicAuth: []
+
+paths:
+  # ============================================
+  # Authentication Endpoints
+  # ============================================
+  /api/admin/login:
+    post:
+      tags: [Authentication]
+      summary: Login with username and password
+      operationId: login
+      security: []
+      parameters:
+        - name: rights
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Include user rights in response
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: JWT session token cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserWithRights'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/admin/logout:
+    post:
+      tags: [Authentication]
+      summary: Logout current user
+      operationId: logout
+      responses:
+        '204':
+          description: Logout successful
+
+  /api/admin/openid-connect:
+    get:
+      tags: [Authentication]
+      summary: Initiate OIDC login flow
+      operationId: openIdConnect
+      security: []
+      responses:
+        '302':
+          description: Redirect to OIDC provider
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/admin/openid-connect-callback:
+    post:
+      tags: [Authentication]
+      summary: OIDC callback handler
+      operationId: openIdCodeReturn
+      security: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                code:
+                  type: string
+      responses:
+        '200':
+          description: OIDC login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserWithRights'
+
+  /api/admin/openid-connect/configuration:
+    post:
+      tags: [Authentication]
+      summary: Fetch OIDC configuration
+      operationId: fetchOpenIdConnectConfiguration
+      security: []
+      responses:
+        '200':
+          description: OIDC configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuth2Configuration'
+
+  /api/admin/password/_reset:
+    post:
+      tags: [Authentication]
+      summary: Request password reset email
+      operationId: resetPassword
+      security: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        '204':
+          description: Reset email sent if user exists
+
+  /api/admin/password/_reinitialize:
+    post:
+      tags: [Authentication]
+      summary: Complete password reset
+      operationId: reinitializePassword
+      security: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, password]
+              properties:
+                token:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '204':
+          description: Password reset successful
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  # ============================================
+  # Tenant Endpoints
+  # ============================================
+  /api/admin/tenants:
+    post:
+      tags: [Tenants]
+      summary: Create a new tenant
+      operationId: createTenant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TenantCreationRequest'
+      responses:
+        '201':
+          description: Tenant created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tenant'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Tenant already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    get:
+      tags: [Tenants]
+      summary: List all tenants
+      operationId: readTenants
+      parameters:
+        - name: right
+          in: query
+          schema:
+            $ref: '#/components/schemas/RightLevel'
+          description: Filter by minimum right level
+      responses:
+        '200':
+          description: List of tenants
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Tenant'
+
+  /api/admin/tenants/{name}:
+    parameters:
+      - $ref: '#/components/parameters/tenantName'
+    get:
+      tags: [Tenants]
+      summary: Get tenant by name
+      operationId: readTenant
+      responses:
+        '200':
+          description: Tenant details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tenant'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Tenants]
+      summary: Update tenant
+      operationId: updateTenant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TenantCreationRequest'
+      responses:
+        '204':
+          description: Tenant updated
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Tenants]
+      summary: Delete tenant
+      operationId: deleteTenant
+      responses:
+        '204':
+          description: Tenant deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/admin/tenants/{tenant}/logs:
+    parameters:
+      - $ref: '#/components/parameters/tenant'
+    get:
+      tags: [Tenants]
+      summary: Read tenant event logs
+      operationId: readEventsForTenant
+      parameters:
+        - name: order
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+        - name: users
+          in: query
+          schema:
+            type: string
+          description: Comma-separated user filter
+        - name: types
+          in: query
+          schema:
+            type: string
+          description: Comma-separated event type filter
+        - name: features
+          in: query
+          schema:
+            type: string
+          description: Comma-separated feature filter
+        - name: projects
+          in: query
+          schema:
+            type: string
+          description: Comma-separated project filter
+        - name: start
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: end
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: cursor
+          in: query
+          schema:
+            type: integer
+            format: int64
+        - name: count
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: total
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Event logs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AuditEvent'
+                  count:
+                    type: integer
+
+  # ============================================
+  # Global Context Endpoints
+  # ============================================
+  /api/admin/tenants/{tenant}/contexts:
+    parameters:
+      - $ref: '#/components/parameters/tenant'
+    post:
+      tags: [Feature Contexts]
+      summary: Create global root context
+      operationId: createGlobalRootSubContext
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContextCreationRequest'
+      responses:
+        '201':
+          description: Context created
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    get:
+      tags: [Feature Contexts]
+      summary: List global contexts
+      operationId: readGlobalContexts
+      parameters:
+        - name: all
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Include all nested contexts
+      responses:
+        '200':
+          description: Context tree
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ContextNode'
+
+  /api/admin/tenants/{tenant}/contexts/{context}:
+    parameters:
+      - $ref: '#/components/parameters/tenant'
+      - $ref: '#/components/parameters/contextPath'
+    put:
+      tags: [Feature Contexts]
+      summary: Update global context
+      operationId: updateGlobalContext
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContextUpdateRequest'
+      responses:
+        '204':
+          description: Context updated
+    delete:
+      tags: [Feature Contexts]
+      summary: Delete global context
+      operationId: deleteGlobalFeatureContext
+      responses:
+        '204':
+          description: Context deleted
+
+  /api/admin/tenants/{tenant}/contexts/{parents}:
+    parameters:
+      - $ref: '#/components/parameters/tenant'
+      - name: parents
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Parent context path (e.g., "parent/child")
+    post:
+      tags: [Feature Contexts]
+      summary: Create global sub-context
+      operationId: createGlobalSubContext
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContextCreationRequest'
+      responses:
+        '201':
+          description: Sub-context created
+
+  # ============================================
+  # Project Endpoints
+  # ============================================
+  /api/admin/tenants/{tenant}/projects:
+    parameters:
+      - $ref: '#/components/parameters/tenant'
+    post:
+      tags: [Projects]
+      summary: Create a new project
+      operationId: createProject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectCreationRequest'
+      responses:
+        '201':
+          description: Project created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Project already exists
+    get:
+      tags: [Projects]
+      summary: List all projects in tenant
+      operationId: readProjects
+      responses:
+        '200':
+          description: List of projects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Project'
+
+  /api/admin/tenants/{tenant}/projects/{project}:
+    parameters:
+      - $ref: '#/components/parameters/tenant'
+      - $ref: '#/components/parameters/project'
+    get:
+      tags: [Projects]
+      summary: Get project by name
+      operationId: readProject
+      responses:
+        '200':
+          description: Project details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectWithUsageInformation'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Projects]
+      summary: Update project
+      operationId: updateProject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectCreationRequest'
+      responses:
+        '204':
+          description: Project updated
+    delete:
+      tags: [Projects]
+      summary: Delete project
+      operationId: deleteProject
+      responses:
+        '204':
+          description: Project deleted
+
+  /api/admin/tenants/{tenant}/projects/_id/{project}:
+    parameters:
+      - $ref: '#/components/parameters/tenant'
+      - name: project
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Project UUID
+    get:
+      tags: [Projects]
+      summary: Get project by UUID
+      operationId: readProjectById
+      responses:
+        '200':
+          description: Project details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+
+  /api/admin/tenants/{tenant}/projects/{project}/logs:
+    parameters:
+      - $ref: '#/components/parameters/tenant'
+      - $ref: '#/components/parameters/project'
+    get:
+      tags: [Projects]
+      summary: Read project event logs
+      operationId: readEventsForProject
+      parameters:
+        - name: order
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+        - name: users
+          in: query
+          schema:
+            type: string
+        - name: types
+          in: query
+          schema:
+            type: string
+        - name: features
+          in: query
+          schema:
+            type: string
+        - name: start
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: end
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: cursor
+          in: query
+          schema:
+            type: integer
+            format: int64
+        - name: count
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: total
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Event logs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AuditEvent'
+
+  # ============================================
+  # Project Context Endpoints
+  # ============================================
+  /api/admin/tenants/{tenant}/projects/{project}/contexts:
+    parameters:
+      - $ref: '#/components/parameters/tenant'
+      - $ref: '#/components/parameters/project'
+    post:
+      tags: [Feature Contexts]
+      summary: Create project root context
+      operationId: createFeatureContext
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContextCreationRequest'
+      responses:
+        '201':
+          description: Context created
+    get:
+      tags: [Feature Contexts]
+      summary: List project contexts
+      operationId: readFeatureContexts
+      responses:
+        '200':
+          description: Context tree
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ContextNode'
+
+  /api/admin/tenants/{tenant}/projects/{project}/contexts/{name}:
+    parameters:
+      - $ref: '#/components/parameters/tenant'
+      - $ref: '#/components/parameters/project'
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+    put:
+      tags: [Feature Contexts]
+      summary: Update project context
+      operationId: updateFeatureContext
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContextUpdateRequest'
+      responses:
+        '204':
+          description: Context updated
+
+  /api/admin/tenants/{tenant}/projects/{project}/contexts/{parents}:
+    parameters:
+      - $ref: '#/components/parameters/tenant'
+      - $ref: '#/components/parameters/project'
+      - name: parents
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Parent context path
+    post:
+      tags: [Feature Contexts]
+      summary: Create project sub-context
+      operationId: createSubContext
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContextCreationRequest'
+      responses:
+        '201':
+          description: Sub-context created
+
+  /api/admin/tenants/{tenant}/projects/{project}/contexts/{parents}/{name}:
+    parameters:
+      - $ref: '#/components/parameters/tenant'
+      - $ref: '#/components/parameters/project'
+      - name: parents
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+    put:
+      tags: [Feature Contexts]
+      summary: Update project sub-context
+      operationId: updateFeatureSubContext
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContextUpdateRequest'
+      responses:
+        '204':
+          description: Context updated
+
+  /api/admin/tenants/{tenant}/projects/{project}/contexts/{context}:
+    parameters:
+      - $ref: '#/components/parameters/tenant'
+      - $ref: '#/components/parameters/project'
+      - $ref: '#/components/parameters/contextPath'
+    delete:
+      tags: [Feature Contexts]
+      summary: Delete project context
+      operationId: deleteFeatureContext
+      responses:
+        '204':
+          description: Context deleted
+
+  /api/admin/tenants/{tenant}/projects/{project}/contexts/{parents}/features/{name}:
+    parameters:
+      - $ref: '#/components/parameters/tenant'
+      - $ref: '#/components/parameters/project'
+      - name: parents
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Context path
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Feature name
+    put:
+      tags: [Feature Contexts]
+      summary: Create/update feature strategy for context
+      operationId: createFeatureStrategy
+      parameters:
+        - name: preserveProtectedContexts
+          in: query
+          schema:
+            type: boolean
+            default: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeatureStrategy'
+      responses:
+        '204':
+          description: Strategy created/updated
+    delete:
+      tags: [Feature Contexts]
+      summary: Delete feature strategy from context
+      operationId: deleteFeatureStrategy
+      responses:
+        '204':
+          description: Strategy deleted
+
+  # ============================================
+  # Feature Endpoints
+  # ============================================
+  /api/admin/tenants/{tenant}/projects/{project}/features:
+    parameters:
+      - $ref: '#/components/parameters/tenant'
+      - $ref: '#/components/parameters/project'
+    post:
+      tags: [Features]
+      summary: Create a new feature
+      operationId: createFeature
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeatureCreationRequest'
+      responses:
+        '201':
+          description: Feature created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Feature'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Feature with this name already exists
+
+  /api/admin/tenants/{tenant}/features/{id}:
+    parameters:
+      - $ref: '#/components/parameters/tenant'
+      - $ref: '#/components/parameters/featureId'
+    get:
+      tags: [Features]
+      summary: Get feature by ID
+      operationId: findFeature
+      responses:
+        '200':
+          description: Feature details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Feature'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Features]
+      summary: Update feature
+      operationId: updateFeature
+      parameters:
+        - name: preserveProtectedContexts
+          in: query
+          schema:
+            type: boolean
+            default: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeatureUpdateRequest'
+      responses:
+        '204':
+          description: Feature updated
+    delete:
+      tags: [Features]
+      summary: Delete feature
+      operationId: deleteFeature
+      responses:
+        '204':
+          description: Feature deleted
+
+  /api/admin/tenants/{tenant}/features:
+    parameters:
+      - $ref: '#/components/parameters/tenant'
+    get:
+      tags: [Features]
+      summary: Search features
+      operationId: searchFeatures
+      parameters:
+        - name: tag
+          in: query
+          schema:
+            type: string
+            default: ""
+          description: Filter by tag
+      responses:
+        '200':
+          description: List of features
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Feature'
+    patch:
+      tags: [Features]
+      summary: Batch patch features
+      operationId: patchFeatures
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/FeaturePatchOperation'
+      responses:
+        '204':
+          description: Features patched
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/admin/tenants/{tenant}/features/_test:
+    parameters:
+      - $ref: '#/components/parameters/tenant'
+    get:
+      tags: [Features]
+      summary: Test features for context
+      operationId: testFeaturesForContext
+      parameters:
+        - name: user
+          in: query
+          schema:
+            type: string
+            default: ""
+        - name: date
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - $ref: '#/components/parameters/featureRequestProjects'
+        - $ref: '#/components/parameters/featureRequestFeatures'
+        - $ref: '#/components/parameters/featureRequestContext'
+        - $ref: '#/components/parameters/featureRequestOneTagIn'
+        - $ref: '#/components/parameters/featureRequestAllTagsIn'
+        - $ref: '#/components/parameters/featureRequestNoTagIn'
+      responses:
+        '200':
+          description: Feature evaluation results
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  $ref: '#/components/schemas/FeatureEvaluation'
+
+  /api/admin/tenants/{tenant}/test:
+    parameters:
+      - $ref: '#/components/parameters/tenant'
+    post:
+      tags: [Features]
+      summary: Test a feature definition
+      operationId: testFeature
+      parameters:
+        - name: user
+          in: query
+          schema:
+            type: string
+            default: ""
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Feature'
+      responses:
+        '200':
+          description: Feature evaluation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeatureEvaluation'
+
+  /api/admin/tenants/{tenant}/features/{id}/test:
+    parameters:
+      - $ref: '#/components/parameters/tenant'
+      - $ref: '#/components/parameters/featureId'
+    post:
+      tags: [Features]
+      summary: Test existing feature without context
+      operationId: testExistingFeatureWithoutContext
+      parameters:
+        - name: user
+          in: query
+          schema:
+            type: string
+            default: ""
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Optional context data for WASM features
+      responses:
+        '200':
+          description: Feature evaluation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeatureEvaluation'
+
+  /api/admin/tenants/{tenant}/features/{id}/test/{context}:
+    parameters:
+      - $ref: '#/components/parameters/tenant'
+      - $ref: '#/components/parameters/featureId'
+      - $ref: '#/components/parameters/contextPath'
+    post:
+      tags: [Features]
+      summary: Test existing feature with context
+      operationId: testExistingFeature
+      parameters:
+        - name: user
+          in: query
+          schema:
+            type: string
+            default: ""
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Feature evaluation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeatureEvaluation'
+
+  # ============================================
+  # Tag Endpoints
+  # ============================================
+  /api/admin/tenants/{tenant}/tags:
+    parameters:
+      - $ref: '#/components/parameters/tenant'
+    post:
+      tags: [Tags]
+      summary: Create a new tag
+      operationId: createTag
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TagCreationRequest'
+      responses:
+        '201':
+          description: Tag created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    get:
+      tags: [Tags]
+      summary: List all tags
+      operationId: readTags
+      responses:
+        '200':
+          description: List of tags
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Tag'
+
+  /api/admin/tenants/{tenant}/tags/{name}:
+    parameters:
+      - $ref: '#/components/parameters/tenant'
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Tags]
+      summary: Get tag by name
+      operationId: readTag
+      responses:
+        '200':
+          description: Tag details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tag'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Tags]
+      summary: Update tag
+      operationId: updateTag
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TagCreationRequest'
+      responses:
+        '204':
+          description: Tag updated
+    delete:
+      tags: [Tags]
+      summary: Delete tag
+      operationId: deleteTag
+      responses:
+        '204':
+          description: Tag deleted
+
+  # ============================================
+  # API Key Endpoints
+  # ============================================
+  /api/admin/tenants/{tenant}/keys:
+    parameters:
+      - $ref: '#/components/parameters/tenant'
+    post:
+      tags: [API Keys]
+      summary: Create a new API key
+      operationId: createApiKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApiKeyCreationRequest'
+      responses:
+        '201':
+          description: API key created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKey'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    get:
+      tags: [API Keys]
+      summary: List all API keys
+      operationId: readApiKey
+      responses:
+        '200':
+          description: List of API keys
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ApiKey'
+
+  /api/admin/tenants/{tenant}/keys/{name}:
+    parameters:
+      - $ref: '#/components/parameters/tenant'
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+    put:
+      tags: [API Keys]
+      summary: Update API key
+      operationId: updateApiKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApiKeyUpdateRequest'
+      responses:
+        '204':
+          description: API key updated
+    delete:
+      tags: [API Keys]
+      summary: Delete API key
+      operationId: deleteApiKey
+      responses:
+        '204':
+          description: API key deleted
+
+  /api/admin/tenants/{tenant}/keys/{name}/users:
+    parameters:
+      - $ref: '#/components/parameters/tenant'
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [API Keys]
+      summary: List users with rights on API key
+      operationId: readUsersForKey
+      responses:
+        '200':
+          description: Users with key rights
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserWithKeyRight'
+
+  /api/admin/tenants/{tenant}/keys/{name}/users/{user}/rights:
+    parameters:
+      - $ref: '#/components/parameters/tenant'
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: user
+        in: path
+        required: true
+        schema:
+          type: string
+    put:
+      tags: [API Keys]
+      summary: Update user rights for API key
+      operationId: updateUserRightsForKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RightLevelUpdate'
+      responses:
+        '204':
+          description: Rights updated
+
+  # ============================================
+  # User Endpoints
+  # ============================================
+  /api/admin/users:
+    get:
+      tags: [Users]
+      summary: List all users
+      operationId: readUsers
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+    post:
+      tags: [Users]
+      summary: Create a new user
+      operationId: createUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreationRequest'
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/admin/users/search:
+    get:
+      tags: [Users]
+      summary: Search users
+      operationId: searchUsers
+      parameters:
+        - name: query
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: count
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+
+  /api/admin/users/rights:
+    get:
+      tags: [Users]
+      summary: Get current user rights
+      operationId: readRights
+      responses:
+        '200':
+          description: Current user with rights
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserWithRights'
+
+  /api/admin/users/{user}:
+    parameters:
+      - name: user
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Users]
+      summary: Get user by username
+      operationId: readUser
+      responses:
+        '200':
+          description: User details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserWithRights'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Users]
+      summary: Update user information
+      operationId: updateUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserInformationUpdateRequest'
+      responses:
+        '204':
+          description: User updated
+    delete:
+      tags: [Users]
+      summary: Delete user
+      operationId: deleteUser
+      responses:
+        '204':
+          description: User deleted
+
+  /api/admin/users/{user}/rights:
+    parameters:
+      - name: user
+        in: path
+        required: true
+        schema:
+          type: string
+    put:
+      tags: [Users]
+      summary: Update user global rights
+      operationId: updateUserRights
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRightsUpdateRequest'
+      responses:
+        '204':
+          description: Rights updated
+
+  /api/admin/users/{user}/password:
+    parameters:
+      - name: user
+        in: path
+        required: true
+        schema:
+          type: string
+    put:
+      tags: [Users]
+      summary: Update user password
+      operationId: updateUserPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserPasswordUpdateRequest'
+      responses:
+        '204':
+          description: Password updated
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/admin/tenants/{tenant}/users:
+    parameters:
+      - $ref: '#/components/parameters/tenant'
+    get:
+      tags: [Users]
+      summary: List users for tenant
+      operationId: readUsersForTenant
+      responses:
+        '200':
+          description: Users with tenant rights
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserWithTenantRight'
+    post:
+      tags: [Users]
+      summary: Invite users to tenant
+      operationId: inviteUsersToTenant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/UserInvitation'
+      responses:
+        '204':
+          description: Invitations sent
+
+  /api/admin/{tenant}/users/{user}:
+    parameters:
+      - $ref: '#/components/parameters/tenant'
+      - name: user
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Users]
+      summary: Get user for tenant
+      operationId: readUserForTenant
+      responses:
+        '200':
+          description: User with tenant rights
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserWithTenantRight'
+
+  /api/admin/{tenant}/users/{user}/rights:
+    parameters:
+      - $ref: '#/components/parameters/tenant'
+      - name: user
+        in: path
+        required: true
+        schema:
+          type: string
+    put:
+      tags: [Users]
+      summary: Update user rights for tenant
+      operationId: updateUserRightsForTenant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TenantRight'
+      responses:
+        '204':
+          description: Rights updated
+
+  /api/admin/tenants/{tenant}/projects/{project}/users:
+    parameters:
+      - $ref: '#/components/parameters/tenant'
+      - $ref: '#/components/parameters/project'
+    get:
+      tags: [Users]
+      summary: List users for project
+      operationId: readUsersForProject
+      responses:
+        '200':
+          description: Users with project rights
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserWithProjectRight'
+    post:
+      tags: [Users]
+      summary: Invite users to project
+      operationId: inviteUsersToProject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/UserInvitation'
+      responses:
+        '204':
+          description: Invitations sent
+
+  /api/admin/tenants/{tenant}/projects/{project}/users/{user}/rights:
+    parameters:
+      - $ref: '#/components/parameters/tenant'
+      - $ref: '#/components/parameters/project'
+      - name: user
+        in: path
+        required: true
+        schema:
+          type: string
+    put:
+      tags: [Users]
+      summary: Update user rights for project
+      operationId: updateUserRightsForProject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectRightLevelUpdate'
+      responses:
+        '204':
+          description: Rights updated
+
+  /api/admin/invitation:
+    post:
+      tags: [Users]
+      summary: Send user invitation
+      operationId: sendInvitation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserInvitation'
+      responses:
+        '204':
+          description: Invitation sent
+
+  # ============================================
+  # Personal Access Token Endpoints
+  # ============================================
+  /api/admin/users/{user}/tokens:
+    parameters:
+      - name: user
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Personal Access Tokens]
+      summary: List user's tokens
+      operationId: readTokens
+      responses:
+        '200':
+          description: List of tokens
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReadPersonnalAccessToken'
+    post:
+      tags: [Personal Access Tokens]
+      summary: Create a new token
+      operationId: createToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PersonnalAccessTokenCreationRequest'
+      responses:
+        '201':
+          description: Token created (includes secret, only shown once)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompletePersonnalAccessToken'
+
+  /api/admin/users/{user}/tokens/{id}:
+    parameters:
+      - name: user
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      tags: [Personal Access Tokens]
+      summary: Update token
+      operationId: updateToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PersonnalAccessTokenCreationRequest'
+      responses:
+        '204':
+          description: Token updated
+    delete:
+      tags: [Personal Access Tokens]
+      summary: Delete token
+      operationId: deleteToken
+      responses:
+        '204':
+          description: Token deleted
+
+  # ============================================
+  # Webhook Endpoints
+  # ============================================
+  /api/admin/tenants/{tenant}/webhooks:
+    parameters:
+      - $ref: '#/components/parameters/tenant'
+    post:
+      tags: [Webhooks]
+      summary: Create a new webhook
+      operationId: createWebhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LightWebhook'
+      responses:
+        '201':
+          description: Webhook created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Webhook'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    get:
+      tags: [Webhooks]
+      summary: List all webhooks
+      operationId: listWebhooks
+      responses:
+        '200':
+          description: List of webhooks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Webhook'
+
+  /api/admin/tenants/{tenant}/webhooks/{id}:
+    parameters:
+      - $ref: '#/components/parameters/tenant'
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      tags: [Webhooks]
+      summary: Update webhook
+      operationId: updateWebhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LightWebhook'
+      responses:
+        '204':
+          description: Webhook updated
+    delete:
+      tags: [Webhooks]
+      summary: Delete webhook
+      operationId: deleteWebhook
+      responses:
+        '204':
+          description: Webhook deleted
+
+  /api/admin/tenants/{tenant}/webhooks/{id}/users:
+    parameters:
+      - $ref: '#/components/parameters/tenant'
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Webhooks]
+      summary: List users with webhook rights
+      operationId: readUsersForWebhook
+      responses:
+        '200':
+          description: Users with webhook rights
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserWithWebhookRight'
+
+  /api/admin/tenants/{tenant}/webhooks/{webhook}/users/{user}/rights:
+    parameters:
+      - $ref: '#/components/parameters/tenant'
+      - name: webhook
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: user
+        in: path
+        required: true
+        schema:
+          type: string
+    put:
+      tags: [Webhooks]
+      summary: Update user rights for webhook
+      operationId: updateUserRightsForWebhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RightLevelUpdate'
+      responses:
+        '204':
+          description: Rights updated
+
+  # ============================================
+  # Configuration Endpoints
+  # ============================================
+  /api/admin/configuration:
+    get:
+      tags: [Configuration]
+      summary: Get global configuration
+      operationId: readConfiguration
+      responses:
+        '200':
+          description: Configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FullIzanamiConfiguration'
+    put:
+      tags: [Configuration]
+      summary: Update global configuration
+      operationId: updateConfiguration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FullIzanamiConfiguration'
+      responses:
+        '204':
+          description: Configuration updated
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/admin/exposition:
+    get:
+      tags: [Configuration]
+      summary: Get exposition URL
+      operationId: readExpositionUrl
+      responses:
+        '200':
+          description: Exposition URL
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url:
+                    type: string
+
+  /api/admin/integrations:
+    get:
+      tags: [Configuration]
+      summary: Get available integrations
+      operationId: availableIntegrations
+      responses:
+        '200':
+          description: Integration availability
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  wasmo:
+                    type: boolean
+                  oidc:
+                    type: boolean
+
+  /api/admin/stats:
+    get:
+      tags: [Configuration]
+      summary: Get system statistics
+      operationId: readStats
+      responses:
+        '200':
+          description: System stats
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tenants:
+                    type: integer
+                  projects:
+                    type: integer
+                  features:
+                    type: integer
+                  users:
+                    type: integer
+
+  # ============================================
+  # Import/Export Endpoints
+  # ============================================
+  /api/admin/tenants/{tenant}/_import:
+    parameters:
+      - $ref: '#/components/parameters/tenant'
+    post:
+      tags: [Import/Export]
+      summary: Import data to tenant
+      operationId: importData
+      parameters:
+        - name: version
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: Import format version (1 or 2)
+        - name: conflict
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [skip, overwrite, fail]
+        - name: timezone
+          in: query
+          schema:
+            type: string
+          description: Timezone for date conversions
+        - name: deduceProject
+          in: query
+          schema:
+            type: boolean
+            default: false
+        - name: create
+          in: query
+          schema:
+            type: boolean
+        - name: project
+          in: query
+          schema:
+            type: string
+        - name: projectPartSize
+          in: query
+          schema:
+            type: integer
+        - name: inlineScript
+          in: query
+          schema:
+            type: boolean
+      requestBody:
+        required: true
+        content:
+          application/x-ndjson:
+            schema:
+              type: string
+              description: NDJSON format data
+      responses:
+        '200':
+          description: Import started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+
+  /api/admin/tenants/{tenant}/_import/{id}:
+    parameters:
+      - $ref: '#/components/parameters/tenant'
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Import/Export]
+      summary: Get import status
+      operationId: readImportStatus
+      responses:
+        '200':
+          description: Import status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportStatus'
+    delete:
+      tags: [Import/Export]
+      summary: Delete import status
+      operationId: deleteImportStatus
+      responses:
+        '204':
+          description: Status deleted
+
+  /api/admin/tenants/{tenant}/_export:
+    parameters:
+      - $ref: '#/components/parameters/tenant'
+    post:
+      tags: [Import/Export]
+      summary: Export tenant data
+      operationId: exportTenantData
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                types:
+                  type: array
+                  items:
+                    type: string
+                    enum: [features, projects, keys, tags, contexts, webhooks, scripts]
+      responses:
+        '200':
+          description: Exported data
+          content:
+            application/x-ndjson:
+              schema:
+                type: string
+
+  # ============================================
+  # Search Endpoints
+  # ============================================
+  /api/admin/search:
+    get:
+      tags: [Search]
+      summary: Global search
+      operationId: search
+      parameters:
+        - name: query
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: filter
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [PROJECT, FEATURE, KEY, TAG, SCRIPT, GLOBAL_CONTEXT, LOCAL_CONTEXT, WEBHOOK]
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SearchResult'
+
+  /api/admin/tenants/{tenant}/search:
+    parameters:
+      - $ref: '#/components/parameters/tenant'
+    get:
+      tags: [Search]
+      summary: Tenant-scoped search
+      operationId: searchForTenant
+      parameters:
+        - name: query
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: filter
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [PROJECT, FEATURE, KEY, TAG, SCRIPT, GLOBAL_CONTEXT, LOCAL_CONTEXT, WEBHOOK]
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SearchResult'
+
+  # ============================================
+  # Plugin Endpoints
+  # ============================================
+  /api/admin/plugins:
+    get:
+      tags: [Plugins]
+      summary: List WASM plugins from Wasmo
+      operationId: wasmFiles
+      responses:
+        '200':
+          description: List of plugins
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /api/admin/tenants/{tenant}/local-scripts:
+    parameters:
+      - $ref: '#/components/parameters/tenant'
+    get:
+      tags: [Plugins]
+      summary: List local WASM scripts
+      operationId: localScripts
+      parameters:
+        - name: features
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Include associated features
+      responses:
+        '200':
+          description: List of scripts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WasmConfigWithFeatures'
+
+  /api/admin/tenants/{tenant}/local-scripts/{script}:
+    parameters:
+      - $ref: '#/components/parameters/tenant'
+      - name: script
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Plugins]
+      summary: Get local script
+      operationId: readScript
+      responses:
+        '200':
+          description: Script details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WasmConfig'
+    put:
+      tags: [Plugins]
+      summary: Update local script
+      operationId: updateScript
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WasmConfig'
+      responses:
+        '204':
+          description: Script updated
+    delete:
+      tags: [Plugins]
+      summary: Delete local script
+      operationId: deleteScript
+      responses:
+        '204':
+          description: Script deleted
+
+  /api/admin/local-scripts/_cache:
+    delete:
+      tags: [Plugins]
+      summary: Clear WASM cache
+      operationId: clearWasmCache
+      responses:
+        '204':
+          description: Cache cleared
+
+  /api/admin/sse:
+    delete:
+      tags: [Configuration]
+      summary: Kill all SSE sources
+      operationId: killAllSources
+      responses:
+        '204':
+          description: SSE sources killed
+
+  # ============================================
+  # V2 Client API Endpoints
+  # ============================================
+  /api/v2/features/{id}:
+    parameters:
+      - $ref: '#/components/parameters/clientId'
+      - $ref: '#/components/parameters/clientSecret'
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Feature ID
+      - name: user
+        in: query
+        schema:
+          type: string
+          default: ""
+        description: User ID for percentage/user-list conditions
+      - name: context
+        in: query
+        schema:
+          type: string
+          default: ""
+        description: Context path (e.g., "prod/eu")
+    get:
+      tags: [V2 Client API]
+      summary: Check single feature activation
+      operationId: checkFeatureForContextGet
+      security:
+        - apiKeyAuth: []
+          apiKeySecret: []
+      responses:
+        '200':
+          description: Feature activation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeatureActivation'
+    post:
+      tags: [V2 Client API]
+      summary: Check single feature with payload
+      operationId: checkFeatureForContextPost
+      security:
+        - apiKeyAuth: []
+          apiKeySecret: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Payload for WASM features
+      responses:
+        '200':
+          description: Feature activation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeatureActivation'
+
+  /api/v2/features:
+    parameters:
+      - $ref: '#/components/parameters/clientId'
+      - $ref: '#/components/parameters/clientSecret'
+      - name: user
+        in: query
+        schema:
+          type: string
+          default: ""
+      - name: conditions
+        in: query
+        schema:
+          type: boolean
+          default: false
+        description: Include activation conditions in response
+      - name: date
+        in: query
+        schema:
+          type: string
+          format: date-time
+        description: Date for time-based conditions
+      - $ref: '#/components/parameters/featureRequestProjects'
+      - $ref: '#/components/parameters/featureRequestFeatures'
+      - $ref: '#/components/parameters/featureRequestContext'
+      - $ref: '#/components/parameters/featureRequestOneTagIn'
+      - $ref: '#/components/parameters/featureRequestAllTagsIn'
+      - $ref: '#/components/parameters/featureRequestNoTagIn'
+    get:
+      tags: [V2 Client API]
+      summary: Evaluate multiple features
+      operationId: evaluateFeaturesGet
+      security:
+        - apiKeyAuth: []
+          apiKeySecret: []
+      responses:
+        '200':
+          description: Feature activations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeatureActivationsWithConditions'
+    post:
+      tags: [V2 Client API]
+      summary: Evaluate multiple features with payload
+      operationId: evaluateFeaturesPost
+      security:
+        - apiKeyAuth: []
+          apiKeySecret: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Feature activations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeatureActivationsWithConditions'
+
+  /api/v2/events:
+    parameters:
+      - $ref: '#/components/parameters/clientId'
+      - $ref: '#/components/parameters/clientSecret'
+      - name: user
+        in: query
+        schema:
+          type: string
+          default: "*"
+      - name: conditions
+        in: query
+        schema:
+          type: boolean
+          default: false
+      - name: refreshInterval
+        in: query
+        schema:
+          type: integer
+          default: 0
+        description: Interval in seconds for full state refresh (0 = disabled)
+      - name: keepAliveInterval
+        in: query
+        schema:
+          type: integer
+          default: 25
+        description: Keep-alive interval in seconds
+      - $ref: '#/components/parameters/featureRequestProjects'
+      - $ref: '#/components/parameters/featureRequestFeatures'
+      - $ref: '#/components/parameters/featureRequestContext'
+      - $ref: '#/components/parameters/featureRequestOneTagIn'
+      - $ref: '#/components/parameters/featureRequestAllTagsIn'
+      - $ref: '#/components/parameters/featureRequestNoTagIn'
+    get:
+      tags: [V2 Client API]
+      summary: Subscribe to feature events (SSE)
+      operationId: newEventsGet
+      security:
+        - apiKeyAuth: []
+          apiKeySecret: []
+      responses:
+        '200':
+          description: Server-Sent Events stream
+          content:
+            text/event-stream:
+              schema:
+                $ref: '#/components/schemas/FeatureEvent'
+    post:
+      tags: [V2 Client API]
+      summary: Subscribe to feature events with payload (SSE)
+      operationId: newEventsPost
+      security:
+        - apiKeyAuth: []
+          apiKeySecret: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Server-Sent Events stream
+          content:
+            text/event-stream:
+              schema:
+                $ref: '#/components/schemas/FeatureEvent'
+
+  # ============================================
+  # Legacy API Endpoints
+  # ============================================
+  /api/features/{pattern}/check:
+    parameters:
+      - $ref: '#/components/parameters/clientId'
+      - $ref: '#/components/parameters/clientSecret'
+      - name: pattern
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Legacy Client API]
+      summary: Check legacy feature by pattern
+      operationId: legacyFeatureGet
+      security:
+        - apiKeyAuth: []
+          apiKeySecret: []
+      responses:
+        '200':
+          description: Feature activation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegacyFeatureActivation'
+    post:
+      tags: [Legacy Client API]
+      summary: Check legacy feature with context
+      operationId: legacyFeaturePost
+      security:
+        - apiKeyAuth: []
+          apiKeySecret: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Feature activation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegacyFeatureActivation'
+
+  /api/features:
+    parameters:
+      - $ref: '#/components/parameters/clientId'
+      - $ref: '#/components/parameters/clientSecret'
+      - name: pattern
+        in: query
+        schema:
+          type: string
+          default: "*"
+      - name: page
+        in: query
+        schema:
+          type: integer
+          default: 1
+      - name: pageSize
+        in: query
+        schema:
+          type: integer
+          default: 15
+    get:
+      tags: [Legacy Client API]
+      summary: List legacy features
+      operationId: legacyFeatures
+      security:
+        - apiKeyAuth: []
+          apiKeySecret: []
+      responses:
+        '200':
+          description: Paginated features
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegacyFeaturesResponse'
+
+  /api/features/_checks:
+    parameters:
+      - $ref: '#/components/parameters/clientId'
+      - $ref: '#/components/parameters/clientSecret'
+      - name: pattern
+        in: query
+        schema:
+          type: string
+          default: "*"
+      - name: page
+        in: query
+        schema:
+          type: integer
+          default: 1
+      - name: pageSize
+        in: query
+        schema:
+          type: integer
+          default: 15
+    post:
+      tags: [Legacy Client API]
+      summary: Check multiple legacy features with context
+      operationId: legacyFeaturesChecks
+      security:
+        - apiKeyAuth: []
+          apiKeySecret: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Paginated features with activation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegacyFeaturesResponse'
+
+  /api/events:
+    parameters:
+      - $ref: '#/components/parameters/clientId'
+      - $ref: '#/components/parameters/clientSecret'
+      - name: pattern
+        in: query
+        schema:
+          type: string
+          default: "*"
+    get:
+      tags: [Legacy Client API]
+      summary: Subscribe to legacy events (SSE)
+      operationId: legacyEvents
+      security:
+        - apiKeyAuth: []
+          apiKeySecret: []
+      responses:
+        '200':
+          description: Server-Sent Events stream
+          content:
+            text/event-stream:
+              schema:
+                $ref: '#/components/schemas/LegacyEvent'
+
+  /api/_health:
+    get:
+      tags: [Health]
+      summary: Health check
+      operationId: healthcheck
+      security: []
+      responses:
+        '200':
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+        '500':
+          description: Unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: token
+      description: JWT session token from login
+
+    basicAuth:
+      type: http
+      scheme: basic
+      description: Personal Access Token authentication (username:token)
+
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: Izanami-Client-Id
+      description: API key client ID
+
+    apiKeySecret:
+      type: apiKey
+      in: header
+      name: Izanami-Client-Secret
+      description: API key secret
+
+  parameters:
+    tenant:
+      name: tenant
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^[a-z0-9_-]+$'
+      description: Tenant name
+
+    tenantName:
+      name: name
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^[a-z0-9_-]+$'
+      description: Tenant name
+
+    project:
+      name: project
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^[a-zA-Z0-9_-]+$'
+      description: Project name
+
+    featureId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Feature ID
+
+    contextPath:
+      name: context
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Context path (e.g., "parent/child")
+
+    clientId:
+      name: Izanami-Client-Id
+      in: header
+      required: true
+      schema:
+        type: string
+      description: API key client ID
+
+    clientSecret:
+      name: Izanami-Client-Secret
+      in: header
+      required: true
+      schema:
+        type: string
+      description: API key secret
+
+    featureRequestProjects:
+      name: projects
+      in: query
+      schema:
+        type: array
+        items:
+          type: string
+          format: uuid
+      description: Project UUIDs to include
+
+    featureRequestFeatures:
+      name: features
+      in: query
+      schema:
+        type: array
+        items:
+          type: string
+      description: Feature IDs to include
+
+    featureRequestContext:
+      name: context
+      in: query
+      schema:
+        type: string
+      description: Context path for evaluation
+
+    featureRequestOneTagIn:
+      name: oneTagIn
+      in: query
+      schema:
+        type: array
+        items:
+          type: string
+          format: uuid
+      description: Include features with at least one of these tags
+
+    featureRequestAllTagsIn:
+      name: allTagsIn
+      in: query
+      schema:
+        type: array
+        items:
+          type: string
+          format: uuid
+      description: Include features with all of these tags
+
+    featureRequestNoTagIn:
+      name: noTagIn
+      in: query
+      schema:
+        type: array
+        items:
+          type: string
+          format: uuid
+      description: Exclude features with any of these tags
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+
+    # Authentication
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+
+    # Tenant
+    Tenant:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+        description:
+          type: string
+        projects:
+          type: array
+          items:
+            $ref: '#/components/schemas/Project'
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tag'
+
+    TenantCreationRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          pattern: '^[a-z0-9_-]+$'
+        description:
+          type: string
+          default: ""
+
+    # Project
+    Project:
+      type: object
+      required: [id, name, description]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+        description:
+          type: string
+        features:
+          type: array
+          items:
+            $ref: '#/components/schemas/Feature'
+
+    ProjectCreationRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+        description:
+          type: string
+          default: ""
+
+    ProjectWithUsageInformation:
+      allOf:
+        - $ref: '#/components/schemas/Project'
+        - type: object
+          properties:
+            features:
+              type: array
+              items:
+                $ref: '#/components/schemas/FeatureWithUsageInformation'
+
+    # Feature
+    Feature:
+      type: object
+      required: [name, enabled, resultType]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+          pattern: '^[ a-zA-Z0-9:_-]+$'
+        description:
+          type: string
+        project:
+          type: string
+        enabled:
+          type: boolean
+        tags:
+          type: array
+          items:
+            type: string
+        metadata:
+          type: object
+        resultType:
+          $ref: '#/components/schemas/ResultType'
+        conditions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActivationCondition'
+        value:
+          description: Default value for string/number result types
+          oneOf:
+            - type: string
+            - type: number
+        wasmConfig:
+          oneOf:
+            - type: string
+              description: WASM config name (lightweight)
+            - $ref: '#/components/schemas/WasmConfig'
+
+    FeatureCreationRequest:
+      $ref: '#/components/schemas/Feature'
+
+    FeatureUpdateRequest:
+      $ref: '#/components/schemas/Feature'
+
+    FeatureWithUsageInformation:
+      allOf:
+        - $ref: '#/components/schemas/Feature'
+        - type: object
+          properties:
+            stale:
+              $ref: '#/components/schemas/StaleStatus'
+
+    StaleStatus:
+      type: object
+      properties:
+        because:
+          type: string
+          enum: [NeverCalled, NoCall, NoValueChange]
+        since:
+          type: string
+          format: date-time
+        value:
+          description: Last value (for NoValueChange)
+
+    FeaturePatchOperation:
+      type: object
+      required: [op, path]
+      properties:
+        op:
+          type: string
+          enum: [replace, add, remove, copy]
+        path:
+          type: string
+        value:
+          description: Value for replace/add operations
+        from:
+          type: string
+          description: Source path for copy operation
+
+    FeatureStrategy:
+      type: object
+      required: [enabled]
+      properties:
+        enabled:
+          type: boolean
+        resultType:
+          $ref: '#/components/schemas/ResultType'
+        conditions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActivationCondition'
+        value:
+          oneOf:
+            - type: string
+            - type: number
+        wasmConfig:
+          $ref: '#/components/schemas/WasmConfig'
+
+    FeatureEvaluation:
+      type: object
+      properties:
+        name:
+          type: string
+        active:
+          description: Feature value (boolean, string, or number)
+        project:
+          type: string
+
+    ResultType:
+      type: string
+      enum: [boolean, string, number]
+
+    ActivationCondition:
+      type: object
+      properties:
+        period:
+          $ref: '#/components/schemas/FeaturePeriod'
+        rule:
+          $ref: '#/components/schemas/ActivationRule'
+        value:
+          description: Value for string/number conditions
+
+    FeaturePeriod:
+      type: object
+      properties:
+        begin:
+          type: string
+          format: date-time
+        end:
+          type: string
+          format: date-time
+        timezone:
+          type: string
+          default: "UTC"
+        hourPeriods:
+          type: array
+          items:
+            $ref: '#/components/schemas/HourPeriod'
+        activationDays:
+          type: object
+          properties:
+            days:
+              type: array
+              items:
+                type: string
+                enum: [MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATURDAY, SUNDAY]
+
+    HourPeriod:
+      type: object
+      properties:
+        startTime:
+          type: string
+          format: time
+        endTime:
+          type: string
+          format: time
+
+    ActivationRule:
+      oneOf:
+        - type: object
+          description: All users
+        - type: object
+          properties:
+            users:
+              type: array
+              items:
+                type: string
+          description: User list
+        - type: object
+          properties:
+            percentage:
+              type: integer
+              minimum: 0
+              maximum: 100
+          description: Percentage
+
+    # Context
+    ContextCreationRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          pattern: '^[a-zA-Z0-9-]+$'
+        protected:
+          type: boolean
+          default: false
+
+    ContextUpdateRequest:
+      type: object
+      properties:
+        protected:
+          type: boolean
+
+    ContextNode:
+      type: object
+      properties:
+        name:
+          type: string
+        global:
+          type: boolean
+        protected:
+          type: boolean
+        project:
+          type: string
+        overloads:
+          type: array
+          items:
+            $ref: '#/components/schemas/Feature'
+        children:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContextNode'
+
+    # Tag
+    Tag:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+        description:
+          type: string
+
+    TagCreationRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+        description:
+          type: string
+          default: ""
+
+    # API Key
+    ApiKey:
+      type: object
+      required: [name, enabled]
+      properties:
+        clientId:
+          type: string
+        clientSecret:
+          type: string
+        name:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+        description:
+          type: string
+        projects:
+          type: array
+          items:
+            oneOf:
+              - type: string
+              - type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  name:
+                    type: string
+        enabled:
+          type: boolean
+        admin:
+          type: boolean
+
+    ApiKeyCreationRequest:
+      type: object
+      required: [name, enabled]
+      properties:
+        name:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+        description:
+          type: string
+        projects:
+          type: array
+          items:
+            type: string
+        enabled:
+          type: boolean
+          default: true
+        admin:
+          type: boolean
+          default: false
+
+    ApiKeyUpdateRequest:
+      $ref: '#/components/schemas/ApiKeyCreationRequest'
+
+    # User
+    User:
+      type: object
+      required: [username]
+      properties:
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        admin:
+          type: boolean
+        userType:
+          type: string
+          enum: [INTERNAL, OIDC, OTOROSHI]
+        defaultTenant:
+          type: string
+
+    UserCreationRequest:
+      type: object
+      required: [username, email, password]
+      properties:
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+          maxLength: 50
+        admin:
+          type: boolean
+          default: false
+        defaultTenant:
+          type: string
+
+    UserWithRights:
+      allOf:
+        - $ref: '#/components/schemas/User'
+        - type: object
+          properties:
+            rights:
+              $ref: '#/components/schemas/Rights'
+
+    UserWithTenantRight:
+      allOf:
+        - $ref: '#/components/schemas/User'
+        - type: object
+          properties:
+            tenantRight:
+              $ref: '#/components/schemas/TenantRight'
+
+    UserWithProjectRight:
+      allOf:
+        - $ref: '#/components/schemas/User'
+        - type: object
+          properties:
+            right:
+              $ref: '#/components/schemas/ProjectRightLevel'
+            defaultRight:
+              $ref: '#/components/schemas/ProjectRightLevel'
+            tenantAdmin:
+              type: boolean
+
+    UserWithKeyRight:
+      allOf:
+        - $ref: '#/components/schemas/User'
+        - type: object
+          properties:
+            right:
+              $ref: '#/components/schemas/RightLevel'
+            defaultRight:
+              $ref: '#/components/schemas/RightLevel'
+            tenantAdmin:
+              type: boolean
+
+    UserWithWebhookRight:
+      allOf:
+        - $ref: '#/components/schemas/User'
+        - type: object
+          properties:
+            right:
+              $ref: '#/components/schemas/RightLevel'
+            defaultRight:
+              $ref: '#/components/schemas/RightLevel'
+            tenantAdmin:
+              type: boolean
+
+    UserInformationUpdateRequest:
+      type: object
+      required: [username, email, password]
+      properties:
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+        defaultTenant:
+          type: string
+
+    UserPasswordUpdateRequest:
+      type: object
+      required: [password, oldPassword]
+      properties:
+        password:
+          type: string
+          minLength: 8
+          maxLength: 50
+        oldPassword:
+          type: string
+
+    UserRightsUpdateRequest:
+      type: object
+      properties:
+        rights:
+          $ref: '#/components/schemas/Rights'
+        admin:
+          type: boolean
+
+    UserInvitation:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+        admin:
+          type: boolean
+          default: false
+        rights:
+          $ref: '#/components/schemas/Rights'
+
+    # Rights
+    Rights:
+      type: object
+      properties:
+        tenants:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/TenantRight'
+
+    TenantRight:
+      type: object
+      required: [level]
+      properties:
+        level:
+          $ref: '#/components/schemas/RightLevel'
+        projects:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/ProjectAtomicRight'
+        keys:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/GeneralAtomicRight'
+        webhooks:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/GeneralAtomicRight'
+        defaultProjectRight:
+          $ref: '#/components/schemas/ProjectRightLevel'
+        defaultKeyRight:
+          $ref: '#/components/schemas/RightLevel'
+        defaultWebhookRight:
+          $ref: '#/components/schemas/RightLevel'
+
+    ProjectAtomicRight:
+      type: object
+      required: [level]
+      properties:
+        level:
+          $ref: '#/components/schemas/ProjectRightLevel'
+
+    GeneralAtomicRight:
+      type: object
+      required: [level]
+      properties:
+        level:
+          $ref: '#/components/schemas/RightLevel'
+
+    RightLevel:
+      type: string
+      enum: [Read, Write, Admin]
+
+    ProjectRightLevel:
+      type: string
+      enum: [Read, Update, Write, Admin]
+
+    RightLevelUpdate:
+      type: object
+      required: [level]
+      properties:
+        level:
+          $ref: '#/components/schemas/RightLevel'
+
+    ProjectRightLevelUpdate:
+      type: object
+      required: [level]
+      properties:
+        level:
+          $ref: '#/components/schemas/ProjectRightLevel'
+
+    # Personal Access Token
+    PersonnalAccessTokenCreationRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        allRights:
+          type: boolean
+        rights:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+              enum: [EXPORT, IMPORT]
+        expiresAt:
+          type: string
+          format: date-time
+        expirationTimezone:
+          type: string
+
+    ReadPersonnalAccessToken:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        username:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        allRights:
+          type: boolean
+        rights:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+        expiresAt:
+          type: string
+          format: date-time
+        expirationTimezone:
+          type: string
+
+    CompletePersonnalAccessToken:
+      allOf:
+        - $ref: '#/components/schemas/ReadPersonnalAccessToken'
+        - type: object
+          required: [token]
+          properties:
+            token:
+              type: string
+              description: The actual token value (only shown on creation)
+
+    # Webhook
+    LightWebhook:
+      type: object
+      required: [name, url, enabled, global]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        url:
+          type: string
+          format: uri
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+        features:
+          type: array
+          items:
+            type: string
+        projects:
+          type: array
+          items:
+            type: string
+        context:
+          type: string
+        user:
+          type: string
+        enabled:
+          type: boolean
+        bodyTemplate:
+          type: string
+        global:
+          type: boolean
+
+    Webhook:
+      type: object
+      required: [id, name, url, enabled, global]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        url:
+          type: string
+          format: uri
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+        features:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+              project:
+                type: string
+        projects:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+        context:
+          type: string
+        user:
+          type: string
+        enabled:
+          type: boolean
+        bodyTemplate:
+          type: string
+        global:
+          type: boolean
+
+    # Configuration
+    FullIzanamiConfiguration:
+      type: object
+      required: [invitationMode, anonymousReporting]
+      properties:
+        invitationMode:
+          type: string
+          enum: [Mail, Response]
+        originEmail:
+          type: string
+          format: email
+        mailerConfiguration:
+          $ref: '#/components/schemas/MailerConfiguration'
+        anonymousReporting:
+          type: boolean
+        anonymousReportingLastAsked:
+          type: string
+          format: date-time
+        oidcConfiguration:
+          $ref: '#/components/schemas/OAuth2Configuration'
+
+    MailerConfiguration:
+      type: object
+      required: [mailer]
+      properties:
+        mailer:
+          type: string
+          enum: [Console, MailJet, MailGun, SMTP]
+        apiKey:
+          type: string
+        secret:
+          type: string
+        url:
+          type: string
+        region:
+          type: string
+          enum: [US, EU]
+        host:
+          type: string
+        port:
+          type: integer
+        user:
+          type: string
+        password:
+          type: string
+        auth:
+          type: boolean
+        starttlsEnabled:
+          type: boolean
+        smtps:
+          type: boolean
+
+    OAuth2Configuration:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        method:
+          type: string
+          enum: [BASIC, POST]
+        clientId:
+          type: string
+        clientSecret:
+          type: string
+        authorizeUrl:
+          type: string
+        tokenUrl:
+          type: string
+        scopes:
+          type: string
+        pkce:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+            algorithm:
+              type: string
+        nameField:
+          type: string
+        emailField:
+          type: string
+        callbackUrl:
+          type: string
+        roleClaim:
+          type: string
+        userRightsByRoles:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/Rights'
+
+    # Import/Export
+    ImportStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [pending, running, success, failure]
+        errors:
+          type: array
+          items:
+            type: string
+        progress:
+          type: number
+
+    # Search
+    SearchResult:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [PROJECT, FEATURE, KEY, TAG, SCRIPT, GLOBAL_CONTEXT, LOCAL_CONTEXT, WEBHOOK]
+        path:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+              name:
+                type: string
+              id:
+                type: string
+
+    # Plugins
+    WasmConfig:
+      type: object
+      required: [name, source]
+      properties:
+        name:
+          type: string
+        source:
+          type: object
+          properties:
+            kind:
+              type: string
+              enum: [Base64, Wasmo, File, Http]
+            path:
+              type: string
+
+    WasmConfigWithFeatures:
+      allOf:
+        - $ref: '#/components/schemas/WasmConfig'
+        - type: object
+          properties:
+            features:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  name:
+                    type: string
+
+    # Audit
+    AuditEvent:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        entityType:
+          type: string
+        eventType:
+          type: string
+        user:
+          type: string
+        entityId:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+
+    # Client API responses
+    FeatureActivation:
+      type: object
+      properties:
+        active:
+          description: Feature value
+        name:
+          type: string
+        project:
+          type: string
+
+    FeatureActivationsWithConditions:
+      type: object
+      additionalProperties:
+        type: object
+        properties:
+          name:
+            type: string
+          active:
+            description: Feature value
+          project:
+            type: string
+          conditions:
+            type: object
+            additionalProperties:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                conditions:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/ActivationCondition'
+
+    FeatureEvent:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [FEATURE_STATES, FEATURE_CREATED, FEATURE_UPDATED, FEATURE_DELETED, KEEP_ALIVE]
+        id:
+          type: integer
+        data:
+          type: object
+
+    LegacyFeatureActivation:
+      type: object
+      properties:
+        active:
+          type: boolean
+        id:
+          type: string
+        enabled:
+          type: boolean
+        activationStrategy:
+          type: string
+
+    LegacyFeaturesResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/LegacyFeatureActivation'
+        metadata:
+          type: object
+          properties:
+            count:
+              type: integer
+            page:
+              type: integer
+            pageSize:
+              type: integer
+            nbPages:
+              type: integer
+
+    LegacyEvent:
+      type: object
+      properties:
+        type:
+          type: string
+        id:
+          type: integer
+        origin:
+          type: string
+        data:
+          type: object
+
+    HealthStatus:
+      type: object
+      properties:
+        database:
+          type: boolean
