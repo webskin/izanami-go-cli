@@ -274,3 +274,96 @@ func (tt *TempTenant) MarkCreated() *TempTenant {
 	tt.created = true
 	return tt
 }
+
+// ============================================================================
+// TempProject - Temporary project management for integration tests
+// ============================================================================
+
+// TempProject manages a temporary project for integration tests
+type TempProject struct {
+	Name        string
+	Description string
+	Tenant      string
+	client      *izanami.Client
+	ctx         context.Context
+	created     bool
+}
+
+// NewTempProject creates a new temporary project helper with auto-generated unique name
+func NewTempProject(t *testing.T, client *izanami.Client, tenant, description string) *TempProject {
+	t.Helper()
+	return &TempProject{
+		Name:        fmt.Sprintf("test-project-%d", time.Now().UnixNano()),
+		Description: description,
+		Tenant:      tenant,
+		client:      client,
+		ctx:         context.Background(),
+		created:     false,
+	}
+}
+
+// WithName sets a custom name for the project (for specific test scenarios)
+func (tp *TempProject) WithName(name string) *TempProject {
+	tp.Name = name
+	return tp
+}
+
+// Create creates the project on the server
+func (tp *TempProject) Create(t *testing.T) error {
+	t.Helper()
+	err := tp.client.CreateProject(tp.ctx, tp.Tenant, map[string]interface{}{
+		"name":        tp.Name,
+		"description": tp.Description,
+	})
+	if err == nil {
+		tp.created = true
+		t.Logf("TempProject created: %s/%s", tp.Tenant, tp.Name)
+	}
+	return err
+}
+
+// MustCreate creates the project and fails the test on error
+func (tp *TempProject) MustCreate(t *testing.T) *TempProject {
+	t.Helper()
+	err := tp.Create(t)
+	require.NoError(t, err, "Failed to create temp project %s/%s", tp.Tenant, tp.Name)
+	return tp
+}
+
+// Get retrieves the current project state from server
+func (tp *TempProject) Get(t *testing.T) *izanami.Project {
+	t.Helper()
+	project, err := izanami.GetProject(tp.client, tp.ctx, tp.Tenant, tp.Name, izanami.ParseProject)
+	require.NoError(t, err, "Failed to get temp project %s/%s", tp.Tenant, tp.Name)
+	return project
+}
+
+// Delete removes the project from server
+func (tp *TempProject) Delete(t *testing.T) {
+	t.Helper()
+	if !tp.created {
+		return
+	}
+	err := tp.client.DeleteProject(tp.ctx, tp.Tenant, tp.Name)
+	if err != nil {
+		t.Logf("Warning: failed to delete temp project %s/%s: %v", tp.Tenant, tp.Name, err)
+	} else {
+		t.Logf("TempProject deleted: %s/%s", tp.Tenant, tp.Name)
+		tp.created = false
+	}
+}
+
+// Cleanup registers automatic deletion via t.Cleanup()
+func (tp *TempProject) Cleanup(t *testing.T) *TempProject {
+	t.Helper()
+	t.Cleanup(func() {
+		tp.Delete(t)
+	})
+	return tp
+}
+
+// MarkCreated marks the project as created (for when creation happens outside TempProject)
+func (tp *TempProject) MarkCreated() *TempProject {
+	tp.created = true
+	return tp
+}
