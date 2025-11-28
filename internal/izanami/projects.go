@@ -113,3 +113,65 @@ func (c *Client) DeleteProject(ctx context.Context, tenant, project string) erro
 
 	return nil
 }
+
+// ListProjectLogs retrieves event logs for a project and applies the given mapper.
+// Use Identity mapper for raw JSON output, or ParseLogsResponse for typed structs.
+func ListProjectLogs[T any](c *Client, ctx context.Context, tenant, project string, opts *LogsRequest, mapper Mapper[T]) (T, error) {
+	var zero T
+	raw, err := c.listProjectLogsRaw(ctx, tenant, project, opts)
+	if err != nil {
+		return zero, err
+	}
+	return mapper(raw)
+}
+
+// listProjectLogsRaw fetches project logs and returns raw JSON bytes
+func (c *Client) listProjectLogsRaw(ctx context.Context, tenant, project string, opts *LogsRequest) ([]byte, error) {
+	path := apiAdminTenants + buildPath(tenant, "projects", project, "logs")
+
+	req := c.http.R().SetContext(ctx)
+	c.setAdminAuth(req)
+
+	// Apply query parameters if provided
+	if opts != nil {
+		if opts.Order != "" {
+			req.SetQueryParam("order", opts.Order)
+		}
+		if opts.Users != "" {
+			req.SetQueryParam("users", opts.Users)
+		}
+		if opts.Types != "" {
+			req.SetQueryParam("types", opts.Types)
+		}
+		if opts.Features != "" {
+			req.SetQueryParam("features", opts.Features)
+		}
+		if opts.Start != "" {
+			req.SetQueryParam("start", opts.Start)
+		}
+		if opts.End != "" {
+			req.SetQueryParam("end", opts.End)
+		}
+		if opts.Cursor != 0 {
+			req.SetQueryParam("cursor", fmt.Sprintf("%d", opts.Cursor))
+		}
+		if opts.Count > 0 {
+			req.SetQueryParam("count", fmt.Sprintf("%d", opts.Count))
+		}
+		if opts.Total {
+			req.SetQueryParam("total", "true")
+		}
+	}
+
+	resp, err := req.Get(path)
+
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", errmsg.MsgFailedToListProjectLogs, err)
+	}
+
+	if resp.StatusCode() != http.StatusOK {
+		return nil, c.handleError(resp)
+	}
+
+	return resp.Body(), nil
+}

@@ -164,6 +164,74 @@ var adminProjectsDeleteCmd = &cobra.Command{
 	},
 }
 
+var adminProjectsLogsCmd = &cobra.Command{
+	Use:   "logs <project-name>",
+	Short: "View project event logs",
+	Long: `View event logs for a project. Shows audit events like feature changes, user actions, etc.
+
+Examples:
+  # List recent logs for a project
+  iz admin projects logs my-project --tenant my-tenant
+
+  # List logs with filters
+  iz admin projects logs my-project --tenant my-tenant --users admin,user1
+  iz admin projects logs my-project --tenant my-tenant --types FEATURE_CREATED,FEATURE_UPDATED
+
+  # List logs in descending order (newest first)
+  iz admin projects logs my-project --tenant my-tenant --order desc
+
+  # List logs within a time range
+  iz admin projects logs my-project --tenant my-tenant --start 2024-01-01T00:00:00Z --end 2024-01-31T23:59:59Z
+
+  # Paginate through logs
+  iz admin projects logs my-project --tenant my-tenant --count 100
+  iz admin projects logs my-project --tenant my-tenant --count 50 --cursor 12345`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := cfg.ValidateTenant(); err != nil {
+			return err
+		}
+
+		projectName := args[0]
+
+		client, err := izanami.NewClient(cfg)
+		if err != nil {
+			return err
+		}
+
+		opts := &izanami.LogsRequest{
+			Order:    logsOrder,
+			Users:    logsUsers,
+			Types:    logsTypes,
+			Features: logsFeatures,
+			Start:    logsStart,
+			End:      logsEnd,
+			Cursor:   logsCursor,
+			Count:    logsCount,
+			Total:    logsTotal,
+		}
+
+		ctx := context.Background()
+
+		// For JSON output, use Identity mapper to get raw JSON
+		if outputFormat == "json" {
+			raw, err := izanami.ListProjectLogs(client, ctx, cfg.Tenant, projectName, opts, izanami.Identity)
+			if err != nil {
+				return err
+			}
+			return output.PrintRawJSON(cmd.OutOrStdout(), raw, compactJSON)
+		}
+
+		// For table output, use ParseLogsResponse mapper
+		logs, err := izanami.ListProjectLogs(client, ctx, cfg.Tenant, projectName, opts, izanami.ParseLogsResponse)
+		if err != nil {
+			return err
+		}
+
+		return output.PrintTo(cmd.OutOrStdout(), logs.ToTableView(), output.Format(outputFormat))
+	},
+}
+
 func init() {
 	// Projects
 	adminCmd.AddCommand(adminProjectsCmd)
@@ -175,4 +243,16 @@ func init() {
 	adminProjectsCreateCmd.Flags().StringVar(&projectDesc, "description", "", "Project description")
 	adminProjectsCreateCmd.Flags().StringVar(&projectData, "data", "", "JSON project data")
 	adminProjectsDeleteCmd.Flags().BoolVarP(&projectsDeleteForce, "force", "f", false, "Skip confirmation prompt")
+
+	// Project logs
+	adminProjectsCmd.AddCommand(adminProjectsLogsCmd)
+	adminProjectsLogsCmd.Flags().StringVar(&logsOrder, "order", "", "Sort order: asc or desc")
+	adminProjectsLogsCmd.Flags().StringVar(&logsUsers, "users", "", "Filter by users (comma-separated)")
+	adminProjectsLogsCmd.Flags().StringVar(&logsTypes, "types", "", "Filter by event types (comma-separated)")
+	adminProjectsLogsCmd.Flags().StringVar(&logsFeatures, "features", "", "Filter by features (comma-separated)")
+	adminProjectsLogsCmd.Flags().StringVar(&logsStart, "start", "", "Start date-time (ISO 8601)")
+	adminProjectsLogsCmd.Flags().StringVar(&logsEnd, "end", "", "End date-time (ISO 8601)")
+	adminProjectsLogsCmd.Flags().Int64Var(&logsCursor, "cursor", 0, "Cursor for pagination")
+	adminProjectsLogsCmd.Flags().IntVar(&logsCount, "count", 50, "Number of logs to retrieve")
+	adminProjectsLogsCmd.Flags().BoolVar(&logsTotal, "total", false, "Include total count in response")
 }

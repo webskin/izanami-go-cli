@@ -47,10 +47,11 @@ const (
 	MsgFailedToListTenantLogs  = "failed to list tenant logs"
 
 	// Project error messages
-	MsgFailedToListProjects  = "failed to list projects"
-	MsgFailedToGetProject    = "failed to get project"
-	MsgFailedToCreateProject = "failed to create project"
-	MsgFailedToDeleteProject = "failed to delete project"
+	MsgFailedToListProjects    = "failed to list projects"
+	MsgFailedToGetProject      = "failed to get project"
+	MsgFailedToCreateProject   = "failed to create project"
+	MsgFailedToDeleteProject   = "failed to delete project"
+	MsgFailedToListProjectLogs = "failed to list project logs"
 
 	// API Key error messages
 	MsgFailedToListAPIKeys  = "failed to list API keys"
