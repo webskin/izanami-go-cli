@@ -239,31 +239,30 @@ var adminTenantsDeleteCmd = &cobra.Command{
 }
 
 var adminTenantsLogsCmd = &cobra.Command{
-	Use:   "logs",
+	Use:   "logs <tenant-name>",
 	Short: "View tenant event logs",
 	Long: `View event logs for a tenant. Shows audit events like feature changes, user actions, etc.
 
 Examples:
   # List recent logs for a tenant
-  iz admin tenants logs --tenant my-tenant
+  iz admin tenants logs my-tenant
 
   # List logs with filters
-  iz admin tenants logs --tenant my-tenant --users admin,user1
-  iz admin tenants logs --tenant my-tenant --types FEATURE_CREATED,FEATURE_UPDATED
+  iz admin tenants logs my-tenant --users admin,user1
+  iz admin tenants logs my-tenant --types FEATURE_CREATED,FEATURE_UPDATED
 
   # List logs in descending order (newest first)
-  iz admin tenants logs --tenant my-tenant --order desc
+  iz admin tenants logs my-tenant --order desc
 
   # List logs within a time range
-  iz admin tenants logs --tenant my-tenant --start 2024-01-01T00:00:00Z --end 2024-01-31T23:59:59Z
+  iz admin tenants logs my-tenant --start 2024-01-01T00:00:00Z --end 2024-01-31T23:59:59Z
 
   # Paginate through logs
-  iz admin tenants logs --tenant my-tenant --count 100
-  iz admin tenants logs --tenant my-tenant --count 50 --cursor 12345`,
+  iz admin tenants logs my-tenant --count 100
+  iz admin tenants logs my-tenant --count 50 --cursor 12345`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := cfg.ValidateTenant(); err != nil {
-			return err
-		}
+		tenantName := args[0]
 
 		client, err := izanami.NewClient(cfg)
 		if err != nil {
@@ -287,7 +286,7 @@ Examples:
 
 		// For JSON output, use Identity mapper to get raw JSON
 		if outputFormat == "json" {
-			raw, err := izanami.ListTenantLogs(client, ctx, cfg.Tenant, opts, izanami.Identity)
+			raw, err := izanami.ListTenantLogs(client, ctx, tenantName, opts, izanami.Identity)
 			if err != nil {
 				return err
 			}
@@ -295,7 +294,7 @@ Examples:
 		}
 
 		// For table output, use ParseLogsResponse mapper
-		logs, err := izanami.ListTenantLogs(client, ctx, cfg.Tenant, opts, izanami.ParseLogsResponse)
+		logs, err := izanami.ListTenantLogs(client, ctx, tenantName, opts, izanami.ParseLogsResponse)
 		if err != nil {
 			return err
 		}
