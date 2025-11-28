@@ -53,7 +53,7 @@ var adminProjectsListCmd = &cobra.Command{
 			return err
 		}
 
-		return output.Print(projects, output.Format(outputFormat))
+		return output.PrintTo(cmd.OutOrStdout(), projects, output.Format(outputFormat))
 	},
 }
 
@@ -88,7 +88,7 @@ var adminProjectsGetCmd = &cobra.Command{
 			return err
 		}
 
-		return output.Print(project, output.Format(outputFormat))
+		return output.PrintTo(cmd.OutOrStdout(), project, output.Format(outputFormat))
 	},
 }
 

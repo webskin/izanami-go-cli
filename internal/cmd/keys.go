@@ -76,7 +76,7 @@ var keysListCmd = &cobra.Command{
 			return nil
 		}
 
-		return output.Print(keys, output.Format(outputFormat))
+		return output.PrintTo(cmd.OutOrStdout(), keys, output.Format(outputFormat))
 	},
 }
 
@@ -105,7 +105,7 @@ var keysGetCmd = &cobra.Command{
 			return err
 		}
 
-		return output.Print(key, output.Format(outputFormat))
+		return output.PrintTo(cmd.OutOrStdout(), key, output.Format(outputFormat))
 	},
 }
 

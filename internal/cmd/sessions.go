@@ -71,7 +71,7 @@ var sessionsListCmd = &cobra.Command{
 			})
 		}
 
-		return output.Print(displays, output.Format(outputFormat))
+		return output.PrintTo(cmd.OutOrStdout(), displays, output.Format(outputFormat))
 	},
 }
 

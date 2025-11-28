@@ -52,7 +52,7 @@ Examples:
 			return err
 		}
 
-		return output.Print(results, output.Format(outputFormat))
+		return output.PrintTo(cmd.OutOrStdout(), results, output.Format(outputFormat))
 	},
 }
 

@@ -86,10 +86,10 @@ By default, only shows root-level contexts. Use --all to show all nested context
 		// Show overload column only when --project flag is provided
 		if contextProject != "" {
 			tableView := izanami.FlattenContextsForTable(contexts)
-			return output.Print(tableView, output.Format(outputFormat))
+			return output.PrintTo(cmd.OutOrStdout(), tableView, output.Format(outputFormat))
 		} else {
 			tableView := izanami.FlattenContextsForTableSimple(contexts)
-			return output.Print(tableView, output.Format(outputFormat))
+			return output.PrintTo(cmd.OutOrStdout(), tableView, output.Format(outputFormat))
 		}
 	},
 }
@@ -139,7 +139,7 @@ The context path should be the full hierarchical path, e.g.:
 			return fmt.Errorf("context not found: %s", contextName)
 		}
 
-		return output.Print(found, output.Format(outputFormat))
+		return output.PrintTo(cmd.OutOrStdout(), found, output.Format(outputFormat))
 	},
 }
 

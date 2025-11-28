@@ -60,7 +60,7 @@ Exit codes:
 
 		if !health.Database {
 			fmt.Fprintf(cmd.OutOrStderr(), "Server is unhealthy: database check failed\n")
-			output.Print(health, output.Format(outputFormat))
+			output.PrintTo(cmd.OutOrStdout(), health, output.Format(outputFormat))
 			os.Exit(1)
 		}
 

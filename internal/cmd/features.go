@@ -110,7 +110,7 @@ The list endpoint supports filtering by:
 			features = filtered
 		}
 
-		return output.Print(features, output.Format(outputFormat))
+		return output.PrintTo(cmd.OutOrStdout(), features, output.Format(outputFormat))
 	},
 }
 
@@ -150,7 +150,7 @@ var featuresGetCmd = &cobra.Command{
 			return err
 		}
 
-		return output.Print(feature, output.Format(outputFormat))
+		return output.PrintTo(cmd.OutOrStdout(), feature, output.Format(outputFormat))
 	},
 }
 
@@ -251,7 +251,7 @@ Examples:
 		}
 
 		fmt.Fprintf(cmd.OutOrStderr(), "Feature created successfully: %s\n", created.ID)
-		return output.Print(created, output.Format(outputFormat))
+		return output.PrintTo(cmd.OutOrStdout(), created, output.Format(outputFormat))
 	},
 }
 
@@ -350,7 +350,7 @@ Examples:
 				// Print current feature structure
 				fmt.Fprintf(cmd.OutOrStderr(), "❌ Missing required fields: %v\n\n", missingFields)
 				fmt.Fprintf(cmd.OutOrStderr(), "Current feature structure:\n")
-				output.Print(currentFeature, output.JSON)
+				output.PrintTo(cmd.OutOrStderr(), currentFeature, output.JSON)
 				fmt.Fprintf(cmd.OutOrStderr(), "\nPlease include all required fields in your update.\n")
 				return fmt.Errorf("missing required fields: %v", missingFields)
 			}
@@ -573,7 +573,7 @@ Examples:
 		result.Tenant = cfg.Tenant
 		result.ID = featureID
 
-		return output.Print(result, output.Format(outputFormat))
+		return output.PrintTo(cmd.OutOrStdout(), result, output.Format(outputFormat))
 	},
 }
 
@@ -843,7 +843,7 @@ Examples:
 
 		// Convert to table view for table format
 		tableView := results.ToTableView()
-		return output.Print(tableView, output.Table)
+		return output.PrintTo(cmd.OutOrStdout(), tableView, output.Table)
 	},
 }
 

@@ -91,7 +91,7 @@ var usersListCmd = &cobra.Command{
 			return nil
 		}
 
-		return output.Print(users, output.Format(outputFormat))
+		return output.PrintTo(cmd.OutOrStdout(), users, output.Format(outputFormat))
 	},
 }
 
@@ -442,7 +442,7 @@ var usersSearchCmd = &cobra.Command{
 			return nil
 		}
 
-		return output.Print(usernames, output.Format(outputFormat))
+		return output.PrintTo(cmd.OutOrStdout(), usernames, output.Format(outputFormat))
 	},
 }
 
@@ -475,7 +475,7 @@ var usersListForTenantCmd = &cobra.Command{
 			return nil
 		}
 
-		return output.Print(users, output.Format(outputFormat))
+		return output.PrintTo(cmd.OutOrStdout(), users, output.Format(outputFormat))
 	},
 }
 
@@ -502,7 +502,7 @@ var usersGetForTenantCmd = &cobra.Command{
 			return err
 		}
 
-		return output.Print(user, output.Format(outputFormat))
+		return output.PrintTo(cmd.OutOrStdout(), user, output.Format(outputFormat))
 	},
 }
 
@@ -646,7 +646,7 @@ var usersListForProjectCmd = &cobra.Command{
 			return nil
 		}
 
-		return output.Print(users, output.Format(outputFormat))
+		return output.PrintTo(cmd.OutOrStdout(), users, output.Format(outputFormat))
 	},
 }
 

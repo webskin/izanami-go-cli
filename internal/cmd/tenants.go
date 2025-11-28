@@ -70,7 +70,7 @@ var adminTenantsListCmd = &cobra.Command{
 			}
 		}
 
-		return output.Print(summaries, output.Format(outputFormat))
+		return output.PrintTo(cmd.OutOrStdout(), summaries, output.Format(outputFormat))
 	},
 }
 
@@ -101,7 +101,7 @@ var adminTenantsGetCmd = &cobra.Command{
 			return err
 		}
 
-		return output.Print(tenant, output.Format(outputFormat))
+		return output.PrintTo(cmd.OutOrStdout(), tenant, output.Format(outputFormat))
 	},
 }
 
@@ -300,7 +300,7 @@ Examples:
 			return err
 		}
 
-		return output.Print(logs.ToTableView(), output.Format(outputFormat))
+		return output.PrintTo(cmd.OutOrStdout(), logs.ToTableView(), output.Format(outputFormat))
 	},
 }
 

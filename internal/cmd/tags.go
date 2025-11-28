@@ -53,7 +53,7 @@ var adminTagsListCmd = &cobra.Command{
 			return err
 		}
 
-		return output.Print(tags, output.Format(outputFormat))
+		return output.PrintTo(cmd.OutOrStdout(), tags, output.Format(outputFormat))
 	},
 }
 
@@ -88,7 +88,7 @@ var adminTagsGetCmd = &cobra.Command{
 			return err
 		}
 
-		return output.Print(tag, output.Format(outputFormat))
+		return output.PrintTo(cmd.OutOrStdout(), tag, output.Format(outputFormat))
 	},
 }
 
