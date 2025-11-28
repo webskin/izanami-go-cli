@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -11,6 +12,48 @@ import (
 	"github.com/webskin/izanami-go-cli/internal/output"
 )
 
+// redactAPIKeySecrets redacts the clientSecret field in API key JSON data (array)
+func redactAPIKeySecrets(data []byte) ([]byte, error) {
+	var keys []map[string]interface{}
+	if err := json.Unmarshal(data, &keys); err != nil {
+		return nil, err
+	}
+	for i := range keys {
+		if _, ok := keys[i]["clientSecret"]; ok {
+			keys[i]["clientSecret"] = redactedSecret
+		}
+	}
+	// Use encoder with HTML escaping disabled to avoid \u003c for < characters
+	var buf bytes.Buffer
+	encoder := json.NewEncoder(&buf)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(keys); err != nil {
+		return nil, err
+	}
+	// Remove trailing newline added by Encode
+	result := buf.Bytes()
+	if len(result) > 0 && result[len(result)-1] == '\n' {
+		result = result[:len(result)-1]
+	}
+	return result, nil
+}
+
+// redactAPIKeySecret redacts the clientSecret field in a single API key
+func redactAPIKeySecret(key *izanami.APIKey) {
+	if key.ClientSecret != "" {
+		key.ClientSecret = redactedSecret
+	}
+}
+
+// redactAPIKeySecretsSlice redacts the clientSecret field in a slice of API keys
+func redactAPIKeySecretsSlice(keys []izanami.APIKey) {
+	for i := range keys {
+		if keys[i].ClientSecret != "" {
+			keys[i].ClientSecret = redactedSecret
+		}
+	}
+}
+
 var (
 	keyName         string
 	keyDescription  string
@@ -18,7 +61,10 @@ var (
 	keyEnabled      bool
 	keyAdmin        bool
 	keysDeleteForce bool
+	keysShowSecrets bool
 )
+
+const redactedSecret = "<redacted>"
 
 // keysCmd represents the keys command
 var keysCmd = &cobra.Command{
@@ -62,6 +108,13 @@ var keysListCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
+			// Redact secrets unless --show-secrets is set
+			if !keysShowSecrets {
+				raw, err = redactAPIKeySecrets(raw)
+				if err != nil {
+					return err
+				}
+			}
 			return output.PrintRawJSON(cmd.OutOrStdout(), raw, compactJSON)
 		}
 
@@ -69,6 +122,11 @@ var keysListCmd = &cobra.Command{
 		keys, err := izanami.ListAPIKeys(client, ctx, cfg.Tenant, izanami.ParseAPIKeys)
 		if err != nil {
 			return err
+		}
+
+		// Redact secrets unless --show-secrets is set
+		if !keysShowSecrets {
+			redactAPIKeySecretsSlice(keys)
 		}
 
 		if len(keys) == 0 {
@@ -103,6 +161,11 @@ var keysGetCmd = &cobra.Command{
 		key, err := client.GetAPIKey(ctx, cfg.Tenant, clientID)
 		if err != nil {
 			return err
+		}
+
+		// Redact secret unless --show-secrets is set
+		if !keysShowSecrets {
+			redactAPIKeySecret(key)
 		}
 
 		return output.PrintTo(cmd.OutOrStdout(), key, output.Format(outputFormat))
@@ -328,4 +391,8 @@ func init() {
 
 	// Delete flags
 	keysDeleteCmd.Flags().BoolVarP(&keysDeleteForce, "force", "f", false, "Skip confirmation prompt")
+
+	// Show secrets flags
+	keysListCmd.Flags().BoolVar(&keysShowSecrets, "show-secrets", false, "Show client secrets (hidden by default)")
+	keysGetCmd.Flags().BoolVar(&keysShowSecrets, "show-secrets", false, "Show client secret (hidden by default)")
 }

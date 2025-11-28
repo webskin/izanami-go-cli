@@ -47,6 +47,7 @@ func PrintTo(w io.Writer, data interface{}, format Format) error {
 func printJSON(w io.Writer, data interface{}) error {
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "  ")
+	encoder.SetEscapeHTML(false) // Don't escape <, >, & characters
 	if err := encoder.Encode(data); err != nil {
 		return fmt.Errorf("failed to encode JSON: %w", err)
 	}
