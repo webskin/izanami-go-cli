@@ -85,25 +85,64 @@ Or use `make integration-test` which uses these defaults.
 
 ## Command Execution Pattern
 
-We execute CLI commands using Cobra directly:
+We execute CLI commands using Cobra directly. **CRITICAL**: You must set global variables directly rather than using command-line flags, and set `SetOut`/`SetErr` on ALL subcommands in the hierarchy.
+
+### Why Global Variables Instead of Flags
+
+The CLI uses global package variables (e.g., `tenant`, `outputFormat`) that are populated via Cobra's flag binding. In tests, the `PersistentPreRunE` hook calls `MergeWithFlags()` which reads these global variables. Using `--tenant` as a flag won't work properly in tests because:
+1. Flag parsing happens differently in test context
+2. The global variable remains empty unless explicitly set
+
+### Why SetOut/SetErr on ALL Subcommands
+
+Output capture only works if `SetOut`/`SetErr` is called on the **exact command that produces output**. Parent commands don't propagate these settings to children.
 
 ```go
 func TestIntegration_SomeCommand(t *testing.T) {
     env := setupIntegrationTest(t)
     env.Login(t)
 
+    // Get JWT token and configure global state
+    token := env.GetJwtToken(t)
+
+    // Save and set global variables (NOT flags!)
+    origCfg := cfg
+    origTenant := tenant
+    origOutputFormat := outputFormat
+
+    cfg = &izanami.Config{
+        BaseURL:  env.BaseURL,
+        Username: env.Username,
+        JwtToken: token,
+        Timeout:  30,
+    }
+    tenant = "test-tenant"      // Set global variable directly
+    outputFormat = "json"       // Set global variable directly
+
+    defer func() {
+        cfg = origCfg
+        tenant = origTenant
+        outputFormat = origOutputFormat
+    }()
+
     var buf bytes.Buffer
     cmd := &cobra.Command{Use: "iz"}
-    cmd.AddCommand(targetCmd)  // The command being tested
+    cmd.AddCommand(parentCmd)
+
+    // CRITICAL: Set Out/Err on ALL commands in the hierarchy
     cmd.SetOut(&buf)
     cmd.SetErr(&buf)
-    targetCmd.SetOut(&buf)
+    parentCmd.SetOut(&buf)
+    parentCmd.SetErr(&buf)
+    targetCmd.SetOut(&buf)      // The actual command being tested
     targetCmd.SetErr(&buf)
 
-    cmd.SetArgs([]string{"subcommand", "--flag", "value"})
+    cmd.SetArgs([]string{"parent", "subcommand", "arg"})
     err := cmd.Execute()
 
     // IMPORTANT: Reset command state after execution
+    parentCmd.SetOut(nil)
+    parentCmd.SetErr(nil)
     targetCmd.SetOut(nil)
     targetCmd.SetErr(nil)
 
@@ -116,91 +155,130 @@ func TestIntegration_SomeCommand(t *testing.T) {
 
 ## Standard Test Patterns
 
-### Pattern 1: Command that requires login
+### Pattern 1: Reusable Setup Function (Recommended)
+
+Create a setup function that handles global state management. This avoids repetition and ensures proper cleanup:
+
 ```go
-func TestIntegration_CommandAfterLogin(t *testing.T) {
-    env := setupIntegrationTest(t)
+// setupMyCommandTest sets up the test environment for myCmd tests
+func setupMyCommandTest(t *testing.T, env *IntegrationTestEnv) func() {
+    t.Helper()
     env.Login(t)
+    token := env.GetJwtToken(t)
+
+    // Save original values
+    origCfg := cfg
+    origOutputFormat := outputFormat
+    origTenant := tenant
+
+    // Set up config
+    cfg = &izanami.Config{
+        BaseURL:  env.BaseURL,
+        Username: env.Username,
+        JwtToken: token,
+        Timeout:  30,
+    }
+    outputFormat = "table"
+    tenant = "" // Will be set per-test
+
+    // Reset command-specific flags to defaults
+    myCommandFlag = ""
+    myOtherFlag = false
+
+    return func() {
+        cfg = origCfg
+        outputFormat = origOutputFormat
+        tenant = origTenant
+        myCommandFlag = ""
+        myOtherFlag = false
+    }
+}
+
+// executeMyCommand executes my command with proper output capture
+func executeMyCommand(t *testing.T, args []string) (string, error) {
+    t.Helper()
 
     var buf bytes.Buffer
     cmd := &cobra.Command{Use: "iz"}
-    cmd.AddCommand(targetCmd)
+    cmd.AddCommand(parentCmd)
+
+    // Set Out/Err on ALL commands in hierarchy
     cmd.SetOut(&buf)
     cmd.SetErr(&buf)
-    targetCmd.SetOut(&buf)
-    targetCmd.SetErr(&buf)
+    parentCmd.SetOut(&buf)
+    parentCmd.SetErr(&buf)
+    myCmd.SetOut(&buf)
+    myCmd.SetErr(&buf)
 
-    cmd.SetArgs([]string{"command", "arg"})
+    fullArgs := append([]string{"parent", "mycommand"}, args...)
+    cmd.SetArgs(fullArgs)
     err := cmd.Execute()
 
-    targetCmd.SetOut(nil)
-    targetCmd.SetErr(nil)
+    // Reset all commands
+    parentCmd.SetOut(nil)
+    parentCmd.SetErr(nil)
+    myCmd.SetOut(nil)
+    myCmd.SetErr(nil)
 
+    return buf.String(), err
+}
+```
+
+### Pattern 2: Command that requires login and tenant
+```go
+func TestIntegration_CommandAfterLogin(t *testing.T) {
+    env := setupIntegrationTest(t)
+    cleanup := setupMyCommandTest(t, env)
+    defer cleanup()
+
+    // Set tenant via global variable (NOT --tenant flag)
+    tenant = "test-tenant"
+
+    output, err := executeMyCommand(t, []string{"list"})
     require.NoError(t, err)
-    output := buf.String()
-    assert.Contains(t, output, "Success")
+    assert.Contains(t, output, "expected")
 
     t.Logf("Command output:\n%s", output)
 }
 ```
 
-### Pattern 2: Command that should fail without login
+### Pattern 3: Command that should fail without login
 ```go
 func TestIntegration_CommandWithoutLogin(t *testing.T) {
-    _ = setupIntegrationTest(t)  // No login
+    _ = setupIntegrationTest(t)  // No login, no setup
 
-    var buf bytes.Buffer
-    cmd := &cobra.Command{Use: "iz"}
-    cmd.AddCommand(targetCmd)
-    cmd.SetOut(&buf)
-    cmd.SetErr(&buf)
-    targetCmd.SetOut(&buf)
-    targetCmd.SetErr(&buf)
-
-    cmd.SetArgs([]string{"command"})
-    err := cmd.Execute()
-
-    targetCmd.SetOut(nil)
-    targetCmd.SetErr(nil)
+    // The command should fail because there's no authenticated session
+    output, err := executeMyCommand(t, []string{"list"})
 
     require.Error(t, err)
     assert.Contains(t, err.Error(), "no active profile")
 }
 ```
 
-### Pattern 3: Verify state via API after command
+### Pattern 4: Verify state via API after command
 ```go
 func TestIntegration_CommandVerifyState(t *testing.T) {
     env := setupIntegrationTest(t)
-    env.Login(t)
+    cleanup := setupMyCommandTest(t, env)
+    defer cleanup()
+
+    tenant = "test-tenant"
 
     // Execute command
-    var buf bytes.Buffer
-    cmd := &cobra.Command{Use: "iz"}
-    cmd.AddCommand(targetCmd)
-    cmd.SetOut(&buf)
-    cmd.SetErr(&buf)
-    targetCmd.SetOut(&buf)
-    targetCmd.SetErr(&buf)
-
-    cmd.SetArgs([]string{"command", "--tenant", "test-tenant"})
-    err := cmd.Execute()
-
-    targetCmd.SetOut(nil)
-    targetCmd.SetErr(nil)
-
+    output, err := executeMyCommand(t, []string{"create", "my-item"})
     require.NoError(t, err)
+    assert.Contains(t, output, "created successfully")
 
-    // Verify via API
+    // Verify via direct API call
     client := env.NewAuthenticatedClient(t)
     ctx := context.Background()
-    result, err := client.SomeAPICall(ctx, "test-tenant")
+    result, err := client.GetItem(ctx, "test-tenant", "my-item")
     require.NoError(t, err)
-    assert.Equal(t, expected, result.Field)
+    assert.Equal(t, "my-item", result.Name)
 }
 ```
 
-### Pattern 4: Testing izanami package functions directly
+### Pattern 5: Testing izanami package functions directly
 ```go
 func TestIntegration_PackageFunction(t *testing.T) {
     env := setupIntegrationTest(t)
@@ -217,31 +295,91 @@ func TestIntegration_PackageFunction(t *testing.T) {
 }
 ```
 
-### Pattern 5: Commands with interactive input
+### Pattern 6: Commands with interactive input (confirmations)
 ```go
-func TestIntegration_CommandWithInput(t *testing.T) {
-    env := setupIntegrationTest(t)
+func executeMyCommandWithInput(t *testing.T, args []string, input string) (string, error) {
+    t.Helper()
 
     var buf bytes.Buffer
-    input := bytes.NewBufferString("user-input\n")
+    inputBuf := bytes.NewBufferString(input)
 
     cmd := &cobra.Command{Use: "iz"}
-    cmd.AddCommand(targetCmd)
+    cmd.AddCommand(parentCmd)
+
+    // Set Out/Err/In on ALL commands
     cmd.SetOut(&buf)
     cmd.SetErr(&buf)
-    cmd.SetIn(input)
-    targetCmd.SetOut(&buf)
-    targetCmd.SetErr(&buf)
-    targetCmd.SetIn(input)
+    cmd.SetIn(inputBuf)
+    parentCmd.SetOut(&buf)
+    parentCmd.SetErr(&buf)
+    parentCmd.SetIn(inputBuf)
+    myCmd.SetOut(&buf)
+    myCmd.SetErr(&buf)
+    myCmd.SetIn(inputBuf)
 
-    cmd.SetArgs([]string{"command"})
+    fullArgs := append([]string{"parent", "mycommand"}, args...)
+    cmd.SetArgs(fullArgs)
     err := cmd.Execute()
 
-    targetCmd.SetIn(nil)
-    targetCmd.SetOut(nil)
-    targetCmd.SetErr(nil)
+    // Reset all
+    parentCmd.SetIn(nil)
+    parentCmd.SetOut(nil)
+    parentCmd.SetErr(nil)
+    myCmd.SetIn(nil)
+    myCmd.SetOut(nil)
+    myCmd.SetErr(nil)
 
+    return buf.String(), err
+}
+
+func TestIntegration_DeleteWithConfirmation(t *testing.T) {
+    env := setupIntegrationTest(t)
+    cleanup := setupMyCommandTest(t, env)
+    defer cleanup()
+
+    tenant = "test-tenant"
+
+    // User types "y" to confirm
+    output, err := executeMyCommandWithInput(t, []string{"delete", "item-name"}, "y\n")
     require.NoError(t, err)
+    assert.Contains(t, output, "deleted successfully")
+}
+
+func TestIntegration_DeleteCancelled(t *testing.T) {
+    env := setupIntegrationTest(t)
+    cleanup := setupMyCommandTest(t, env)
+    defer cleanup()
+
+    tenant = "test-tenant"
+
+    // User types "n" to cancel
+    output, err := executeMyCommandWithInput(t, []string{"delete", "item-name"}, "n\n")
+    require.NoError(t, err)
+    assert.Contains(t, output, "Cancelled")  // Note: capital C
+}
+```
+
+### Pattern 7: Using TempResource helpers for cleanup
+
+For commands that create resources, use TempResource helpers to ensure cleanup:
+
+```go
+func TestIntegration_CreateAndVerify(t *testing.T) {
+    env := setupIntegrationTest(t)
+    cleanup := setupMyCommandTest(t, env)
+    defer cleanup()
+
+    // Create temp tenant for isolation
+    client := env.NewAuthenticatedClient(t)
+    tempTenant := NewTempTenant(t, client).MustCreate(t)
+    defer tempTenant.Delete(t)
+
+    tenant = tempTenant.Name
+
+    // Now test creating something in this tenant
+    output, err := executeMyCommand(t, []string{"create", "my-item"})
+    require.NoError(t, err)
+    assert.Contains(t, output, "created successfully")
 }
 ```
 
@@ -302,6 +440,9 @@ Look at these files for patterns:
 - `internal/cmd/profiles_integration_test.go` - Profile commands + API verification
 - `internal/cmd/reset_integration_test.go` - Commands modifying local files
 - `internal/cmd/health_integration_test.go` - Commands using global config
+- `internal/cmd/contexts_integration_test.go` - **Best example**: Shows TempContext helper, setup/execute helpers, global variable management, nested command hierarchy (admin > contexts > subcommands)
+- `internal/cmd/tenants_integration_test.go` - TempTenant helper pattern
+- `internal/cmd/projects_integration_test.go` - TempProject helper pattern
 
 ## Important Notes
 
@@ -310,5 +451,45 @@ Look at these files for patterns:
 - Always reset command streams after execution (SetOut/SetErr/SetIn to nil)
 - Use `t.Logf()` for helpful debug output
 - Add `t.Helper()` in any helper functions you create
+
+### Critical Gotchas (Learned the Hard Way)
+
+1. **Variable Shadowing**: When creating temp resources, avoid naming local variables the same as global flag variables:
+   ```go
+   // BAD - shadows global 'tenant' variable
+   tenant := NewTempTenant(t, client)
+
+   // GOOD - use different name
+   tempTenant := NewTempTenant(t, client)
+   tenant = tempTenant.Name  // Set global variable explicitly
+   ```
+
+2. **Global Variables vs Flags**: Set global variables directly, not via `--flag` arguments:
+   ```go
+   // BAD - may not work in test context
+   cmd.SetArgs([]string{"list", "--tenant", "my-tenant", "--output", "json"})
+
+   // GOOD - set globals directly
+   tenant = "my-tenant"
+   outputFormat = "json"
+   cmd.SetArgs([]string{"list"})
+   ```
+
+3. **SetOut/SetErr Inheritance**: Cobra does NOT propagate SetOut/SetErr to child commands. You must set it on EVERY command that produces output:
+   ```go
+   // BAD - output won't be captured
+   cmd.SetOut(&buf)
+   parentCmd.SetOut(&buf)
+   // Missing: childCmd.SetOut(&buf)
+
+   // GOOD - set on all commands in hierarchy
+   cmd.SetOut(&buf)
+   parentCmd.SetOut(&buf)
+   childCmd.SetOut(&buf)
+   ```
+
+4. **output.Print vs output.PrintTo**: Commands must use `output.PrintTo(cmd.OutOrStdout(), ...)` not `output.Print(...)` for output to be captured in tests. If tests show empty output, check the command implementation.
+
+5. **Confirmation Prompts**: The confirmation helper uses "Cancelled" with capital C. Match exact case in assertions.
 
 Now analyze `{{target_file}}` and generate the integration tests.
