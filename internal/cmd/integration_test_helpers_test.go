@@ -2,9 +2,12 @@ package cmd
 
 import (
 	"bytes"
+	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
@@ -167,4 +170,107 @@ func (env *IntegrationTestEnv) NewAuthenticatedClient(t *testing.T) *izanami.Cli
 	require.NoError(t, err, "Should create authenticated client")
 
 	return client
+}
+
+// ============================================================================
+// TempTenant - Temporary tenant management for integration tests
+// ============================================================================
+
+// TempTenant manages a temporary tenant for integration tests
+type TempTenant struct {
+	Name        string
+	Description string
+	client      *izanami.Client
+	ctx         context.Context
+	created     bool
+}
+
+// NewTempTenant creates a new temporary tenant helper with auto-generated unique name
+func NewTempTenant(t *testing.T, client *izanami.Client, description string) *TempTenant {
+	t.Helper()
+	return &TempTenant{
+		Name:        fmt.Sprintf("test-tenant-%d", time.Now().UnixNano()),
+		Description: description,
+		client:      client,
+		ctx:         context.Background(),
+		created:     false,
+	}
+}
+
+// WithName sets a custom name for the tenant (for specific test scenarios)
+func (tt *TempTenant) WithName(name string) *TempTenant {
+	tt.Name = name
+	return tt
+}
+
+// Create creates the tenant on the server
+func (tt *TempTenant) Create(t *testing.T) error {
+	t.Helper()
+	err := tt.client.CreateTenant(tt.ctx, map[string]interface{}{
+		"name":        tt.Name,
+		"description": tt.Description,
+	})
+	if err == nil {
+		tt.created = true
+		t.Logf("TempTenant created: %s", tt.Name)
+	}
+	return err
+}
+
+// MustCreate creates the tenant and fails the test on error
+func (tt *TempTenant) MustCreate(t *testing.T) *TempTenant {
+	t.Helper()
+	err := tt.Create(t)
+	require.NoError(t, err, "Failed to create temp tenant %s", tt.Name)
+	return tt
+}
+
+// Get retrieves the current tenant state from server
+func (tt *TempTenant) Get(t *testing.T) *izanami.Tenant {
+	t.Helper()
+	tenant, err := izanami.GetTenant(tt.client, tt.ctx, tt.Name, izanami.ParseTenant)
+	require.NoError(t, err, "Failed to get temp tenant %s", tt.Name)
+	return tenant
+}
+
+// Update updates the tenant description
+func (tt *TempTenant) Update(t *testing.T, description string) *TempTenant {
+	t.Helper()
+	err := tt.client.UpdateTenant(tt.ctx, tt.Name, map[string]interface{}{
+		"name":        tt.Name,
+		"description": description,
+	})
+	require.NoError(t, err, "Failed to update temp tenant %s", tt.Name)
+	tt.Description = description
+	return tt
+}
+
+// Delete removes the tenant from server
+func (tt *TempTenant) Delete(t *testing.T) {
+	t.Helper()
+	if !tt.created {
+		return
+	}
+	err := tt.client.DeleteTenant(tt.ctx, tt.Name)
+	if err != nil {
+		t.Logf("Warning: failed to delete temp tenant %s: %v", tt.Name, err)
+	} else {
+		t.Logf("TempTenant deleted: %s", tt.Name)
+		tt.created = false
+	}
+}
+
+// Cleanup registers automatic deletion via t.Cleanup()
+func (tt *TempTenant) Cleanup(t *testing.T) *TempTenant {
+	t.Helper()
+	t.Cleanup(func() {
+		tt.Delete(t)
+	})
+	return tt
+}
+
+// MarkCreated marks the tenant as created (for when creation happens outside TempTenant)
+func (tt *TempTenant) MarkCreated() *TempTenant {
+	tt.created = true
+	return tt
 }

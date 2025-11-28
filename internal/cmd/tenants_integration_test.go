@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -341,14 +340,15 @@ func TestIntegration_TenantsCreateAndDelete(t *testing.T) {
 	cleanup := setupTenantsTest(t, env)
 	defer cleanup()
 
-	// Generate unique tenant name
-	tenantName := fmt.Sprintf("test-tenant-%d", time.Now().UnixNano())
+	// Use TempTenant for name generation and safety cleanup
 	tenantDescription := "Integration test tenant"
+	client := env.NewAuthenticatedClient(t)
+	tempTenant := NewTempTenant(t, client, tenantDescription).Cleanup(t)
 
 	// Set description flag
 	tenantDesc = tenantDescription
 
-	// Create tenant
+	// Create tenant via CLI
 	var createBuf bytes.Buffer
 	createCmd := &cobra.Command{Use: "iz"}
 	createCmd.AddCommand(adminCmd)
@@ -361,7 +361,7 @@ func TestIntegration_TenantsCreateAndDelete(t *testing.T) {
 	adminTenantsCreateCmd.SetOut(&createBuf)
 	adminTenantsCreateCmd.SetErr(&createBuf)
 
-	createCmd.SetArgs([]string{"admin", "tenants", "create", tenantName})
+	createCmd.SetArgs([]string{"admin", "tenants", "create", tempTenant.Name})
 	err := createCmd.Execute()
 
 	adminCmd.SetOut(nil)
@@ -374,19 +374,17 @@ func TestIntegration_TenantsCreateAndDelete(t *testing.T) {
 	require.NoError(t, err, "Tenant create should succeed")
 	createOutput := createBuf.String()
 	assert.Contains(t, createOutput, "created successfully", "Should confirm creation")
-	assert.Contains(t, createOutput, tenantName, "Should mention tenant name")
+	assert.Contains(t, createOutput, tempTenant.Name, "Should mention tenant name")
+	tempTenant.MarkCreated() // Mark for cleanup tracking
 
-	t.Logf("Tenant created: %s", tenantName)
+	t.Logf("Tenant created: %s", tempTenant.Name)
 
 	// Verify via API
-	client := env.NewAuthenticatedClient(t)
-	ctx := context.Background()
-	tenant, err := izanami.GetTenant(client, ctx, tenantName, izanami.ParseTenant)
-	require.NoError(t, err, "Should be able to get created tenant via API")
-	assert.Equal(t, tenantName, tenant.Name, "Tenant name should match")
+	tenant := tempTenant.Get(t)
+	assert.Equal(t, tempTenant.Name, tenant.Name, "Tenant name should match")
 	assert.Equal(t, tenantDescription, tenant.Description, "Tenant description should match")
 
-	// Cleanup: Delete tenant
+	// Delete tenant via CLI
 	tenantsDeleteForce = true
 
 	var deleteBuf bytes.Buffer
@@ -401,7 +399,7 @@ func TestIntegration_TenantsCreateAndDelete(t *testing.T) {
 	adminTenantsDeleteCmd.SetOut(&deleteBuf)
 	adminTenantsDeleteCmd.SetErr(&deleteBuf)
 
-	deleteCmd.SetArgs([]string{"admin", "tenants", "delete", tenantName})
+	deleteCmd.SetArgs([]string{"admin", "tenants", "delete", tempTenant.Name})
 	err = deleteCmd.Execute()
 
 	adminCmd.SetOut(nil)
@@ -415,7 +413,7 @@ func TestIntegration_TenantsCreateAndDelete(t *testing.T) {
 	deleteOutput := deleteBuf.String()
 	assert.Contains(t, deleteOutput, "deleted successfully", "Should confirm deletion")
 
-	t.Logf("Tenant deleted: %s", tenantName)
+	t.Logf("Tenant deleted: %s", tempTenant.Name)
 }
 
 func TestIntegration_TenantsCreateWithJSONData(t *testing.T) {
@@ -424,9 +422,10 @@ func TestIntegration_TenantsCreateWithJSONData(t *testing.T) {
 	cleanup := setupTenantsTest(t, env)
 	defer cleanup()
 
-	// Generate unique tenant name
-	tenantName := fmt.Sprintf("test-tenant-json-%d", time.Now().UnixNano())
-	jsonData := fmt.Sprintf(`{"name":"%s","description":"Created with JSON data"}`, tenantName)
+	// Prepare temp tenant for cleanup (will be created via CLI)
+	client := env.NewAuthenticatedClient(t)
+	tempTenant := NewTempTenant(t, client, "Created with JSON data").Cleanup(t)
+	jsonData := fmt.Sprintf(`{"name":"%s","description":"Created with JSON data"}`, tempTenant.Name)
 
 	// Set data flag
 	tenantData = jsonData
@@ -447,7 +446,7 @@ func TestIntegration_TenantsCreateWithJSONData(t *testing.T) {
 	// Mark the flag as changed
 	adminTenantsCreateCmd.Flags().Set("data", jsonData)
 
-	createCmd.SetArgs([]string{"admin", "tenants", "create", tenantName})
+	createCmd.SetArgs([]string{"admin", "tenants", "create", tempTenant.Name})
 	err := createCmd.Execute()
 
 	adminCmd.SetOut(nil)
@@ -458,19 +457,13 @@ func TestIntegration_TenantsCreateWithJSONData(t *testing.T) {
 	adminTenantsCreateCmd.SetErr(nil)
 
 	require.NoError(t, err, "Tenant create with JSON should succeed")
+	tempTenant.MarkCreated() // Mark as created for cleanup
 
 	// Verify via API
-	client := env.NewAuthenticatedClient(t)
-	ctx := context.Background()
-	tenant, err := izanami.GetTenant(client, ctx, tenantName, izanami.ParseTenant)
-	require.NoError(t, err, "Should be able to get created tenant via API")
+	tenant := tempTenant.Get(t)
 	assert.Equal(t, "Created with JSON data", tenant.Description, "Description from JSON should match")
 
-	t.Logf("Tenant created with JSON data: %s", tenantName)
-
-	// Cleanup
-	err = client.DeleteTenant(ctx, tenantName)
-	require.NoError(t, err, "Cleanup delete should succeed")
+	t.Logf("Tenant created with JSON data: %s", tempTenant.Name)
 }
 
 func TestIntegration_TenantsCreateDuplicate(t *testing.T) {
@@ -479,17 +472,9 @@ func TestIntegration_TenantsCreateDuplicate(t *testing.T) {
 	cleanup := setupTenantsTest(t, env)
 	defer cleanup()
 
-	// Generate unique tenant name
-	tenantName := fmt.Sprintf("test-tenant-dup-%d", time.Now().UnixNano())
-
-	// Create tenant first time via API
+	// Create tenant first time via TempTenant
 	client := env.NewAuthenticatedClient(t)
-	ctx := context.Background()
-	err := client.CreateTenant(ctx, map[string]interface{}{
-		"name":        tenantName,
-		"description": "First creation",
-	})
-	require.NoError(t, err, "First creation should succeed")
+	tempTenant := NewTempTenant(t, client, "First creation").Cleanup(t).MustCreate(t)
 
 	// Set description for CLI create
 	tenantDesc = "Duplicate"
@@ -507,8 +492,8 @@ func TestIntegration_TenantsCreateDuplicate(t *testing.T) {
 	adminTenantsCreateCmd.SetOut(&buf)
 	adminTenantsCreateCmd.SetErr(&buf)
 
-	cmd.SetArgs([]string{"admin", "tenants", "create", tenantName})
-	err = cmd.Execute()
+	cmd.SetArgs([]string{"admin", "tenants", "create", tempTenant.Name})
+	err := cmd.Execute()
 
 	adminCmd.SetOut(nil)
 	adminCmd.SetErr(nil)
@@ -520,10 +505,6 @@ func TestIntegration_TenantsCreateDuplicate(t *testing.T) {
 	require.Error(t, err, "Creating duplicate tenant should fail")
 
 	t.Logf("Expected error for duplicate tenant: %v", err)
-
-	// Cleanup
-	err = client.DeleteTenant(ctx, tenantName)
-	require.NoError(t, err, "Cleanup delete should succeed")
 }
 
 // ============================================================================
@@ -536,19 +517,12 @@ func TestIntegration_TenantsUpdateDescription(t *testing.T) {
 	cleanup := setupTenantsTest(t, env)
 	defer cleanup()
 
-	// Generate unique tenant name
-	tenantName := fmt.Sprintf("test-tenant-upd-%d", time.Now().UnixNano())
 	originalDesc := "Original description"
 	updatedDesc := "Updated description"
 
-	// Create tenant first via API
+	// Create tenant via TempTenant
 	client := env.NewAuthenticatedClient(t)
-	ctx := context.Background()
-	err := client.CreateTenant(ctx, map[string]interface{}{
-		"name":        tenantName,
-		"description": originalDesc,
-	})
-	require.NoError(t, err, "Tenant creation should succeed")
+	tempTenant := NewTempTenant(t, client, originalDesc).Cleanup(t).MustCreate(t)
 
 	// Set description flag for update
 	tenantDesc = updatedDesc
@@ -569,8 +543,8 @@ func TestIntegration_TenantsUpdateDescription(t *testing.T) {
 	adminTenantsUpdateCmd.SetOut(&buf)
 	adminTenantsUpdateCmd.SetErr(&buf)
 
-	cmd.SetArgs([]string{"admin", "tenants", "update", tenantName})
-	err = cmd.Execute()
+	cmd.SetArgs([]string{"admin", "tenants", "update", tempTenant.Name})
+	err := cmd.Execute()
 
 	adminCmd.SetOut(nil)
 	adminCmd.SetErr(nil)
@@ -584,15 +558,10 @@ func TestIntegration_TenantsUpdateDescription(t *testing.T) {
 	assert.Contains(t, output, "updated successfully", "Should confirm update")
 
 	// Verify via API
-	tenant, err := izanami.GetTenant(client, ctx, tenantName, izanami.ParseTenant)
-	require.NoError(t, err, "Should be able to get updated tenant")
+	tenant := tempTenant.Get(t)
 	assert.Equal(t, updatedDesc, tenant.Description, "Description should be updated")
 
-	t.Logf("Tenant updated: %s (description: '%s' -> '%s')", tenantName, originalDesc, updatedDesc)
-
-	// Cleanup
-	err = client.DeleteTenant(ctx, tenantName)
-	require.NoError(t, err, "Cleanup delete should succeed")
+	t.Logf("Tenant updated: %s (description: '%s' -> '%s')", tempTenant.Name, originalDesc, updatedDesc)
 }
 
 func TestIntegration_TenantsUpdateViaAPI(t *testing.T) {
@@ -601,35 +570,18 @@ func TestIntegration_TenantsUpdateViaAPI(t *testing.T) {
 	cleanup := setupTenantsTest(t, env)
 	defer cleanup()
 
-	// Generate unique tenant name
-	tenantName := fmt.Sprintf("test-tenant-updapi-%d", time.Now().UnixNano())
-
-	// Create tenant first via API
+	// Create tenant via TempTenant
 	client := env.NewAuthenticatedClient(t)
-	ctx := context.Background()
-	err := client.CreateTenant(ctx, map[string]interface{}{
-		"name":        tenantName,
-		"description": "Original",
-	})
-	require.NoError(t, err, "Tenant creation should succeed")
+	tempTenant := NewTempTenant(t, client, "Original").Cleanup(t).MustCreate(t)
 
-	// Update via API directly (testing the underlying client method)
-	err = client.UpdateTenant(ctx, tenantName, map[string]interface{}{
-		"name":        tenantName,
-		"description": "Updated via API",
-	})
-	require.NoError(t, err, "Tenant update via API should succeed")
+	// Update via TempTenant.Update method
+	tempTenant.Update(t, "Updated via API")
 
 	// Verify via API
-	tenant, err := izanami.GetTenant(client, ctx, tenantName, izanami.ParseTenant)
-	require.NoError(t, err, "Should be able to get updated tenant")
+	tenant := tempTenant.Get(t)
 	assert.Equal(t, "Updated via API", tenant.Description, "Description should be updated")
 
-	t.Logf("Tenant updated via API: %s", tenantName)
-
-	// Cleanup
-	err = client.DeleteTenant(ctx, tenantName)
-	require.NoError(t, err, "Cleanup delete should succeed")
+	t.Logf("Tenant updated via API: %s", tempTenant.Name)
 }
 
 // ============================================================================
@@ -642,17 +594,9 @@ func TestIntegration_TenantsDeleteWithForce(t *testing.T) {
 	cleanup := setupTenantsTest(t, env)
 	defer cleanup()
 
-	// Generate unique tenant name
-	tenantName := fmt.Sprintf("test-tenant-del-%d", time.Now().UnixNano())
-
-	// Create tenant first via API
+	// Create tenant via TempTenant (no Cleanup - testing delete)
 	client := env.NewAuthenticatedClient(t)
-	ctx := context.Background()
-	err := client.CreateTenant(ctx, map[string]interface{}{
-		"name":        tenantName,
-		"description": "To be deleted",
-	})
-	require.NoError(t, err, "Tenant creation should succeed")
+	tempTenant := NewTempTenant(t, client, "To be deleted").MustCreate(t)
 
 	// Set force flag
 	tenantsDeleteForce = true
@@ -670,8 +614,8 @@ func TestIntegration_TenantsDeleteWithForce(t *testing.T) {
 	adminTenantsDeleteCmd.SetOut(&buf)
 	adminTenantsDeleteCmd.SetErr(&buf)
 
-	cmd.SetArgs([]string{"admin", "tenants", "delete", tenantName})
-	err = cmd.Execute()
+	cmd.SetArgs([]string{"admin", "tenants", "delete", tempTenant.Name})
+	err := cmd.Execute()
 
 	adminCmd.SetOut(nil)
 	adminCmd.SetErr(nil)
@@ -685,10 +629,11 @@ func TestIntegration_TenantsDeleteWithForce(t *testing.T) {
 	assert.Contains(t, output, "deleted successfully", "Should confirm deletion")
 
 	// Verify tenant no longer exists
-	_, err = izanami.GetTenant(client, ctx, tenantName, izanami.ParseTenant)
+	ctx := context.Background()
+	_, err = izanami.GetTenant(client, ctx, tempTenant.Name, izanami.ParseTenant)
 	require.Error(t, err, "Tenant should no longer exist")
 
-	t.Logf("Tenant deleted: %s", tenantName)
+	t.Logf("Tenant deleted: %s", tempTenant.Name)
 }
 
 func TestIntegration_TenantsDeleteWithConfirmation(t *testing.T) {
@@ -697,17 +642,9 @@ func TestIntegration_TenantsDeleteWithConfirmation(t *testing.T) {
 	cleanup := setupTenantsTest(t, env)
 	defer cleanup()
 
-	// Generate unique tenant name
-	tenantName := fmt.Sprintf("test-tenant-delconf-%d", time.Now().UnixNano())
-
-	// Create tenant first via API
+	// Create tenant via TempTenant (no Cleanup - testing delete)
 	client := env.NewAuthenticatedClient(t)
-	ctx := context.Background()
-	err := client.CreateTenant(ctx, map[string]interface{}{
-		"name":        tenantName,
-		"description": "To be deleted with confirmation",
-	})
-	require.NoError(t, err, "Tenant creation should succeed")
+	tempTenant := NewTempTenant(t, client, "To be deleted with confirmation").MustCreate(t)
 
 	// Force flag is false (default from cleanup setup)
 	tenantsDeleteForce = false
@@ -730,8 +667,8 @@ func TestIntegration_TenantsDeleteWithConfirmation(t *testing.T) {
 	adminTenantsDeleteCmd.SetErr(&buf)
 	adminTenantsDeleteCmd.SetIn(input)
 
-	cmd.SetArgs([]string{"admin", "tenants", "delete", tenantName})
-	err = cmd.Execute()
+	cmd.SetArgs([]string{"admin", "tenants", "delete", tempTenant.Name})
+	err := cmd.Execute()
 
 	adminCmd.SetIn(nil)
 	adminCmd.SetOut(nil)
@@ -748,10 +685,11 @@ func TestIntegration_TenantsDeleteWithConfirmation(t *testing.T) {
 	assert.Contains(t, output, "deleted successfully", "Should confirm deletion")
 
 	// Verify tenant no longer exists
-	_, err = izanami.GetTenant(client, ctx, tenantName, izanami.ParseTenant)
+	ctx := context.Background()
+	_, err = izanami.GetTenant(client, ctx, tempTenant.Name, izanami.ParseTenant)
 	require.Error(t, err, "Tenant should no longer exist")
 
-	t.Logf("Tenant deleted with confirmation: %s", tenantName)
+	t.Logf("Tenant deleted with confirmation: %s", tempTenant.Name)
 }
 
 func TestIntegration_TenantsDeleteCancelled(t *testing.T) {
@@ -760,17 +698,9 @@ func TestIntegration_TenantsDeleteCancelled(t *testing.T) {
 	cleanup := setupTenantsTest(t, env)
 	defer cleanup()
 
-	// Generate unique tenant name
-	tenantName := fmt.Sprintf("test-tenant-delcan-%d", time.Now().UnixNano())
-
-	// Create tenant first via API
+	// Create tenant via TempTenant (with Cleanup since delete is cancelled)
 	client := env.NewAuthenticatedClient(t)
-	ctx := context.Background()
-	err := client.CreateTenant(ctx, map[string]interface{}{
-		"name":        tenantName,
-		"description": "Should not be deleted",
-	})
-	require.NoError(t, err, "Tenant creation should succeed")
+	tempTenant := NewTempTenant(t, client, "Should not be deleted").Cleanup(t).MustCreate(t)
 
 	// Force flag is false
 	tenantsDeleteForce = false
@@ -793,8 +723,8 @@ func TestIntegration_TenantsDeleteCancelled(t *testing.T) {
 	adminTenantsDeleteCmd.SetErr(&buf)
 	adminTenantsDeleteCmd.SetIn(input)
 
-	cmd.SetArgs([]string{"admin", "tenants", "delete", tenantName})
-	err = cmd.Execute()
+	cmd.SetArgs([]string{"admin", "tenants", "delete", tempTenant.Name})
+	err := cmd.Execute()
 
 	adminCmd.SetIn(nil)
 	adminCmd.SetOut(nil)
@@ -809,15 +739,10 @@ func TestIntegration_TenantsDeleteCancelled(t *testing.T) {
 	require.NoError(t, err, "Cancelled delete should not error")
 
 	// Verify tenant still exists
-	tenant, err := izanami.GetTenant(client, ctx, tenantName, izanami.ParseTenant)
-	require.NoError(t, err, "Tenant should still exist")
-	assert.Equal(t, tenantName, tenant.Name)
+	tenant := tempTenant.Get(t)
+	assert.Equal(t, tempTenant.Name, tenant.Name)
 
-	t.Logf("Tenant deletion cancelled: %s still exists", tenantName)
-
-	// Cleanup
-	err = client.DeleteTenant(ctx, tenantName)
-	require.NoError(t, err, "Cleanup delete should succeed")
+	t.Logf("Tenant deletion cancelled: %s still exists", tempTenant.Name)
 }
 
 func TestIntegration_TenantsDeleteNonExistent(t *testing.T) {
