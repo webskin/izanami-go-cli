@@ -10,13 +10,14 @@ import (
 )
 
 var (
-	contextProject      string
-	contextAll          bool
-	contextParent       string
-	contextProtected    bool
-	contextGlobal       bool
-	contextData         string
-	contextsDeleteForce bool
+	contextProject        string
+	contextAll            bool
+	contextParent         string
+	contextProtected      bool
+	contextGlobal         bool
+	contextData           string
+	contextsDeleteForce   bool
+	contextUpdateProtected string
 )
 
 // contextsCmd represents the admin contexts command
@@ -210,6 +211,65 @@ Examples:
 	},
 }
 
+// contextsUpdateCmd updates a global context
+var contextsUpdateCmd = &cobra.Command{
+	Use:   "update <context-path>",
+	Short: "Update a global context",
+	Long: `Update a global feature context.
+
+NOTE: Only global contexts can be updated. Project-specific contexts do not
+support the update operation.
+
+The only property that can be updated is the protected status.
+
+Examples:
+  # Set context as protected
+  iz admin contexts update prod --tenant my-tenant --protected=true
+
+  # Remove protected status
+  iz admin contexts update prod --tenant my-tenant --protected=false`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := cfg.Validate(); err != nil {
+			return err
+		}
+		if err := cfg.ValidateTenant(); err != nil {
+			return err
+		}
+
+		contextPath := args[0]
+
+		// Validate protected flag value
+		var protected bool
+		switch contextUpdateProtected {
+		case "true":
+			protected = true
+		case "false":
+			protected = false
+		default:
+			return fmt.Errorf("--protected must be 'true' or 'false', got '%s'", contextUpdateProtected)
+		}
+
+		client, err := izanami.NewClient(cfg)
+		if err != nil {
+			return err
+		}
+
+		// Build context data - only protected is supported
+		data := map[string]interface{}{
+			"protected": protected,
+		}
+
+		ctx := context.Background()
+		if err := client.UpdateContext(ctx, cfg.Tenant, contextPath, data); err != nil {
+			return err
+		}
+
+		fmt.Fprintf(cmd.OutOrStderr(), "Context updated successfully: %s\n", contextPath)
+		return nil
+	},
+}
+
 // contextsDeleteCmd deletes a context
 var contextsDeleteCmd = &cobra.Command{
 	Use:   "delete <context-path>",
@@ -288,6 +348,7 @@ func init() {
 	contextsCmd.AddCommand(contextsListCmd)
 	contextsCmd.AddCommand(contextsGetCmd)
 	contextsCmd.AddCommand(contextsCreateCmd)
+	contextsCmd.AddCommand(contextsUpdateCmd)
 	contextsCmd.AddCommand(contextsDeleteCmd)
 
 	// List flags
@@ -303,6 +364,10 @@ func init() {
 	contextsCreateCmd.Flags().StringVar(&contextParent, "parent", "", "Parent context path")
 	contextsCreateCmd.Flags().BoolVar(&contextProtected, "protected", false, "Mark context as protected")
 	contextsCreateCmd.Flags().StringVar(&contextData, "data", "", "JSON context data")
+
+	// Update flags
+	contextsUpdateCmd.Flags().StringVar(&contextUpdateProtected, "protected", "", "Set protected status (true/false)")
+	_ = contextsUpdateCmd.MarkFlagRequired("protected")
 
 	// Delete flags
 	contextsDeleteCmd.Flags().StringVar(&contextProject, "project", "", "Project for the context")

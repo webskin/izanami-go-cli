@@ -35,6 +35,7 @@ const (
 	// Context error messages
 	MsgFailedToListContexts  = "failed to list contexts"
 	MsgFailedToCreateContext = "failed to create context"
+	MsgFailedToUpdateContext = "failed to update context"
 	MsgFailedToDeleteContext = "failed to delete context"
 
 	// Tenant error messages

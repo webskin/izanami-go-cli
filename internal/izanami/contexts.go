@@ -57,13 +57,15 @@ func (c *Client) CreateContext(ctx context.Context, tenant, project, name, paren
 	var path string
 	if project != "" {
 		if parentPath != "" {
-			path = apiAdminTenants + buildPath(tenant, "projects", project, "contexts", parentPath)
+			// parentPath contains slashes (e.g., "prod/eu") - append directly without escaping
+			path = apiAdminTenants + buildPath(tenant, "projects", project, "contexts") + "/" + parentPath
 		} else {
 			path = apiAdminTenants + buildPath(tenant, "projects", project, "contexts")
 		}
 	} else {
 		if parentPath != "" {
-			path = apiAdminTenants + buildPath(tenant, "contexts", parentPath)
+			// parentPath contains slashes (e.g., "prod/eu") - append directly without escaping
+			path = apiAdminTenants + buildPath(tenant, "contexts") + "/" + parentPath
 		} else {
 			path = apiAdminTenants + buildPath(tenant, "contexts")
 		}
@@ -87,13 +89,39 @@ func (c *Client) CreateContext(ctx context.Context, tenant, project, name, paren
 	return nil
 }
 
+// UpdateContext updates a global context (only global contexts support update)
+// The contextData parameter accepts a map with "protected" boolean field
+func (c *Client) UpdateContext(ctx context.Context, tenant, contextPath string, contextData interface{}) error {
+	// contextPath contains slashes (e.g., "prod/eu") - append directly without escaping
+	path := apiAdminTenants + buildPath(tenant, "contexts") + "/" + contextPath
+
+	req := c.http.R().
+		SetContext(ctx).
+		SetHeader("Content-Type", "application/json").
+		SetBody(contextData)
+	c.setAdminAuth(req)
+	resp, err := req.Put(path)
+
+	if err != nil {
+		return fmt.Errorf("%s: %w", errmsg.MsgFailedToUpdateContext, err)
+	}
+
+	if resp.StatusCode() != http.StatusOK && resp.StatusCode() != http.StatusNoContent {
+		return c.handleError(resp)
+	}
+
+	return nil
+}
+
 // DeleteContext deletes a context
 func (c *Client) DeleteContext(ctx context.Context, tenant, project, contextPath string) error {
 	var path string
 	if project != "" {
-		path = apiAdminTenants + buildPath(tenant, "projects", project, "contexts", contextPath)
+		// contextPath contains slashes (e.g., "prod/eu") - append directly without escaping
+		path = apiAdminTenants + buildPath(tenant, "projects", project, "contexts") + "/" + contextPath
 	} else {
-		path = apiAdminTenants + buildPath(tenant, "contexts", contextPath)
+		// contextPath contains slashes (e.g., "prod/eu") - append directly without escaping
+		path = apiAdminTenants + buildPath(tenant, "contexts") + "/" + contextPath
 	}
 
 	req := c.http.R().SetContext(ctx)
