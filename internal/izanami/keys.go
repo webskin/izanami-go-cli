@@ -132,3 +132,33 @@ func (c *Client) DeleteAPIKey(ctx context.Context, tenant, clientID string) erro
 
 	return nil
 }
+
+// ListAPIKeyUsers lists users with rights on an API key and applies the given mapper.
+// Use Identity mapper for raw JSON output, or ParseKeyScopedUsers for typed structs.
+func ListAPIKeyUsers[T any](c *Client, ctx context.Context, tenant, clientID string, mapper Mapper[T]) (T, error) {
+	var zero T
+	raw, err := c.listAPIKeyUsersRaw(ctx, tenant, clientID)
+	if err != nil {
+		return zero, err
+	}
+	return mapper(raw)
+}
+
+// listAPIKeyUsersRaw fetches users with rights on an API key and returns raw JSON bytes
+func (c *Client) listAPIKeyUsersRaw(ctx context.Context, tenant, clientID string) ([]byte, error) {
+	path := apiAdminTenants + buildPath(tenant, "keys", clientID, "users")
+
+	req := c.http.R().SetContext(ctx)
+	c.setAdminAuth(req)
+	resp, err := req.Get(path)
+
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", errmsg.MsgFailedToListAPIKeyUsers, err)
+	}
+
+	if resp.StatusCode() != http.StatusOK {
+		return nil, c.handleError(resp)
+	}
+
+	return resp.Body(), nil
+}

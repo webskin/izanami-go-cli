@@ -513,6 +513,18 @@ type ProjectScopedUser struct {
 	DefaultRight  *string `json:"defaultRight"` // Default project right at tenant level
 }
 
+// KeyScopedUser represents a user with rights on an API key
+type KeyScopedUser struct {
+	Username      string  `json:"username"`
+	Email         string  `json:"email"`
+	UserType      string  `json:"userType"`
+	Admin         bool    `json:"admin"`
+	DefaultTenant string  `json:"defaultTenant,omitempty"`
+	TenantAdmin   bool    `json:"tenantAdmin"`
+	Right         string  `json:"right"`        // Key-level right
+	DefaultRight  *string `json:"defaultRight"` // Default key right at tenant level
+}
+
 // TenantRight represents user rights for a tenant
 type TenantRight struct {
 	Level               string                        `json:"level"` // Read, Write, Admin

@@ -39,6 +39,7 @@ var (
 	ParseFeature       = UnmarshalPtr[FeatureWithOverloads]()
 	ParseAPIKeys       = Unmarshal[[]APIKey]()
 	ParseAPIKey        = UnmarshalPtr[APIKey]()
+	ParseKeyScopedUsers = Unmarshal[[]KeyScopedUser]()
 	ParseUsers         = Unmarshal[[]User]()
 	ParseUser          = UnmarshalPtr[User]()
 	ParseUserListItems = Unmarshal[[]UserListItem]()

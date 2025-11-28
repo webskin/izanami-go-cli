@@ -54,11 +54,12 @@ const (
 	MsgFailedToListProjectLogs = "failed to list project logs"
 
 	// API Key error messages
-	MsgFailedToListAPIKeys  = "failed to list API keys"
-	MsgFailedToGetAPIKey    = "failed to get API key"
-	MsgFailedToCreateAPIKey = "failed to create API key"
-	MsgFailedToUpdateAPIKey = "failed to update API key"
-	MsgFailedToDeleteAPIKey = "failed to delete API key"
+	MsgFailedToListAPIKeys      = "failed to list API keys"
+	MsgFailedToGetAPIKey        = "failed to get API key"
+	MsgFailedToCreateAPIKey     = "failed to create API key"
+	MsgFailedToUpdateAPIKey     = "failed to update API key"
+	MsgFailedToDeleteAPIKey     = "failed to delete API key"
+	MsgFailedToListAPIKeyUsers  = "failed to list API key users"
 
 	// Tag error messages
 	MsgFailedToListTags  = "failed to list tags"

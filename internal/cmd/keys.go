@@ -250,6 +250,59 @@ var keysDeleteCmd = &cobra.Command{
 	},
 }
 
+// keysUsersCmd lists users with rights on an API key
+var keysUsersCmd = &cobra.Command{
+	Use:   "users <client-id>",
+	Short: "List users with rights on an API key",
+	Long: `List all users who have been granted rights to access a specific API key.
+
+Shows each user's right level (Read, Write, Admin) and whether they are a tenant admin.
+
+Examples:
+  # List users for an API key
+  iz admin keys users my-client-id --tenant my-tenant
+
+  # Output as JSON
+  iz admin keys users my-client-id --tenant my-tenant -o json`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		clientID := args[0]
+
+		if cfg.Tenant == "" {
+			return fmt.Errorf(errors.MsgTenantRequired)
+		}
+
+		client, err := izanami.NewClient(cfg)
+		if err != nil {
+			return err
+		}
+
+		ctx := context.Background()
+
+		// For JSON output, use Identity mapper for raw JSON passthrough
+		if outputFormat == "json" {
+			raw, err := izanami.ListAPIKeyUsers(client, ctx, cfg.Tenant, clientID, izanami.Identity)
+			if err != nil {
+				return err
+			}
+			return output.PrintRawJSON(cmd.OutOrStdout(), raw, compactJSON)
+		}
+
+		// For table output, use ParseKeyScopedUsers mapper
+		users, err := izanami.ListAPIKeyUsers(client, ctx, cfg.Tenant, clientID, izanami.ParseKeyScopedUsers)
+		if err != nil {
+			return err
+		}
+
+		if len(users) == 0 {
+			fmt.Fprintln(cmd.OutOrStderr(), "No users found for this API key")
+			return nil
+		}
+
+		return output.PrintTo(cmd.OutOrStdout(), users, output.Format(outputFormat))
+	},
+}
+
 func init() {
 	adminCmd.AddCommand(keysCmd)
 
@@ -258,6 +311,7 @@ func init() {
 	keysCmd.AddCommand(keysCreateCmd)
 	keysCmd.AddCommand(keysUpdateCmd)
 	keysCmd.AddCommand(keysDeleteCmd)
+	keysCmd.AddCommand(keysUsersCmd)
 
 	// Create flags
 	keysCreateCmd.Flags().StringVar(&keyDescription, "description", "", "Description of the API key")
