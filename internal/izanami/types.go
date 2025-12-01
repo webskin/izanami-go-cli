@@ -584,13 +584,53 @@ type UserInvitation struct {
 
 // SearchResult represents a search result
 type SearchResult struct {
-	Type        string      `json:"type"` // PROJECT, FEATURE, KEY, TAG, etc.
-	Name        string      `json:"name"`
-	ID          string      `json:"id,omitempty"`
-	Description string      `json:"description,omitempty"`
-	Tenant      string      `json:"tenant,omitempty"`
-	Project     string      `json:"project,omitempty"`
-	Data        interface{} `json:"data,omitempty"`
+	Type   string             `json:"type"` // PROJECT, FEATURE, KEY, TAG, etc.
+	Name   string             `json:"name"`
+	Path   []SearchPathEntry  `json:"path,omitempty"`
+	Tenant string             `json:"tenant,omitempty"`
+}
+
+// SearchPathEntry represents an entry in the search result path
+type SearchPathEntry struct {
+	Type string `json:"type"` // tenant, project
+	Name string `json:"name"`
+	ID   string `json:"id,omitempty"`
+}
+
+// SearchResultTableView represents a search result for table display
+type SearchResultTableView struct {
+	Type    string `json:"type"`
+	Name    string `json:"name"`
+	Tenant  string `json:"tenant"`
+	Project string `json:"project"`
+}
+
+// ToTableView converts a SearchResult to a table view
+func (s *SearchResult) ToTableView() SearchResultTableView {
+	project := ""
+	// Extract project from path if present
+	for _, entry := range s.Path {
+		if entry.Type == "project" {
+			project = entry.Name
+			break
+		}
+	}
+
+	return SearchResultTableView{
+		Type:    s.Type,
+		Name:    s.Name,
+		Tenant:  s.Tenant,
+		Project: project,
+	}
+}
+
+// SearchResultsToTableView converts a slice of SearchResult to table views
+func SearchResultsToTableView(results []SearchResult) []SearchResultTableView {
+	views := make([]SearchResultTableView, len(results))
+	for i := range results {
+		views[i] = results[i].ToTableView()
+	}
+	return views
 }
 
 // RightLevel represents user permission levels in Izanami

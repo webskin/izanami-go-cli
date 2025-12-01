@@ -46,18 +46,19 @@ Examples:
 			return output.PrintRawJSON(cmd.OutOrStdout(), raw, compactJSON)
 		}
 
-		// For table output, use ParseSearchResults mapper
+		// For table output, use ParseSearchResults mapper and convert to table view
 		results, err := izanami.Search(client, ctx, cfg.Tenant, args[0], searchFilters, izanami.ParseSearchResults)
 		if err != nil {
 			return err
 		}
 
-		return output.PrintTo(cmd.OutOrStdout(), results, output.Format(outputFormat))
+		tableViews := izanami.SearchResultsToTableView(results)
+		return output.PrintTo(cmd.OutOrStdout(), tableViews, output.Format(outputFormat))
 	},
 }
 
 func init() {
 	// Search
 	adminCmd.AddCommand(adminSearchCmd)
-	adminSearchCmd.Flags().StringSliceVar(&searchFilters, "filter", []string{}, "Filter by resource type")
+	adminSearchCmd.Flags().StringSliceVar(&searchFilters, "filter", []string{}, "Filter by resource type (PROJECT, FEATURE, KEY, TAG, SCRIPT, GLOBAL_CONTEXT, LOCAL_CONTEXT, WEBHOOK)")
 }
