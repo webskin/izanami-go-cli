@@ -314,6 +314,70 @@ func logResponse(resp *resty.Response, sensitiveHeaders map[string]bool, izClien
 	}
 }
 
+// sensitiveHeadersMap returns the map of sensitive headers that should be redacted
+func sensitiveHeadersMap() map[string]bool {
+	return map[string]bool{
+		"cookie":                true,
+		"set-cookie":            true,
+		"authorization":         true,
+		"izanami-client-secret": true,
+		"izanami-client-id":     true,
+		"x-api-key":             true,
+		"authentication":        true,
+		"www-authenticate":      true,
+	}
+}
+
+// LogSSERequest logs SSE request details when verbose mode is enabled.
+// This is needed because SetDoNotParseResponse(true) bypasses OnAfterResponse hooks.
+func (c *Client) LogSSERequest(method, path string, queryParams map[string]string, headers map[string]string, body interface{}) {
+	if !c.config.Verbose {
+		return
+	}
+
+	sensitiveHeaders := sensitiveHeadersMap()
+
+	fmt.Fprintf(os.Stderr, "==============================================================================\n")
+	fmt.Fprintf(os.Stderr, "~~~ REQUEST (SSE) ~~~\n")
+
+	// Build URL with query params
+	url := path
+	if len(queryParams) > 0 {
+		params := make([]string, 0, len(queryParams))
+		for k, v := range queryParams {
+			params = append(params, k+"="+v)
+		}
+		url += "?" + strings.Join(params, "&")
+	}
+
+	fmt.Fprintf(os.Stderr, "%s  %s\n", method, url)
+	fmt.Fprintf(os.Stderr, "HOST   : %s\n", c.config.BaseURL)
+	fmt.Fprintf(os.Stderr, "HEADERS:\n")
+	for key, value := range headers {
+		keyLower := strings.ToLower(key)
+		if sensitiveHeaders[keyLower] {
+			fmt.Fprintf(os.Stderr, "\t%s: [REDACTED]\n", key)
+		} else {
+			fmt.Fprintf(os.Stderr, "\t%s: %s\n", key, value)
+		}
+	}
+	fmt.Fprintf(os.Stderr, "BODY   :\n")
+	logBody(os.Stderr, body)
+	fmt.Fprintf(os.Stderr, "------------------------------------------------------------------------------\n")
+}
+
+// LogSSEResponse logs SSE response status when verbose mode is enabled.
+func (c *Client) LogSSEResponse(statusCode int, status string) {
+	if !c.config.Verbose {
+		return
+	}
+
+	fmt.Fprintf(os.Stderr, "~~~ RESPONSE (SSE) ~~~\n")
+	fmt.Fprintf(os.Stderr, "STATUS       : %d %s\n", statusCode, status)
+	fmt.Fprintf(os.Stderr, "BODY         : [streaming...]\n")
+	fmt.Fprintf(os.Stderr, "==============================================================================\n")
+}
+
 // logBody safely logs a request body with truncation and type handling
 func logBody(w io.Writer, body interface{}) {
 	if body == nil {

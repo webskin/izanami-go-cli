@@ -88,58 +88,92 @@ func (c *Client) WatchEvents(ctx context.Context, request EventsWatchRequest, ca
 func (c *Client) streamEvents(ctx context.Context, request EventsWatchRequest, lastEventID string, callback EventCallback) (time.Duration, error) {
 	req := c.http.R().SetContext(ctx).SetDoNotParseResponse(true)
 
+	// Collect headers for logging
+	headers := make(map[string]string)
+
 	// Set client authentication
 	if err := c.setClientAuth(req); err != nil {
 		return 0, err
 	}
+	headers["Izanami-Client-Id"] = c.config.ClientID
+	headers["Izanami-Client-Secret"] = c.config.ClientSecret
 
 	if lastEventID != "" {
 		req.SetHeader("Last-Event-Id", lastEventID)
+		headers["Last-Event-Id"] = lastEventID
 	}
+
+	// Collect query parameters for logging
+	queryParams := make(map[string]string)
 
 	// Set query parameters
 	if request.User != "" {
 		req.SetQueryParam("user", request.User)
+		queryParams["user"] = request.User
 	}
 	if request.Context != "" {
-		req.SetQueryParam("context", normalizeContextPath(request.Context))
+		ctxPath := normalizeContextPath(request.Context)
+		req.SetQueryParam("context", ctxPath)
+		queryParams["context"] = ctxPath
 	}
 	if len(request.Features) > 0 {
-		req.SetQueryParam("features", strings.Join(request.Features, ","))
+		features := strings.Join(request.Features, ",")
+		req.SetQueryParam("features", features)
+		queryParams["features"] = features
 	}
 	if len(request.Projects) > 0 {
-		req.SetQueryParam("projects", strings.Join(request.Projects, ","))
+		projects := strings.Join(request.Projects, ",")
+		req.SetQueryParam("projects", projects)
+		queryParams["projects"] = projects
 	}
 	if request.Conditions {
 		req.SetQueryParam("conditions", "true")
+		queryParams["conditions"] = "true"
 	}
 	if request.Date != "" {
 		req.SetQueryParam("date", request.Date)
+		queryParams["date"] = request.Date
 	}
 	if len(request.OneTagIn) > 0 {
-		req.SetQueryParam("oneTagIn", strings.Join(request.OneTagIn, ","))
+		oneTagIn := strings.Join(request.OneTagIn, ",")
+		req.SetQueryParam("oneTagIn", oneTagIn)
+		queryParams["oneTagIn"] = oneTagIn
 	}
 	if len(request.AllTagsIn) > 0 {
-		req.SetQueryParam("allTagIn", strings.Join(request.AllTagsIn, ","))
+		allTagIn := strings.Join(request.AllTagsIn, ",")
+		req.SetQueryParam("allTagIn", allTagIn)
+		queryParams["allTagIn"] = allTagIn
 	}
 	if len(request.NoTagIn) > 0 {
-		req.SetQueryParam("noTagIn", strings.Join(request.NoTagIn, ","))
+		noTagIn := strings.Join(request.NoTagIn, ",")
+		req.SetQueryParam("noTagIn", noTagIn)
+		queryParams["noTagIn"] = noTagIn
 	}
 	if request.RefreshInterval > 0 {
-		req.SetQueryParam("refreshInterval", strconv.Itoa(request.RefreshInterval))
+		interval := strconv.Itoa(request.RefreshInterval)
+		req.SetQueryParam("refreshInterval", interval)
+		queryParams["refreshInterval"] = interval
 	}
 	if request.KeepAliveInterval > 0 {
-		req.SetQueryParam("keepAliveInterval", strconv.Itoa(request.KeepAliveInterval))
+		interval := strconv.Itoa(request.KeepAliveInterval)
+		req.SetQueryParam("keepAliveInterval", interval)
+		queryParams["keepAliveInterval"] = interval
 	}
 
 	var resp *resty.Response
 	var err error
+	var method string
 
 	// Use POST if payload is provided, GET otherwise
 	if request.Payload != "" {
+		method = "POST"
 		req.SetHeader("Content-Type", "application/json").SetBody(request.Payload)
+		headers["Content-Type"] = "application/json"
+		c.LogSSERequest(method, "/api/v2/events", queryParams, headers, request.Payload)
 		resp, err = req.Post("/api/v2/events")
 	} else {
+		method = "GET"
+		c.LogSSERequest(method, "/api/v2/events", queryParams, headers, nil)
 		resp, err = req.Get("/api/v2/events")
 	}
 
@@ -151,6 +185,9 @@ func (c *Client) streamEvents(ctx context.Context, request EventsWatchRequest, l
 		return 0, fmt.Errorf("%s: %w", errmsg.MsgFailedToConnectToEventStream, err)
 	}
 	defer resp.RawBody().Close()
+
+	// Log SSE response
+	c.LogSSEResponse(resp.StatusCode(), resp.Status())
 
 	if resp.StatusCode() != http.StatusOK {
 		return 0, fmt.Errorf(errmsg.MsgEventStreamReturnedStatus, resp.StatusCode())

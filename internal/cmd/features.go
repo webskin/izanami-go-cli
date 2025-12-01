@@ -473,7 +473,7 @@ Examples:
 		var featureID string
 
 		// Determine if input is a UUID or name
-		if isUUID(featureIDOrName) {
+		if IsUUID(featureIDOrName) {
 			// UUID mode: use directly
 			featureID = featureIDOrName
 			if cfg.Verbose {
@@ -671,7 +671,7 @@ Examples:
 		var projectsToResolve []string
 
 		for _, projectIDOrName := range checkProjects {
-			if isUUID(projectIDOrName) {
+			if IsUUID(projectIDOrName) {
 				// Already a UUID, use as-is
 				resolvedProjects = append(resolvedProjects, projectIDOrName)
 			} else {
@@ -721,7 +721,7 @@ Examples:
 		var featuresToResolve []string
 
 		for _, featureIDOrName := range checkFeatures {
-			if isUUID(featureIDOrName) {
+			if IsUUID(featureIDOrName) {
 				// Already a UUID, use as-is
 				resolvedFeatures = append(resolvedFeatures, featureIDOrName)
 			} else {
@@ -858,7 +858,7 @@ func resolveTagNames(ctx context.Context, client *izanami.Client, tenant string,
 	resolved := make([]string, 0, len(tags))
 
 	for _, tag := range tags {
-		if isUUID(tag) {
+		if IsUUID(tag) {
 			// Already a UUID, use as-is
 			resolved = append(resolved, tag)
 		} else {
@@ -911,8 +911,8 @@ func resolveClientCredentials(cmd *cobra.Command, cfg *izanami.Config, flagClien
 	}
 }
 
-// isUUID checks if a string matches the UUID format (8-4-4-4-12)
-func isUUID(s string) bool {
+// IsUUID checks if a string matches the UUID format (8-4-4-4-12)
+func IsUUID(s string) bool {
 	uuidPattern := `^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`
 	matched, _ := regexp.MatchString(uuidPattern, s)
 	return matched

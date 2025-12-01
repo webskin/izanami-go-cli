@@ -42,24 +42,36 @@ var eventsCmd = &cobra.Command{
 This command opens a persistent connection to Izanami and streams events as they occur.
 Useful for monitoring feature flag changes in real-time.
 
+IMPORTANT: This endpoint requires client credentials (--client-id/--client-secret) or
+credentials configured in your profile.
+
 You can filter events by:
-  - Specific features (--features)
-  - Projects (--projects)
-  - Tags (--one-tag-in, --all-tags-in, --no-tag-in)
+  - Specific features (--features) - feature UUIDs
+  - Projects (--projects) - project names or UUIDs (names resolved via admin API)
+  - Tags (--one-tag-in, --all-tags-in, --no-tag-in) - tag names or UUIDs
   - User/context (--user, --context)
 
 Examples:
-  # Watch all events
+  # Watch all events (with explicit credentials)
   iz events watch --client-id xxx --client-secret yyy
 
-  # Watch specific features
-  iz events watch --features feat1-uuid,feat2-uuid
+  # Watch all events (using profile credentials for tenant)
+  iz events watch --tenant my-tenant
 
-  # Watch all features in specific projects
-  iz events watch --projects proj1-uuid,proj2-uuid
+  # Watch specific features (by UUID)
+  iz events watch --features 550e8400-e29b-41d4-a716-446655440000
 
-  # Watch with tag filtering
-  iz events watch --projects proj1-uuid --one-tag-in beta,experimental
+  # Watch all features in a project (by name)
+  iz events watch --tenant my-tenant --projects my-project
+
+  # Watch all features in a project (by UUID)
+  iz events watch --projects fc5eabbd-9f4d-47ff-9e29-2341275f53ad
+
+  # Watch with context
+  iz events watch --tenant my-tenant --projects my-project --context PROD
+
+  # Watch with tag filtering (by name)
+  iz events watch --tenant my-tenant --one-tag-in beta,experimental
 
   # Watch events with pretty JSON formatting
   iz events watch --pretty
@@ -144,17 +156,37 @@ Press Ctrl+C to stop watching.`,
 			payload = string(payloadBytes)
 		}
 
+		// Resolve project names to UUIDs if needed
+		resolvedProjects, err := resolveProjectsToUUIDs(ctx, client, cfg.Tenant, eventsProjects, cfg.Verbose, cmd)
+		if err != nil {
+			return err
+		}
+
+		// Resolve tag names to UUIDs if needed
+		resolvedOneTagIn, err := resolveTagsToUUIDs(ctx, client, cfg.Tenant, eventsOneTagIn, cfg.Verbose, cmd)
+		if err != nil {
+			return err
+		}
+		resolvedAllTagsIn, err := resolveTagsToUUIDs(ctx, client, cfg.Tenant, eventsAllTagsIn, cfg.Verbose, cmd)
+		if err != nil {
+			return err
+		}
+		resolvedNoTagIn, err := resolveTagsToUUIDs(ctx, client, cfg.Tenant, eventsNoTagIn, cfg.Verbose, cmd)
+		if err != nil {
+			return err
+		}
+
 		// Build request
 		request := izanami.EventsWatchRequest{
 			User:              eventsUser,
 			Context:           contextPath,
 			Features:          eventsFeatures,
-			Projects:          eventsProjects,
+			Projects:          resolvedProjects,
 			Conditions:        eventsConditions,
 			Date:              eventsDate,
-			OneTagIn:          eventsOneTagIn,
-			AllTagsIn:         eventsAllTagsIn,
-			NoTagIn:           eventsNoTagIn,
+			OneTagIn:          resolvedOneTagIn,
+			AllTagsIn:         resolvedAllTagsIn,
+			NoTagIn:           resolvedNoTagIn,
 			RefreshInterval:   eventsRefreshInterval,
 			KeepAliveInterval: eventsKeepAlive,
 			Payload:           payload,
@@ -223,6 +255,76 @@ Press Ctrl+C to stop watching.`,
 	},
 }
 
+// resolveProjectsToUUIDs converts project names to UUIDs.
+// If a project value is already a valid UUID, it's used as-is.
+// Otherwise, it's treated as a project name and looked up via the admin API.
+func resolveProjectsToUUIDs(ctx context.Context, client *izanami.Client, tenant string, projects []string, verbose bool, cmd *cobra.Command) ([]string, error) {
+	if len(projects) == 0 {
+		return projects, nil
+	}
+
+	resolved := make([]string, 0, len(projects))
+	for _, p := range projects {
+		// Check if it's already a valid UUID
+		if IsUUID(p) {
+			resolved = append(resolved, p)
+			continue
+		}
+
+		// Not a UUID, look up by name
+		if tenant == "" {
+			return nil, fmt.Errorf("project %q is not a UUID; --tenant is required to resolve project names", p)
+		}
+
+		project, err := izanami.GetProject(client, ctx, tenant, p, izanami.ParseProject)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve project %q: %w", p, err)
+		}
+
+		if verbose {
+			fmt.Fprintf(cmd.OutOrStderr(), "Resolved project %q to UUID %s\n", p, project.ID)
+		}
+		resolved = append(resolved, project.ID)
+	}
+
+	return resolved, nil
+}
+
+// resolveTagsToUUIDs converts tag names to UUIDs.
+// If a tag value is already a valid UUID, it's used as-is.
+// Otherwise, it's treated as a tag name and looked up via the admin API.
+func resolveTagsToUUIDs(ctx context.Context, client *izanami.Client, tenant string, tags []string, verbose bool, cmd *cobra.Command) ([]string, error) {
+	if len(tags) == 0 {
+		return tags, nil
+	}
+
+	resolved := make([]string, 0, len(tags))
+	for _, t := range tags {
+		// Check if it's already a valid UUID
+		if IsUUID(t) {
+			resolved = append(resolved, t)
+			continue
+		}
+
+		// Not a UUID, look up by name
+		if tenant == "" {
+			return nil, fmt.Errorf("tag %q is not a UUID; --tenant is required to resolve tag names", t)
+		}
+
+		tag, err := izanami.GetTag(client, ctx, tenant, t, izanami.ParseTag)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve tag %q: %w", t, err)
+		}
+
+		if verbose {
+			fmt.Fprintf(cmd.OutOrStderr(), "Resolved tag %q to UUID %s\n", t, tag.ID)
+		}
+		resolved = append(resolved, tag.ID)
+	}
+
+	return resolved, nil
+}
+
 func init() {
 	rootCmd.AddCommand(eventsCmd)
 	eventsCmd.AddCommand(eventsWatchCmd)
@@ -233,13 +335,13 @@ func init() {
 	// Filtering flags
 	eventsWatchCmd.Flags().StringVar(&eventsUser, "user", "", "User for feature evaluation (default: *)")
 	eventsWatchCmd.Flags().StringVar(&eventsContext, "context", "", "Context path for evaluation")
-	eventsWatchCmd.Flags().StringSliceVar(&eventsFeatures, "features", []string{}, "Feature IDs to watch (comma-separated)")
-	eventsWatchCmd.Flags().StringSliceVar(&eventsProjects, "projects", []string{}, "Project IDs to watch (comma-separated)")
+	eventsWatchCmd.Flags().StringSliceVar(&eventsFeatures, "features", []string{}, "Feature UUIDs to watch (comma-separated)")
+	eventsWatchCmd.Flags().StringSliceVar(&eventsProjects, "projects", []string{}, "Project names or UUIDs to watch (comma-separated)")
 	eventsWatchCmd.Flags().BoolVar(&eventsConditions, "conditions", false, "Include activation conditions in events")
 	eventsWatchCmd.Flags().StringVar(&eventsDate, "date", "", "Date for evaluation (ISO 8601 format)")
-	eventsWatchCmd.Flags().StringSliceVar(&eventsOneTagIn, "one-tag-in", []string{}, "Features must have at least one of these tags (comma-separated)")
-	eventsWatchCmd.Flags().StringSliceVar(&eventsAllTagsIn, "all-tags-in", []string{}, "Features must have all of these tags (comma-separated)")
-	eventsWatchCmd.Flags().StringSliceVar(&eventsNoTagIn, "no-tag-in", []string{}, "Features must not have any of these tags (comma-separated)")
+	eventsWatchCmd.Flags().StringSliceVar(&eventsOneTagIn, "one-tag-in", []string{}, "Tag names or UUIDs - features must have at least one (comma-separated)")
+	eventsWatchCmd.Flags().StringSliceVar(&eventsAllTagsIn, "all-tags-in", []string{}, "Tag names or UUIDs - features must have all (comma-separated)")
+	eventsWatchCmd.Flags().StringSliceVar(&eventsNoTagIn, "no-tag-in", []string{}, "Tag names or UUIDs - features must not have any (comma-separated)")
 	eventsWatchCmd.Flags().IntVar(&eventsRefreshInterval, "refresh-interval", 0, "Periodic refresh interval in seconds (0 = no periodic refresh)")
 	eventsWatchCmd.Flags().IntVar(&eventsKeepAlive, "keep-alive-interval", 0, "Keep-alive interval in seconds (default: 25)")
 	eventsWatchCmd.Flags().StringVar(&eventsData, "data", "", "JSON payload for script features (from file with @file.json, stdin with -, or inline)")
