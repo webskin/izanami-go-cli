@@ -46,7 +46,7 @@ IMPORTANT: This endpoint requires client credentials (--client-id/--client-secre
 credentials configured in your profile.
 
 You can filter events by:
-  - Specific features (--features) - feature UUIDs
+  - Specific features (--features) - feature names or UUIDs (names require --project)
   - Projects (--projects) - project names or UUIDs (names resolved via admin API)
   - Tags (--one-tag-in, --all-tags-in, --no-tag-in) - tag names or UUIDs
   - User/context (--user, --context)
@@ -57,6 +57,9 @@ Examples:
 
   # Watch all events (using profile credentials for tenant)
   iz events watch --tenant my-tenant
+
+  # Watch specific features (by name, requires --project)
+  iz events watch --tenant my-tenant --project my-project --features my-feature
 
   # Watch specific features (by UUID)
   iz events watch --features 550e8400-e29b-41d4-a716-446655440000
@@ -162,6 +165,12 @@ Press Ctrl+C to stop watching.`,
 			return err
 		}
 
+		// Resolve feature names to UUIDs if needed (requires project from config)
+		resolvedFeatures, err := resolveFeaturesToUUIDs(ctx, client, cfg.Tenant, cfg.Project, eventsFeatures, cfg.Verbose, cmd)
+		if err != nil {
+			return err
+		}
+
 		// Resolve tag names to UUIDs if needed
 		resolvedOneTagIn, err := resolveTagsToUUIDs(ctx, client, cfg.Tenant, eventsOneTagIn, cfg.Verbose, cmd)
 		if err != nil {
@@ -180,7 +189,7 @@ Press Ctrl+C to stop watching.`,
 		request := izanami.EventsWatchRequest{
 			User:              eventsUser,
 			Context:           contextPath,
-			Features:          eventsFeatures,
+			Features:          resolvedFeatures,
 			Projects:          resolvedProjects,
 			Conditions:        eventsConditions,
 			Date:              eventsDate,
@@ -290,6 +299,74 @@ func resolveProjectsToUUIDs(ctx context.Context, client *izanami.Client, tenant 
 	return resolved, nil
 }
 
+// resolveFeaturesToUUIDs converts feature names to UUIDs.
+// If a feature value is already a valid UUID, it's used as-is.
+// Otherwise, it's treated as a feature name and looked up by listing features.
+// Requires tenant and project to be defined for name resolution.
+func resolveFeaturesToUUIDs(ctx context.Context, client *izanami.Client, tenant, project string, features []string, verbose bool, cmd *cobra.Command) ([]string, error) {
+	if len(features) == 0 {
+		return features, nil
+	}
+
+	// Check if any features need name resolution
+	needsLookup := false
+	for _, f := range features {
+		if !IsUUID(f) {
+			needsLookup = true
+			break
+		}
+	}
+
+	// If all are UUIDs, return as-is
+	if !needsLookup {
+		return features, nil
+	}
+
+	// Validate requirements for name resolution
+	if tenant == "" {
+		return nil, fmt.Errorf("--tenant is required to resolve feature names")
+	}
+	if project == "" {
+		return nil, fmt.Errorf("--project is required to resolve feature names")
+	}
+
+	// List all features and build a name->ID map for the specified project
+	allFeatures, err := izanami.ListFeatures(client, ctx, tenant, "", izanami.ParseFeatures)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list features: %w", err)
+	}
+
+	// Build map of name -> ID for features in the specified project
+	featureMap := make(map[string]string)
+	for _, feat := range allFeatures {
+		if feat.Project == project {
+			featureMap[feat.Name] = feat.ID
+		}
+	}
+
+	resolved := make([]string, 0, len(features))
+	for _, f := range features {
+		// Check if it's already a valid UUID
+		if IsUUID(f) {
+			resolved = append(resolved, f)
+			continue
+		}
+
+		// Look up by name in the map
+		id, ok := featureMap[f]
+		if !ok {
+			return nil, fmt.Errorf("feature %q not found in project %q", f, project)
+		}
+
+		if verbose {
+			fmt.Fprintf(cmd.OutOrStderr(), "Resolved feature %q to UUID %s\n", f, id)
+		}
+		resolved = append(resolved, id)
+	}
+
+	return resolved, nil
+}
+
 // resolveTagsToUUIDs converts tag names to UUIDs.
 // If a tag value is already a valid UUID, it's used as-is.
 // Otherwise, it's treated as a tag name and looked up via the admin API.
@@ -335,7 +412,7 @@ func init() {
 	// Filtering flags
 	eventsWatchCmd.Flags().StringVar(&eventsUser, "user", "", "User for feature evaluation (default: *)")
 	eventsWatchCmd.Flags().StringVar(&eventsContext, "context", "", "Context path for evaluation")
-	eventsWatchCmd.Flags().StringSliceVar(&eventsFeatures, "features", []string{}, "Feature UUIDs to watch (comma-separated)")
+	eventsWatchCmd.Flags().StringSliceVar(&eventsFeatures, "features", []string{}, "Feature names or UUIDs to watch (names require --project)")
 	eventsWatchCmd.Flags().StringSliceVar(&eventsProjects, "projects", []string{}, "Project names or UUIDs to watch (comma-separated)")
 	eventsWatchCmd.Flags().BoolVar(&eventsConditions, "conditions", false, "Include activation conditions in events")
 	eventsWatchCmd.Flags().StringVar(&eventsDate, "date", "", "Date for evaluation (ISO 8601 format)")
