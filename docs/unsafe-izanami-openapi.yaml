@@ -2232,6 +2232,7 @@ paths:
                 $ref: '#/components/schemas/FeatureActivationsWithConditions'
 
   /api/v2/events:
+    description: Emit Server Sent Events when features in given scope are modified. This endpoint also emit initially (and optionally periodically) a global event that contains state of every feature in scope.
     parameters:
       - $ref: '#/components/parameters/clientId'
       - $ref: '#/components/parameters/clientSecret'
@@ -2239,12 +2240,26 @@ paths:
         in: query
         schema:
           type: string
-          default: "*"
+          default: ""
+        description: User for which activation should be computed
+      - $ref: '#/components/parameters/featureRequestContext'
+      - $ref: '#/components/parameters/featureRequestFeatures'
+      - $ref: '#/components/parameters/featureRequestProjects'
       - name: conditions
         in: query
         schema:
           type: boolean
           default: false
+        description: Whether activation conditions should be returned alongside feature activations
+      - name: date
+        in: query
+        schema:
+          type: string
+          format: date-time
+        description: Date for which activation should be computed (default is current time)
+      - $ref: '#/components/parameters/featureRequestOneTagIn'
+      - $ref: '#/components/parameters/featureRequestAllTagsIn'
+      - $ref: '#/components/parameters/featureRequestNoTagIn'
       - name: refreshInterval
         in: query
         schema:
@@ -2257,12 +2272,6 @@ paths:
           type: integer
           default: 25
         description: Keep-alive interval in seconds
-      - $ref: '#/components/parameters/featureRequestProjects'
-      - $ref: '#/components/parameters/featureRequestFeatures'
-      - $ref: '#/components/parameters/featureRequestContext'
-      - $ref: '#/components/parameters/featureRequestOneTagIn'
-      - $ref: '#/components/parameters/featureRequestAllTagsIn'
-      - $ref: '#/components/parameters/featureRequestNoTagIn'
     get:
       tags: [V2 Client API]
       summary: Subscribe to feature events (SSE)
@@ -2519,7 +2528,8 @@ components:
       required: true
       schema:
         type: string
-      description: Feature ID
+        format: uuid
+      description: Feature UUID
 
     contextPath:
       name: context
@@ -2553,7 +2563,7 @@ components:
         items:
           type: string
           format: uuid
-      description: Project UUIDs to include
+      description: Project UUIDs to include. Format is comma-separated (e.g., 'uuid1,uuid2,uuid3')
 
     featureRequestFeatures:
       name: features
@@ -2562,14 +2572,16 @@ components:
         type: array
         items:
           type: string
-      description: Feature IDs to include
+          format: uuid
+      description: Feature UUIDs to include. Format is comma-separated (e.g., 'uuid1,uuid2,uuid3')
 
     featureRequestContext:
       name: context
       in: query
       schema:
         type: string
-      description: Context path for evaluation
+        default: ""
+      description: Context path for evaluation. For subcontext separate by '/' (e.g., 'root/subcontext')
 
     featureRequestOneTagIn:
       name: oneTagIn
@@ -2579,7 +2591,7 @@ components:
         items:
           type: string
           format: uuid
-      description: Include features with at least one of these tags
+      description: Include features with at least one of these tags. Format is comma-separated (e.g., 'tag1,tag2,tag3')
 
     featureRequestAllTagsIn:
       name: allTagsIn
@@ -2589,7 +2601,7 @@ components:
         items:
           type: string
           format: uuid
-      description: Include features with all of these tags
+      description: Include features with all of these tags. Format is comma-separated (e.g., 'tag1,tag2,tag3')
 
     featureRequestNoTagIn:
       name: noTagIn
@@ -2599,7 +2611,7 @@ components:
         items:
           type: string
           format: uuid
-      description: Exclude features with any of these tags
+      description: Exclude features with any of these tags. Format is comma-separated (e.g., 'tag1,tag2,tag3')
 
   responses:
     BadRequest:
