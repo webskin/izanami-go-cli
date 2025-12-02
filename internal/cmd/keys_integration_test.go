@@ -20,16 +20,17 @@ import (
 
 // TempAPIKey manages a temporary API key for integration tests
 type TempAPIKey struct {
-	Name        string
-	ClientID    string
-	Description string
-	Tenant      string
-	Projects    []string
-	Enabled     bool
-	Admin       bool
-	client      *izanami.Client
-	ctx         context.Context
-	created     bool
+	Name         string
+	ClientID     string
+	ClientSecret string // Returned only on creation
+	Description  string
+	Tenant       string
+	Projects     []string
+	Enabled      bool
+	Admin        bool
+	client       *izanami.Client
+	ctx          context.Context
+	created      bool
 }
 
 // NewTempAPIKey creates a new temporary API key helper with auto-generated unique name
@@ -96,6 +97,7 @@ func (tk *TempAPIKey) Create(t *testing.T) (*izanami.APIKey, error) {
 	if err == nil {
 		tk.created = true
 		tk.ClientID = result.ClientID
+		tk.ClientSecret = result.ClientSecret
 		t.Logf("TempAPIKey created: %s (clientID: %s, tenant: %s)", tk.Name, tk.ClientID, tk.Tenant)
 	}
 	return result, err
