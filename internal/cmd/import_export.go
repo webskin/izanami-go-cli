@@ -13,6 +13,7 @@ var (
 	exportOutput   string
 	importConflict string
 	importTimezone string
+	importVersion  int
 )
 
 var adminExportCmd = &cobra.Command{
@@ -68,20 +69,27 @@ var adminImportCmd = &cobra.Command{
 	Short: "Import tenant data",
 	Long: `Import data into a tenant from a newline-delimited JSON file.
 
+Version (required):
+  - 1: Import Izanami v1 data into v2 server (migration)
+  - 2: Import Izanami v2 data
+
 Conflict resolution strategies:
   - FAIL: Stop on first conflict (default)
   - SKIP: Skip conflicting items
   - OVERWRITE: Overwrite existing items
 
 Examples:
-  # Import with default settings (fail on conflict)
-  iz admin import export.ndjson
+  # Import Izanami v2 data
+  iz admin import export.ndjson --version 2
+
+  # Import Izanami v1 data (migration from v1 to v2)
+  iz admin import v1-export.ndjson --version 1
 
   # Import and overwrite conflicts
-  iz admin import export.ndjson --conflict OVERWRITE
+  iz admin import export.ndjson --version 2 --conflict OVERWRITE
 
   # Import with timezone
-  iz admin import export.ndjson --timezone "Europe/Paris"`,
+  iz admin import export.ndjson --version 2 --timezone "Europe/Paris"`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := cfg.ValidateTenant(); err != nil {
@@ -94,6 +102,7 @@ Examples:
 		}
 
 		req := izanami.ImportRequest{
+			Version:  importVersion,
 			Conflict: importConflict,
 			Timezone: importTimezone,
 		}
@@ -120,6 +129,8 @@ func init() {
 	adminCmd.AddCommand(adminImportCmd)
 
 	adminExportCmd.Flags().StringVarP(&exportOutput, "output", "o", "", "Output file (default: stdout)")
+	adminImportCmd.Flags().IntVar(&importVersion, "version", 0, "Import version: 1 for v1 data migration, 2 for v2 data")
+	_ = adminImportCmd.MarkFlagRequired("version")
 	adminImportCmd.Flags().StringVar(&importConflict, "conflict", "FAIL", "Conflict resolution: FAIL, SKIP, OVERWRITE")
 	adminImportCmd.Flags().StringVar(&importTimezone, "timezone", "", "Timezone for time-based features")
 }
