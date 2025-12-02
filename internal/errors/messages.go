@@ -24,13 +24,17 @@ const (
 	MsgNoJWTTokenInResponse = "no JWT token in login response"
 
 	// Feature error messages
-	MsgFailedToListFeatures  = "failed to list features"
-	MsgFailedToGetFeature    = "failed to get feature"
-	MsgFailedToCreateFeature = "failed to create feature"
-	MsgFailedToUpdateFeature = "failed to update feature"
-	MsgFailedToDeleteFeature = "failed to delete feature"
-	MsgFailedToCheckFeature  = "failed to check feature"
-	MsgFailedToCheckFeatures = "failed to check features"
+	MsgFailedToListFeatures          = "failed to list features"
+	MsgFailedToGetFeature            = "failed to get feature"
+	MsgFailedToCreateFeature         = "failed to create feature"
+	MsgFailedToUpdateFeature         = "failed to update feature"
+	MsgFailedToDeleteFeature         = "failed to delete feature"
+	MsgFailedToCheckFeature          = "failed to check feature"
+	MsgFailedToCheckFeatures         = "failed to check features"
+	MsgFailedToPatchFeatures         = "failed to patch features"
+	MsgFailedToTestFeature           = "failed to test feature"
+	MsgFailedToTestFeatureDefinition = "failed to test feature definition"
+	MsgFailedToTestFeaturesBulk      = "failed to test features"
 
 	// Context error messages
 	MsgFailedToListContexts  = "failed to list contexts"

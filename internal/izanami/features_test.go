@@ -299,3 +299,235 @@ func TestClient_CheckFeatures(t *testing.T) {
 	assert.True(t, result["feature-1"].Active.(bool))
 	assert.False(t, result["feature-2"].Active.(bool))
 }
+
+func TestClient_PatchFeatures(t *testing.T) {
+	patches := []FeaturePatch{
+		{Op: "replace", Path: "/feature-1/enabled", Value: true},
+		{Op: "replace", Path: "/feature-2/enabled", Value: false},
+	}
+
+	server := mockServer(t, func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/admin/tenants/test-tenant/features", r.URL.Path)
+		assert.Equal(t, "PATCH", r.Method)
+		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+
+		// Verify request body
+		var body []FeaturePatch
+		err := json.NewDecoder(r.Body).Decode(&body)
+		assert.NoError(t, err)
+		assert.Len(t, body, 2)
+		assert.Equal(t, "replace", body[0].Op)
+		assert.Equal(t, "/feature-1/enabled", body[0].Path)
+
+		w.WriteHeader(http.StatusNoContent)
+	})
+	defer server.Close()
+
+	config := &Config{
+		BaseURL:  server.URL,
+		Username: "test-user",
+		JwtToken: "test-jwt-token",
+		Timeout:  30,
+	}
+
+	client, err := NewClient(config)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	err = client.PatchFeatures(ctx, "test-tenant", patches)
+
+	assert.NoError(t, err)
+}
+
+func TestClient_TestFeature(t *testing.T) {
+	expectedResult := &FeatureTestResult{
+		Name:    "feature-1",
+		Active:  true,
+		Project: "test-project",
+	}
+
+	server := mockServer(t, func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/admin/tenants/test-tenant/features/feature-1/test", r.URL.Path)
+		assert.Equal(t, "POST", r.Method)
+
+		// Check query params
+		user := r.URL.Query().Get("user")
+		date := r.URL.Query().Get("date")
+		assert.Equal(t, "user123", user)
+		assert.NotEmpty(t, date)
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(expectedResult)
+	})
+	defer server.Close()
+
+	config := &Config{
+		BaseURL:  server.URL,
+		Username: "test-user",
+		JwtToken: "test-jwt-token",
+		Timeout:  30,
+	}
+
+	client, err := NewClient(config)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	result, err := TestFeature(client, ctx, "test-tenant", "feature-1", "", "user123", "2025-01-01T00:00:00Z", "", ParseFeatureTestResult)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, "feature-1", result.Name)
+	assert.Equal(t, true, result.Active)
+}
+
+func TestClient_TestFeatureWithContext(t *testing.T) {
+	expectedResult := &FeatureTestResult{
+		Name:    "feature-1",
+		Active:  false,
+		Project: "test-project",
+	}
+
+	server := mockServer(t, func(w http.ResponseWriter, r *http.Request) {
+		// Context path should be appended to the URL
+		assert.Equal(t, "/api/admin/tenants/test-tenant/features/feature-1/test/prod/env", r.URL.Path)
+		assert.Equal(t, "POST", r.Method)
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(expectedResult)
+	})
+	defer server.Close()
+
+	config := &Config{
+		BaseURL:  server.URL,
+		Username: "test-user",
+		JwtToken: "test-jwt-token",
+		Timeout:  30,
+	}
+
+	client, err := NewClient(config)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	// Test with leading slash - should be stripped
+	result, err := TestFeature(client, ctx, "test-tenant", "feature-1", "/prod/env", "", "2025-01-01T00:00:00Z", "", ParseFeatureTestResult)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, "feature-1", result.Name)
+	assert.Equal(t, false, result.Active)
+}
+
+func TestClient_TestFeatureDefinition(t *testing.T) {
+	definition := map[string]interface{}{
+		"name":    "test-feature",
+		"enabled": true,
+		"conditions": map[string]interface{}{
+			"": map[string]interface{}{
+				"conditions": []interface{}{},
+			},
+		},
+	}
+
+	expectedResult := &FeatureTestResult{
+		Name:   "test-feature",
+		Active: true,
+	}
+
+	server := mockServer(t, func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/admin/tenants/test-tenant/test", r.URL.Path)
+		assert.Equal(t, "POST", r.Method)
+		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+
+		// Check query params
+		user := r.URL.Query().Get("user")
+		date := r.URL.Query().Get("date")
+		assert.Equal(t, "user123", user)
+		assert.NotEmpty(t, date)
+
+		// Verify request body - definition should be wrapped in "feature" key
+		var body map[string]interface{}
+		err := json.NewDecoder(r.Body).Decode(&body)
+		assert.NoError(t, err)
+		feature, ok := body["feature"].(map[string]interface{})
+		assert.True(t, ok, "body should have 'feature' key")
+		assert.Equal(t, "test-feature", feature["name"])
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(expectedResult)
+	})
+	defer server.Close()
+
+	config := &Config{
+		BaseURL:  server.URL,
+		Username: "test-user",
+		JwtToken: "test-jwt-token",
+		Timeout:  30,
+	}
+
+	client, err := NewClient(config)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	result, err := TestFeatureDefinition(client, ctx, "test-tenant", "user123", "2025-01-01T00:00:00Z", definition, ParseFeatureTestResult)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, "test-feature", result.Name)
+	assert.Equal(t, true, result.Active)
+}
+
+func TestClient_TestFeaturesBulk(t *testing.T) {
+	expectedResults := FeatureTestResults{
+		"feature-1": {Name: "feature-1", Active: true, Project: "test-project"},
+		"feature-2": {Name: "feature-2", Active: false, Project: "test-project"},
+	}
+
+	server := mockServer(t, func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/admin/tenants/test-tenant/features/_test", r.URL.Path)
+		assert.Equal(t, "GET", r.Method)
+
+		// Check query params
+		user := r.URL.Query().Get("user")
+		date := r.URL.Query().Get("date")
+		context := r.URL.Query().Get("context")
+		features := r.URL.Query()["features"]
+		projects := r.URL.Query()["projects"]
+
+		assert.Equal(t, "user123", user)
+		assert.NotEmpty(t, date)
+		assert.Equal(t, "/prod/env", context) // normalizeContextPath ensures leading slash
+		assert.Contains(t, features, "feature-1")
+		assert.Contains(t, features, "feature-2")
+		assert.Contains(t, projects, "test-project")
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(expectedResults)
+	})
+	defer server.Close()
+
+	config := &Config{
+		BaseURL:  server.URL,
+		Username: "test-user",
+		JwtToken: "test-jwt-token",
+		Timeout:  30,
+	}
+
+	client, err := NewClient(config)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	request := TestFeaturesAdminRequest{
+		User:     "user123",
+		Date:     "2025-01-01T00:00:00Z",
+		Features: []string{"feature-1", "feature-2"},
+		Projects: []string{"test-project"},
+		Context:  "/prod/env", // with leading slash - should be normalized
+	}
+	result, err := TestFeaturesBulk(client, ctx, "test-tenant", request, ParseFeatureTestResults)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Len(t, result, 2)
+	assert.Equal(t, true, result["feature-1"].Active)
+	assert.Equal(t, false, result["feature-2"].Active)
+}

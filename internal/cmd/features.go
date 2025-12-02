@@ -17,6 +17,14 @@ var (
 	featureDesc         string
 	featureEnabled      bool
 	featuresDeleteForce bool
+
+	// Test command flags
+	featureTestDate     string   // Date for feature evaluation (ISO 8601)
+	featureTestFeatures []string // Feature IDs for bulk testing
+	featureTestProjects []string // Project IDs for bulk testing
+	featureTestOneTagIn []string // Tag filter: at least one must match
+	featureTestAllTagsIn []string // Tag filter: all must match
+	featureTestNoTagIn  []string // Tag filter: none can match
 )
 
 // featuresCmd represents the admin features command
@@ -387,6 +395,344 @@ var featuresDeleteCmd = &cobra.Command{
 	},
 }
 
+// featuresPatchCmd applies batch patches to multiple features
+var featuresPatchCmd = &cobra.Command{
+	Use:   "patch",
+	Short: "Batch update multiple features",
+	Long: `Apply batch patches to multiple features in a single request.
+
+Patch operations allow you to update specific fields across multiple features
+without providing full feature definitions. This is useful for:
+- Enabling/disabling multiple features at once
+- Moving features between projects
+- Updating tags across multiple features
+- Deleting multiple features
+
+Patch format (JSON array of operations):
+  [
+    {"op": "replace", "path": "/<feature-id>/enabled", "value": true},
+    {"op": "replace", "path": "/<feature-id>/project", "value": "<project-id>"},
+    {"op": "replace", "path": "/<feature-id>/tags", "value": ["tag1", "tag2"]},
+    {"op": "remove", "path": "/<feature-id>"}
+  ]
+
+Examples:
+  # Disable multiple features
+  iz admin features patch --data '[{"op":"replace","path":"/feat1/enabled","value":false},{"op":"replace","path":"/feat2/enabled","value":false}]'
+
+  # Patch from file
+  iz admin features patch --data @patches.json
+
+  # Move features to different project
+  iz admin features patch --data '[{"op":"replace","path":"/feat1/project","value":"new-project-id"}]'`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := cfg.Validate(); err != nil {
+			return err
+		}
+		if err := cfg.ValidateTenant(); err != nil {
+			return err
+		}
+
+		if !cmd.Flags().Changed("data") {
+			return fmt.Errorf("patch data is required (use --data flag)")
+		}
+
+		var patches interface{}
+		if err := parseJSONData(featureData, &patches); err != nil {
+			return fmt.Errorf("invalid JSON patch data: %w", err)
+		}
+
+		client, err := izanami.NewClient(cfg)
+		if err != nil {
+			return err
+		}
+
+		ctx := context.Background()
+		if err := client.PatchFeatures(ctx, cfg.Tenant, patches); err != nil {
+			return err
+		}
+
+		fmt.Fprintf(cmd.OutOrStderr(), "Features patched successfully\n")
+		return nil
+	},
+}
+
+// featuresTestCmd tests an existing feature's evaluation
+var featuresTestCmd = &cobra.Command{
+	Use:   "test <feature-id>",
+	Short: "Test an existing feature's evaluation",
+	Long: `Test how a feature evaluates for a given user and context without making changes.
+
+This is useful for debugging feature behavior, testing activation conditions,
+and verifying feature configuration before deployment.
+
+The --date flag defaults to "now" (current time). You can also specify an ISO 8601
+datetime (e.g., 2025-01-01T00:00:00Z) to test activation at a specific time.
+
+For WASM/script features, you can provide a JSON payload via --data.
+
+Examples:
+  # Test feature evaluation (uses current time)
+  iz admin features test feat-id
+
+  # Test feature for a specific user
+  iz admin features test feat-id --user user123
+
+  # Test with specific date
+  iz admin features test feat-id --user user123 --date 2025-06-01T12:00:00Z
+
+  # Test with context path
+  iz admin features test feat-id --user user123 --context /prod/region1
+
+  # Test WASM feature with payload
+  iz admin features test feat-id --user user123 --data '{"age": 25}'`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := cfg.Validate(); err != nil {
+			return err
+		}
+		if err := cfg.ValidateTenant(); err != nil {
+			return err
+		}
+
+		// Handle "now" shortcut
+		date := featureTestDate
+		if date == "now" {
+			date = nowISO8601()
+		}
+
+		client, err := izanami.NewClient(cfg)
+		if err != nil {
+			return err
+		}
+
+		featureID := args[0]
+		contextPath := ensureLeadingSlash(featureContextStr)
+
+		// Parse payload if provided
+		var payload string
+		if featureData != "" {
+			var payloadData interface{}
+			if err := parseJSONData(featureData, &payloadData); err != nil {
+				return fmt.Errorf("invalid JSON payload: %w", err)
+			}
+			payloadBytes, _ := marshalJSON(payloadData)
+			payload = string(payloadBytes)
+		}
+
+		ctx := context.Background()
+
+		// For JSON output, use Identity mapper
+		if outputFormat == "json" {
+			raw, err := izanami.TestFeature(client, ctx, cfg.Tenant, featureID, contextPath, featureUser, date, payload, izanami.Identity)
+			if err != nil {
+				return err
+			}
+			return output.PrintRawJSON(cmd.OutOrStdout(), raw, compactJSON)
+		}
+
+		// For table output, use ParseFeatureTestResult mapper
+		result, err := izanami.TestFeature(client, ctx, cfg.Tenant, featureID, contextPath, featureUser, date, payload, izanami.ParseFeatureTestResult)
+		if err != nil {
+			return err
+		}
+
+		return output.PrintTo(cmd.OutOrStdout(), result, output.Format(outputFormat))
+	},
+}
+
+// featuresTestDefinitionCmd tests a feature definition without saving
+var featuresTestDefinitionCmd = &cobra.Command{
+	Use:   "test-definition",
+	Short: "Test a feature definition without saving",
+	Long: `Test how a feature definition would evaluate without saving it.
+
+This is useful for validating feature configurations before creating or updating
+a feature, especially for complex activation conditions.
+
+The --date flag defaults to "now" (current time). You can also specify an ISO 8601
+datetime (e.g., 2025-01-01T00:00:00Z) to test activation at a specific time.
+
+The --data flag is required and should contain the feature definition to test.
+Required fields: name, enabled, resultType (boolean|string|number), conditions (array).
+
+Examples:
+  # Test a simple boolean feature definition
+  iz admin features test-definition --data '{"name":"test","enabled":true,"resultType":"boolean","conditions":[]}'
+
+  # Test with user context
+  iz admin features test-definition --data @feature.json --user user123
+
+  # Test with specific date
+  iz admin features test-definition --data @feature.json --date 2025-06-01T12:00:00Z`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := cfg.Validate(); err != nil {
+			return err
+		}
+		if err := cfg.ValidateTenant(); err != nil {
+			return err
+		}
+
+		if !cmd.Flags().Changed("data") {
+			return fmt.Errorf("--data is required (feature definition to test)")
+		}
+
+		// Handle "now" shortcut
+		date := featureTestDate
+		if date == "now" {
+			date = nowISO8601()
+		}
+
+		var definition interface{}
+		if err := parseJSONData(featureData, &definition); err != nil {
+			return fmt.Errorf("invalid JSON feature definition: %w", err)
+		}
+
+		client, err := izanami.NewClient(cfg)
+		if err != nil {
+			return err
+		}
+
+		ctx := context.Background()
+
+		// For JSON output, use Identity mapper
+		if outputFormat == "json" {
+			raw, err := izanami.TestFeatureDefinition(client, ctx, cfg.Tenant, featureUser, date, definition, izanami.Identity)
+			if err != nil {
+				return err
+			}
+			return output.PrintRawJSON(cmd.OutOrStdout(), raw, compactJSON)
+		}
+
+		// For table output, use ParseFeatureTestResult mapper
+		result, err := izanami.TestFeatureDefinition(client, ctx, cfg.Tenant, featureUser, date, definition, izanami.ParseFeatureTestResult)
+		if err != nil {
+			return err
+		}
+
+		return output.PrintTo(cmd.OutOrStdout(), result, output.Format(outputFormat))
+	},
+}
+
+// featuresTestBulkCmd tests multiple features at once
+var featuresTestBulkCmd = &cobra.Command{
+	Use:   "test-bulk",
+	Short: "Test multiple features at once",
+	Long: `Test evaluation of multiple features for a given context.
+
+This is useful for understanding how a set of features will behave for a specific
+user and context, useful for debugging and validation.
+
+You can filter which features to test using:
+  --features: Feature IDs or names (names require --project to be set)
+  --projects: All features in these projects
+  --one-tag-in: Features with at least one of these tags
+  --all-tags-in: Features with all of these tags
+  --no-tag-in: Features without any of these tags
+
+At least one filter (--features or --projects) is required.
+
+When using feature names instead of UUIDs, the --project flag must be set (via flag
+or config) so that feature names can be resolved to UUIDs.
+
+Examples:
+  # Test specific features by UUID
+  iz admin features test-bulk --features feat-uuid1,feat-uuid2 --user user123
+
+  # Test features by name (requires --project)
+  iz admin features test-bulk --project my-project --features my-feature,other-feature
+
+  # Test all features in a project
+  iz admin features test-bulk --projects proj1 --user user123
+
+  # Test with context
+  iz admin features test-bulk --projects proj1 --context /prod --user user123
+
+  # Test with tag filters
+  iz admin features test-bulk --projects proj1 --one-tag-in beta,experimental`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := cfg.Validate(); err != nil {
+			return err
+		}
+		if err := cfg.ValidateTenant(); err != nil {
+			return err
+		}
+
+		if len(featureTestFeatures) == 0 && len(featureTestProjects) == 0 {
+			return fmt.Errorf("at least one filter is required: --features or --projects")
+		}
+
+		// Handle "now" shortcut for date
+		date := featureTestDate
+		if date == "now" {
+			date = nowISO8601()
+		}
+
+		client, err := izanami.NewClient(cfg)
+		if err != nil {
+			return err
+		}
+
+		ctx := context.Background()
+
+		// Resolve feature names to UUIDs if project is available
+		resolvedFeatures, err := resolveFeaturesToUUIDs(ctx, client, cfg.Tenant, cfg.Project, featureTestFeatures, cfg.Verbose, cmd)
+		if err != nil {
+			return err
+		}
+
+		// Resolve project names to UUIDs
+		resolvedProjects, err := resolveProjectsToUUIDs(ctx, client, cfg.Tenant, featureTestProjects, cfg.Verbose, cmd)
+		if err != nil {
+			return err
+		}
+
+		// Resolve tag names to UUIDs
+		resolvedOneTagIn, err := resolveTagsToUUIDs(ctx, client, cfg.Tenant, featureTestOneTagIn, cfg.Verbose, cmd)
+		if err != nil {
+			return err
+		}
+		resolvedAllTagsIn, err := resolveTagsToUUIDs(ctx, client, cfg.Tenant, featureTestAllTagsIn, cfg.Verbose, cmd)
+		if err != nil {
+			return err
+		}
+		resolvedNoTagIn, err := resolveTagsToUUIDs(ctx, client, cfg.Tenant, featureTestNoTagIn, cfg.Verbose, cmd)
+		if err != nil {
+			return err
+		}
+
+		request := izanami.TestFeaturesAdminRequest{
+			User:      featureUser,
+			Date:      date,
+			Features:  resolvedFeatures,
+			Projects:  resolvedProjects,
+			Context:   featureContextStr,
+			OneTagIn:  resolvedOneTagIn,
+			AllTagsIn: resolvedAllTagsIn,
+			NoTagIn:   resolvedNoTagIn,
+		}
+
+		// For JSON output, use Identity mapper
+		if outputFormat == "json" {
+			raw, err := izanami.TestFeaturesBulk(client, ctx, cfg.Tenant, request, izanami.Identity)
+			if err != nil {
+				return err
+			}
+			return output.PrintRawJSON(cmd.OutOrStdout(), raw, compactJSON)
+		}
+
+		// For table output, use ParseFeatureTestResults mapper
+		results, err := izanami.TestFeaturesBulk(client, ctx, cfg.Tenant, request, izanami.ParseFeatureTestResults)
+		if err != nil {
+			return err
+		}
+
+		// Convert to table view
+		tableView := results.ToTableView()
+		return output.PrintTo(cmd.OutOrStdout(), tableView, output.Table)
+	},
+}
+
 func init() {
 	// List flags
 	featuresListCmd.Flags().StringVar(&featureTag, "tag", "", "Filter by tag (server-side)")
@@ -405,4 +751,36 @@ func init() {
 
 	// Delete flags
 	featuresDeleteCmd.Flags().BoolVarP(&featuresDeleteForce, "force", "f", false, "Skip confirmation prompt")
+
+	// Patch flags
+	featuresPatchCmd.Flags().StringVar(&featureData, "data", "", "JSON patch data (from file with @file.json, stdin with -, or inline)")
+	featuresPatchCmd.MarkFlagRequired("data")
+
+	// Test flags (for testing an existing feature)
+	featuresTestCmd.Flags().StringVar(&featureUser, "user", "", "User ID for evaluation")
+	featuresTestCmd.Flags().StringVar(&featureTestDate, "date", "now", "Evaluation date (ISO 8601 format or 'now')")
+	featuresTestCmd.Flags().StringVar(&featureContextStr, "context", "", "Context path for evaluation")
+	featuresTestCmd.Flags().StringVar(&featureData, "data", "", "JSON payload for WASM features (from file with @file.json, stdin with -, or inline)")
+
+	// Test-definition flags
+	featuresTestDefinitionCmd.Flags().StringVar(&featureUser, "user", "", "User ID for evaluation")
+	featuresTestDefinitionCmd.Flags().StringVar(&featureTestDate, "date", "now", "Evaluation date (ISO 8601 format or 'now')")
+	featuresTestDefinitionCmd.Flags().StringVar(&featureData, "data", "", "Feature definition JSON (from file with @file.json, stdin with -, or inline) - required")
+	featuresTestDefinitionCmd.MarkFlagRequired("data")
+
+	// Test-bulk flags
+	featuresTestBulkCmd.Flags().StringVar(&featureUser, "user", "", "User ID for evaluation")
+	featuresTestBulkCmd.Flags().StringVar(&featureTestDate, "date", "now", "Evaluation date (ISO 8601 format or 'now')")
+	featuresTestBulkCmd.Flags().StringVar(&featureContextStr, "context", "", "Context path for evaluation")
+	featuresTestBulkCmd.Flags().StringSliceVar(&featureTestFeatures, "features", []string{}, "Feature IDs to test (comma-separated)")
+	featuresTestBulkCmd.Flags().StringSliceVar(&featureTestProjects, "projects", []string{}, "Project IDs to test all features from (comma-separated)")
+	featuresTestBulkCmd.Flags().StringSliceVar(&featureTestOneTagIn, "one-tag-in", []string{}, "Features must have at least one of these tags (comma-separated)")
+	featuresTestBulkCmd.Flags().StringSliceVar(&featureTestAllTagsIn, "all-tags-in", []string{}, "Features must have all of these tags (comma-separated)")
+	featuresTestBulkCmd.Flags().StringSliceVar(&featureTestNoTagIn, "no-tag-in", []string{}, "Features must not have any of these tags (comma-separated)")
+
+	// Register new subcommands with featuresCmd
+	featuresCmd.AddCommand(featuresPatchCmd)
+	featuresCmd.AddCommand(featuresTestCmd)
+	featuresCmd.AddCommand(featuresTestDefinitionCmd)
+	featuresCmd.AddCommand(featuresTestBulkCmd)
 }

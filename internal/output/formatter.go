@@ -196,6 +196,11 @@ func printStructTable(w io.Writer, val reflect.Value) error {
 			continue
 		}
 
+		// Skip empty fields with omitempty tag
+		if shouldOmitEmpty(field, fieldVal) {
+			continue
+		}
+
 		// Get field name (properly parsed from JSON tag)
 		fieldName := getFieldName(field)
 
@@ -252,6 +257,22 @@ func getFieldName(field reflect.StructField) string {
 		return parseJSONTag(jsonTag)
 	}
 	return field.Name
+}
+
+// shouldOmitEmpty checks if a field should be omitted based on omitempty tag and zero value
+func shouldOmitEmpty(field reflect.StructField, val reflect.Value) bool {
+	jsonTag := field.Tag.Get("json")
+	if jsonTag == "" || jsonTag == "-" {
+		return false
+	}
+
+	// Check if omitempty is present in the tag
+	if !strings.Contains(jsonTag, "omitempty") {
+		return false
+	}
+
+	// Check if the value is zero/empty
+	return val.IsZero()
 }
 
 // extractHeaders extracts field names from a struct type

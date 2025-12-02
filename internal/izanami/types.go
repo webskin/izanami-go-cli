@@ -184,6 +184,76 @@ type CheckFeaturesRequest struct {
 	Payload    string   `json:"-"` // Optional JSON payload for POST requests (script features)
 }
 
+// FeaturePatch represents a batch patch operation for features
+type FeaturePatch struct {
+	Op    string      `json:"op"`              // "replace" or "remove"
+	Path  string      `json:"path"`            // "/featureId/field" or "/featureId"
+	Value interface{} `json:"value,omitempty"` // Required for replace, omitted for remove
+}
+
+// TestFeaturesAdminRequest represents the request parameters for admin bulk feature testing
+type TestFeaturesAdminRequest struct {
+	User      string   `json:"-"` // Query param: user ID for evaluation
+	Date      string   `json:"-"` // Query param: ISO 8601 datetime
+	Features  []string `json:"-"` // Query param: feature IDs to test
+	Projects  []string `json:"-"` // Query param: project IDs to test
+	Context   string   `json:"-"` // Query param: context path
+	OneTagIn  []string `json:"-"` // Query param: at least one tag must match
+	AllTagsIn []string `json:"-"` // Query param: all tags must match
+	NoTagIn   []string `json:"-"` // Query param: none of these tags can match
+}
+
+// FeatureTestResult represents the result of a feature test operation
+type FeatureTestResult struct {
+	Name    string      `json:"name"`
+	Active  interface{} `json:"active"`          // Can be bool, string, or number
+	Project string      `json:"project"`
+	Error   string      `json:"error,omitempty"` // Only present if evaluation failed
+}
+
+// FeatureTestResults is a map of feature IDs to their test results (for bulk testing)
+type FeatureTestResults map[string]FeatureTestResult
+
+// FeatureTestResultTableView represents a feature test result for table display
+type FeatureTestResultTableView struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Active  string `json:"active"` // Formatted and colored
+	Project string `json:"project"`
+	Error   string `json:"error,omitempty"`
+}
+
+// ToTableView converts FeatureTestResults to a sorted slice for table display
+func (r FeatureTestResults) ToTableView() []FeatureTestResultTableView {
+	var result []FeatureTestResultTableView
+
+	for id, testResult := range r {
+		// Create activation table view to reuse color formatting
+		atv := ActivationTableView{
+			ID:      id,
+			Name:    testResult.Name,
+			Active:  testResult.Active,
+			Project: testResult.Project,
+		}
+
+		row := FeatureTestResultTableView{
+			ID:      id,
+			Name:    testResult.Name,
+			Active:  atv.FormatActive(),
+			Project: testResult.Project,
+			Error:   testResult.Error,
+		}
+		result = append(result, row)
+	}
+
+	// Sort by name for consistent output
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Name < result[j].Name
+	})
+
+	return result
+}
+
 // EventsWatchRequest represents the request parameters for watching events
 type EventsWatchRequest struct {
 	User              string   `json:"-"` // Query param: user for feature evaluation (default: "*")

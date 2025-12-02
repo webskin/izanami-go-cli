@@ -48,10 +48,14 @@ var (
 	ParseLogsResponse  = UnmarshalPtr[LogsResponse]()
 
 	// Feature check mappers
-	ParseFeatureCheckResult      = UnmarshalPtr[FeatureCheckResult]()
+	ParseFeatureCheckResult        = UnmarshalPtr[FeatureCheckResult]()
 	ParseActivationsWithConditions = Unmarshal[ActivationsWithConditions]()
 
+	// Feature test mappers (admin API)
+	ParseFeatureTestResult  = UnmarshalPtr[FeatureTestResult]()
+	ParseFeatureTestResults = Unmarshal[FeatureTestResults]()
+
 	// Utility mappers
-	ParseHealthStatus   = UnmarshalPtr[HealthStatus]()
-	ParseSearchResults  = Unmarshal[[]SearchResult]()
+	ParseHealthStatus  = UnmarshalPtr[HealthStatus]()
+	ParseSearchResults = Unmarshal[[]SearchResult]()
 )
