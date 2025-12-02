@@ -501,7 +501,7 @@ type APIKey struct {
 	Admin        bool     `json:"admin"`
 }
 
-// Webhook represents a webhook configuration
+// Webhook represents a webhook configuration (simplified for creation/update)
 type Webhook struct {
 	ID           string            `json:"id"`
 	Name         string            `json:"name"`
@@ -515,6 +515,47 @@ type Webhook struct {
 	Context      string            `json:"context,omitempty"`
 	User         string            `json:"user,omitempty"`
 	BodyTemplate string            `json:"bodyTemplate,omitempty"`
+}
+
+// WebhookFeatureRef represents a feature reference in webhook response
+type WebhookFeatureRef struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Project string `json:"project"`
+}
+
+// WebhookProjectRef represents a project reference in webhook response
+type WebhookProjectRef struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// WebhookFull represents the full webhook response with nested objects
+type WebhookFull struct {
+	ID           string              `json:"id"`
+	Name         string              `json:"name"`
+	Description  string              `json:"description"`
+	URL          string              `json:"url"`
+	Headers      map[string]string   `json:"headers,omitempty"`
+	Features     []WebhookFeatureRef `json:"features,omitempty"`
+	Projects     []WebhookProjectRef `json:"projects,omitempty"`
+	Enabled      bool                `json:"enabled"`
+	Global       bool                `json:"global"`
+	Context      string              `json:"context,omitempty"`
+	User         string              `json:"user,omitempty"`
+	BodyTemplate string              `json:"bodyTemplate,omitempty"`
+}
+
+// UserWithWebhookRight represents a user with webhook access rights
+type UserWithWebhookRight struct {
+	Username      string  `json:"username"`
+	Email         string  `json:"email"`
+	UserType      string  `json:"userType"`
+	Admin         bool    `json:"admin"`
+	DefaultTenant *string `json:"defaultTenant,omitempty"` // Nullable
+	TenantAdmin   bool    `json:"tenantAdmin"`
+	DefaultRight  *string `json:"defaultRight,omitempty"` // Nullable
+	Right         string  `json:"right,omitempty"`        // Read, Write, Admin
 }
 
 // User represents an Izanami user

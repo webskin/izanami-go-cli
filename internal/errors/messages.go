@@ -71,6 +71,13 @@ const (
 	MsgFailedToCreateTag = "failed to create tag"
 	MsgFailedToDeleteTag = "failed to delete tag"
 
+	// Webhook error messages
+	MsgFailedToListWebhooks     = "failed to list webhooks"
+	MsgFailedToCreateWebhook    = "failed to create webhook"
+	MsgFailedToUpdateWebhook    = "failed to update webhook"
+	MsgFailedToDeleteWebhook    = "failed to delete webhook"
+	MsgFailedToListWebhookUsers = "failed to list webhook users"
+
 	// User error messages
 	MsgFailedToListUsers            = "failed to list users"
 	MsgFailedToGetUser              = "failed to get user"

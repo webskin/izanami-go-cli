@@ -55,6 +55,10 @@ var (
 	ParseFeatureTestResult  = UnmarshalPtr[FeatureTestResult]()
 	ParseFeatureTestResults = Unmarshal[FeatureTestResults]()
 
+	// Webhook mappers
+	ParseWebhooks     = Unmarshal[[]WebhookFull]()
+	ParseWebhookUsers = Unmarshal[[]UserWithWebhookRight]()
+
 	// Utility mappers
 	ParseHealthStatus  = UnmarshalPtr[HealthStatus]()
 	ParseSearchResults = Unmarshal[[]SearchResult]()
