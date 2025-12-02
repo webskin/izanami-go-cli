@@ -3,25 +3,32 @@ package cmd
 import (
 	"bufio"
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/webskin/izanami-go-cli/internal/izanami"
+	"github.com/webskin/izanami-go-cli/internal/utils"
 	"golang.org/x/term"
 )
 
 var (
 	loginSessionName string
 	loginPassword    string
+	loginOIDC        bool
+	loginToken       string
+	loginNoBrowser   bool
 )
 
 // loginCmd represents the login command
 var loginCmd = &cobra.Command{
-	Use:   "login <url> <username>",
+	Use:   "login [url] [username]",
 	Short: "Login to Izanami and save session",
 	Long: `Login to an Izanami instance and save the authentication session.
 
@@ -29,14 +36,34 @@ The command will prompt for your password securely, authenticate with
 Izanami, and save the JWT token for future use. The session is automatically
 linked to a profile, and the profile becomes active.
 
+OIDC Authentication:
+  Use --oidc flag to authenticate via your organization's identity provider.
+  This opens a browser for OIDC login, then you copy the JWT token back to the CLI.
+
 Examples:
-  # Login to local Izanami
+  # Login with username/password
   iz login http://localhost:9000 RESERVED_ADMIN_USER
 
-  # Login to production (will prompt for profile name if new URL)
-  iz login https://izanami.prod.com admin`,
-	Args: cobra.ExactArgs(2),
+  # Login via OIDC (opens browser)
+  iz login --oidc --url https://izanami.prod.com
+
+  # Login via OIDC with token directly (for scripting)
+  iz login --oidc --url https://izanami.prod.com --token "eyJhbGciOiJIUzI1NiIs..."
+
+  # Login via OIDC without opening browser
+  iz login --oidc --url https://izanami.prod.com --no-browser`,
+	Args: cobra.MaximumNArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// OIDC flow
+		if loginOIDC {
+			return runOIDCLogin(cmd, args)
+		}
+
+		// Traditional username/password flow requires both args
+		if len(args) < 2 {
+			return fmt.Errorf("username/password login requires: iz login <url> <username>\nFor OIDC login, use: iz login --oidc --url <url>")
+		}
+
 		baseURL := args[0]
 		username := args[1]
 
@@ -275,9 +302,238 @@ func updateProfileWithSession(profileName, baseURL, username, sessionName string
 	return nil
 }
 
+// runOIDCLogin handles the OIDC authentication flow
+//
+// TODO: Future enhancement - Automatic callback flow (requires Izanami server changes)
+// Once the Izanami server supports dynamic redirect_uri parameter, implement:
+// 1. Start a local HTTP callback server on localhost (random or specified port)
+// 2. Build OIDC URL with redirect_uri=http://localhost:<port>/callback
+// 3. Open browser to OIDC URL
+// 4. Wait for callback with JWT token (with timeout)
+// 5. Extract token from callback request and save session
+// 6. Shutdown callback server
+//
+// This would eliminate the need for manual token copy-paste.
+// See TODO_OIDC.md for detailed implementation plan.
+//
+// New flags needed:
+//   --callback-port int    Local callback server port (default: random available port)
+//   --timeout duration     Authentication timeout (default: 5m)
+//
+// Security considerations:
+//   - Callback server must only bind to localhost (127.0.0.1)
+//   - Use state parameter to prevent CSRF attacks
+//   - Consider PKCE (Proof Key for Code Exchange) for additional security
+func runOIDCLogin(cmd *cobra.Command, args []string) error {
+	// Get base URL from args or global flag
+	var oidcBaseURL string
+	if len(args) > 0 {
+		oidcBaseURL = args[0]
+	} else if baseURL != "" {
+		// Use global --url flag
+		oidcBaseURL = baseURL
+	} else if cfg != nil && cfg.BaseURL != "" {
+		// Fall back to config
+		oidcBaseURL = cfg.BaseURL
+	}
+
+	if oidcBaseURL == "" {
+		return fmt.Errorf("base URL is required (use --url flag, provide as argument, or set IZ_BASE_URL)")
+	}
+
+	// Normalize URL
+	oidcBaseURL = strings.TrimSuffix(oidcBaseURL, "/")
+
+	// If token provided via flag, skip browser flow
+	if loginToken != "" {
+		return saveOIDCSession(cmd, oidcBaseURL, loginToken)
+	}
+
+	// Build OIDC URL
+	oidcURL := oidcBaseURL + "/api/admin/openid-connect"
+
+	// Open browser (unless --no-browser)
+	if !loginNoBrowser {
+		fmt.Fprintln(cmd.OutOrStderr(), "Opening browser for OIDC authentication...")
+		if err := utils.OpenBrowser(oidcURL); err != nil {
+			fmt.Fprintf(cmd.OutOrStderr(), "Warning: Could not open browser: %v\n", err)
+		}
+	}
+
+	// Print URL for manual access
+	fmt.Fprintf(cmd.OutOrStderr(), "\nIf browser doesn't open, visit:\n  %s\n\n", oidcURL)
+	fmt.Fprintln(cmd.OutOrStderr(), "After authenticating, copy the JWT token from your browser cookies.")
+	fmt.Fprintln(cmd.OutOrStderr(), "(In browser DevTools > Application > Cookies > look for 'token')")
+	fmt.Fprint(cmd.OutOrStderr(), "\nPaste the token here: ")
+
+	// TODO: Future enhancement - Replace manual token paste with callback server
+	// When callback flow is implemented, this section would become:
+	//   result, err := callbackServer.WaitForCallback(timeout)
+	//   if err != nil { return err }
+	//   token = result.Token
+
+	// Read token from stdin (current manual flow)
+	reader := bufio.NewReader(cmd.InOrStdin())
+	token, err := reader.ReadString('\n')
+	if err != nil {
+		return fmt.Errorf("failed to read token: %w", err)
+	}
+	token = strings.TrimSpace(token)
+
+	if token == "" {
+		return fmt.Errorf("no token provided")
+	}
+
+	// Save session
+	return saveOIDCSession(cmd, oidcBaseURL, token)
+}
+
+// saveOIDCSession saves the OIDC session with the provided token
+func saveOIDCSession(cmd *cobra.Command, baseURL, token string) error {
+	// Decode username from JWT
+	username := decodeJWTUsername(token)
+
+	// Determine profile name
+	profileName, profileCreated, profileUpdated := determineProfileName(cmd.InOrStdin(), cmd.OutOrStderr(), baseURL, username)
+
+	// Generate session name
+	sessionName := loginSessionName
+	if sessionName == "" {
+		sessionName = fmt.Sprintf("%s-%s-oidc", profileName, username)
+	}
+
+	// Load existing sessions
+	sessions, err := izanami.LoadSessions()
+	if err != nil {
+		sessions = &izanami.Sessions{Sessions: make(map[string]*izanami.Session)}
+	}
+
+	// Create session
+	session := &izanami.Session{
+		URL:       baseURL,
+		Username:  username,
+		JwtToken:  token,
+		CreatedAt: time.Now(),
+	}
+
+	// Check if session with same URL+username exists and overwrite
+	for name, existingSession := range sessions.Sessions {
+		if existingSession.URL == baseURL && existingSession.Username == username {
+			if name != sessionName {
+				delete(sessions.Sessions, name)
+				fmt.Fprintf(cmd.OutOrStderr(), "   Replacing existing session: %s\n", name)
+			}
+			break
+		}
+	}
+
+	sessions.AddSession(sessionName, session)
+
+	if err := sessions.Save(); err != nil {
+		return fmt.Errorf("failed to save session: %w", err)
+	}
+
+	// Update profile with session reference
+	if err := updateProfileWithSession(profileName, baseURL, username, sessionName); err != nil {
+		fmt.Fprintf(cmd.OutOrStderr(), "\n   Warning: failed to update profile: %v\n", err)
+	}
+
+	// Success messages
+	fmt.Fprintf(cmd.OutOrStderr(), "\n✅ Successfully logged in as %s (via OIDC)\n", username)
+	fmt.Fprintf(cmd.OutOrStderr(), "   Session saved as: %s\n", sessionName)
+
+	// Profile messages
+	if profileCreated {
+		fmt.Fprintf(cmd.OutOrStderr(), "\n✓ Profile '%s' created\n", profileName)
+	} else if profileUpdated {
+		fmt.Fprintf(cmd.OutOrStderr(), "\n   Using existing profile: %s (session updated)\n", profileName)
+	}
+
+	if profileName != "" {
+		activeProfile, _ := izanami.GetActiveProfileName()
+		if activeProfile == profileName {
+			fmt.Fprintf(cmd.OutOrStderr(), "   Active profile: %s\n", profileName)
+		}
+	}
+
+	fmt.Fprintf(cmd.OutOrStderr(), "\nYou can now run commands like:\n")
+	fmt.Fprintf(cmd.OutOrStderr(), "  iz admin tenants list\n")
+	fmt.Fprintf(cmd.OutOrStderr(), "  iz features list --tenant <tenant>\n")
+
+	return nil
+}
+
+// decodeJWTUsername extracts the username from a JWT token without validation
+func decodeJWTUsername(token string) string {
+	// JWT is base64(header).base64(payload).signature
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return "oidc-user"
+	}
+
+	// Decode payload (second part)
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		// Try standard base64 with padding
+		payload, err = base64.StdEncoding.DecodeString(parts[1])
+		if err != nil {
+			return "oidc-user"
+		}
+	}
+
+	// Parse claims
+	var claims struct {
+		Sub      string `json:"sub"`
+		Name     string `json:"name"`
+		Username string `json:"username"`
+		Email    string `json:"email"`
+	}
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return "oidc-user"
+	}
+
+	// Return first non-empty field
+	if claims.Username != "" {
+		return claims.Username
+	}
+	if claims.Name != "" {
+		return claims.Name
+	}
+	if claims.Sub != "" {
+		return claims.Sub
+	}
+	if claims.Email != "" {
+		// Use email prefix as username
+		if at := strings.Index(claims.Email, "@"); at > 0 {
+			return claims.Email[:at]
+		}
+		return claims.Email
+	}
+
+	return "oidc-user"
+}
+
+// generateOIDCSessionName generates a session name from the base URL
+func generateOIDCSessionName(baseURL string) string {
+	u, err := url.Parse(baseURL)
+	if err != nil {
+		return "oidc-session"
+	}
+	return u.Host + "-oidc"
+}
+
 func init() {
 	rootCmd.AddCommand(loginCmd)
 
 	loginCmd.Flags().StringVar(&loginSessionName, "name", "", "Custom name for this session")
 	loginCmd.Flags().StringVar(&loginPassword, "password", "", "Password (not recommended, use prompt instead)")
+
+	// OIDC flags
+	loginCmd.Flags().BoolVar(&loginOIDC, "oidc", false, "Use OIDC authentication")
+	loginCmd.Flags().StringVar(&loginToken, "token", "", "JWT token for OIDC (skip browser flow)")
+	loginCmd.Flags().BoolVar(&loginNoBrowser, "no-browser", false, "Don't open browser, just print URL")
+
+	// TODO: Future enhancement - Add callback server flags when Izanami supports dynamic redirect_uri
+	// loginCmd.Flags().IntVar(&loginCallbackPort, "callback-port", 0, "Local callback server port (0 = random)")
+	// loginCmd.Flags().DurationVar(&loginTimeout, "timeout", 5*time.Minute, "OIDC authentication timeout")
 }
