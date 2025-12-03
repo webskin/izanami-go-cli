@@ -7,12 +7,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/webskin/izanami-go-cli/internal/auth"
 	"github.com/webskin/izanami-go-cli/internal/izanami"
 	"github.com/webskin/izanami-go-cli/internal/utils"
 	"golang.org/x/term"
@@ -24,6 +26,8 @@ var (
 	loginOIDC        bool
 	loginToken       string
 	loginNoBrowser   bool
+	loginTimeout     time.Duration
+	loginPollInterval time.Duration
 )
 
 // loginCmd represents the login command
@@ -38,19 +42,26 @@ linked to a profile, and the profile becomes active.
 
 OIDC Authentication:
   Use --oidc flag to authenticate via your organization's identity provider.
-  This opens a browser for OIDC login, then you copy the JWT token back to the CLI.
+  The CLI opens a browser for OIDC login, then automatically polls the server
+  until authentication completes - no manual token copying needed!
+
+  If the server doesn't support automatic polling, you can use --token flag
+  to provide the JWT token directly.
 
 Examples:
   # Login with username/password
   iz login http://localhost:9000 RESERVED_ADMIN_USER
 
-  # Login via OIDC (opens browser)
+  # Login via OIDC (opens browser, waits for authentication)
   iz login --oidc --url https://izanami.prod.com
 
-  # Login via OIDC with token directly (for scripting)
+  # Login via OIDC with custom timeout
+  iz login --oidc --url https://izanami.prod.com --timeout 10m
+
+  # Login via OIDC with token directly (for scripting or fallback)
   iz login --oidc --url https://izanami.prod.com --token "eyJhbGciOiJIUzI1NiIs..."
 
-  # Login via OIDC without opening browser
+  # Login via OIDC without opening browser (prints URL only)
   iz login --oidc --url https://izanami.prod.com --no-browser`,
 	Args: cobra.MaximumNArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -67,6 +78,13 @@ Examples:
 		baseURL := args[0]
 		username := args[1]
 
+		// Verbose: Log login attempt details
+		if verbose {
+			fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Login attempt:\n")
+			fmt.Fprintf(cmd.OutOrStderr(), "[verbose]   URL: %s\n", baseURL)
+			fmt.Fprintf(cmd.OutOrStderr(), "[verbose]   Username: %s\n", username)
+		}
+
 		// Get password
 		password := loginPassword
 		if password == "" {
@@ -77,6 +95,13 @@ Examples:
 				return fmt.Errorf("failed to read password: %w", err)
 			}
 			password = string(passwordBytes)
+			if verbose {
+				fmt.Fprintf(cmd.OutOrStderr(), "[verbose]   Password: <redacted> (%d chars)\n", len(password))
+			}
+		} else {
+			if verbose {
+				fmt.Fprintf(cmd.OutOrStderr(), "[verbose]   Password: <redacted from flag> (%d chars)\n", len(password))
+			}
 		}
 
 		if password == "" {
@@ -85,10 +110,21 @@ Examples:
 
 		// Login to Izanami
 		fmt.Fprintf(cmd.OutOrStderr(), "Authenticating with %s...\n", baseURL)
+		if verbose {
+			fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Sending POST request to %s/api/admin/login\n", baseURL)
+		}
 
 		token, err := performLogin(baseURL, username, password)
 		if err != nil {
+			if verbose {
+				fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Login failed: %v\n", err)
+			}
 			return fmt.Errorf("login failed: %w", err)
+		}
+
+		if verbose {
+			fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Login successful\n")
+			fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Token received: <redacted> (%d chars)\n", len(token))
 		}
 
 		// Determine profile name first (create or find existing)
@@ -96,6 +132,11 @@ Examples:
 
 		// Generate deterministic session name: <profile-name>-<username>-session
 		sessionName := fmt.Sprintf("%s-%s-session", profileName, username)
+
+		if verbose {
+			fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Profile: %s (created: %v, updated: %v)\n", profileName, profileCreated, profileUpdated)
+			fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Session name: %s\n", sessionName)
+		}
 
 		// Save session
 		sessions, err := izanami.LoadSessions()
@@ -302,96 +343,243 @@ func updateProfileWithSession(profileName, baseURL, username, sessionName string
 	return nil
 }
 
-// runOIDCLogin handles the OIDC authentication flow
+// runOIDCLogin handles the OIDC authentication flow with automatic token polling.
 //
-// TODO: Future enhancement - Automatic callback flow (requires Izanami server changes)
-// Once the Izanami server supports dynamic redirect_uri parameter, implement:
-// 1. Start a local HTTP callback server on localhost (random or specified port)
-// 2. Build OIDC URL with redirect_uri=http://localhost:<port>/callback
-// 3. Open browser to OIDC URL
-// 4. Wait for callback with JWT token (with timeout)
-// 5. Extract token from callback request and save session
-// 6. Shutdown callback server
+// # Authentication Flow
 //
-// This would eliminate the need for manual token copy-paste.
-// See feat-0003-oidc-login.md for detailed implementation plan.
+// This function implements a state-based token polling mechanism that works
+// with any OIDC provider without requiring special configuration.
 //
-// New flags needed:
-//   --callback-port int    Local callback server port (default: random available port)
-//   --timeout duration     Authentication timeout (default: 5m)
+// ## Flow Decision
 //
-// Security considerations:
-//   - Callback server must only bind to localhost (127.0.0.1)
-//   - Use state parameter to prevent CSRF attacks
-//   - Consider PKCE (Proof Key for Code Exchange) for additional security
+//  1. If --token flag provided: Skip browser, use token directly
+//  2. If server supports /api/admin/cli-login: Use automatic polling flow
+//  3. If server doesn't support it: Error with hint to use --token flag
+//
+// ## Automatic Polling Flow
+//
+//  1. Generate cryptographically secure state (32 bytes, base64url)
+//  2. Open browser to /api/admin/cli-login?state={state}
+//  3. Server redirects to OIDC provider with state prefixed as "cli:{state}"
+//  4. User authenticates in browser
+//  5. Server detects CLI flow, stores token for pickup
+//  6. CLI polls /api/admin/cli-token?state={state} every 2 seconds
+//  7. On success: Save session, display success message
+//  8. On timeout/error: Display error with fallback instructions
+//
+// ## Security Features
+//
+//   - 256-bit state entropy prevents guessing attacks
+//   - Single-use tokens (deleted from server after retrieval)
+//   - Rate limiting on polling (60 requests/minute per state)
+//   - Short TTLs (5 min pending auth, 2 min token pickup window)
+//
+// See features/feat-0003-oidc-login.md for full specification.
 func runOIDCLogin(cmd *cobra.Command, args []string) error {
+	// Verbose: Log OIDC login start
+	if verbose {
+		fmt.Fprintf(cmd.OutOrStderr(), "[verbose] OIDC login flow initiated\n")
+	}
+
 	// Get base URL from args or global flag
 	var oidcBaseURL string
 	if len(args) > 0 {
 		oidcBaseURL = args[0]
+		if verbose {
+			fmt.Fprintf(cmd.OutOrStderr(), "[verbose] URL source: command argument\n")
+		}
 	} else if baseURL != "" {
 		// Use global --url flag
 		oidcBaseURL = baseURL
+		if verbose {
+			fmt.Fprintf(cmd.OutOrStderr(), "[verbose] URL source: --url flag\n")
+		}
 	} else if cfg != nil && cfg.BaseURL != "" {
 		// Fall back to config
 		oidcBaseURL = cfg.BaseURL
+		if verbose {
+			fmt.Fprintf(cmd.OutOrStderr(), "[verbose] URL source: config file\n")
+		}
 	}
 
 	if oidcBaseURL == "" {
 		return fmt.Errorf("base URL is required (use --url flag, provide as argument, or set IZ_BASE_URL)")
 	}
 
-	// Normalize URL
+	// Normalize URL - remove trailing slash for consistent URL building
 	oidcBaseURL = strings.TrimSuffix(oidcBaseURL, "/")
 
-	// If token provided via flag, skip browser flow
+	if verbose {
+		fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Base URL: %s\n", oidcBaseURL)
+	}
+
+	// If token provided via flag, skip browser flow entirely
+	// This is useful for scripting or when automatic polling isn't available
 	if loginToken != "" {
+		if verbose {
+			fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Token provided via --token flag, skipping browser flow\n")
+			fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Token: <redacted> (%d chars)\n", len(loginToken))
+		}
 		return saveOIDCSession(cmd, oidcBaseURL, loginToken)
 	}
 
-	// Build OIDC URL
-	oidcURL := oidcBaseURL + "/api/admin/openid-connect"
-
-	// Open browser (unless --no-browser)
-	if !loginNoBrowser {
-		fmt.Fprintln(cmd.OutOrStderr(), "Opening browser for OIDC authentication...")
-		if err := utils.OpenBrowser(oidcURL); err != nil {
-			fmt.Fprintf(cmd.OutOrStderr(), "Warning: Could not open browser: %v\n", err)
+	// Check if server supports CLI OIDC authentication (state-based polling)
+	// This endpoint was added in Izanami server to support CLI tools
+	ctx := context.Background()
+	if verbose {
+		fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Checking server support for CLI OIDC authentication...\n")
+		fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Probing: GET %s/api/admin/cli-login?state=check\n", oidcBaseURL)
+	}
+	if !auth.CheckServerSupport(ctx, oidcBaseURL) {
+		if verbose {
+			fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Server does not support CLI OIDC (endpoint returned 404)\n")
 		}
+		// Server doesn't support CLI auth - provide helpful error with workaround
+		return fmt.Errorf(`server does not support CLI OIDC authentication
+
+The server at %s does not have the /api/admin/cli-login endpoint
+required for automatic token polling.
+
+Workaround: Authenticate manually and provide the token:
+  1. Visit: %s/api/admin/openid-connect
+  2. After login, copy the JWT from browser cookies (DevTools > Application > Cookies > 'token')
+  3. Run: iz login --oidc --url %s --token "your-jwt-token"`, oidcBaseURL, oidcBaseURL, oidcBaseURL)
 	}
 
-	// Print URL for manual access
-	fmt.Fprintf(cmd.OutOrStderr(), "\nIf browser doesn't open, visit:\n  %s\n\n", oidcURL)
-	fmt.Fprintln(cmd.OutOrStderr(), "After authenticating, copy the JWT token from your browser cookies.")
-	fmt.Fprintln(cmd.OutOrStderr(), "(In browser DevTools > Application > Cookies > look for 'token')")
-	fmt.Fprint(cmd.OutOrStderr(), "\nPaste the token here: ")
+	if verbose {
+		fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Server supports CLI OIDC authentication\n")
+	}
 
-	// TODO: Future enhancement - Replace manual token paste with callback server
-	// When callback flow is implemented, this section would become:
-	//   result, err := callbackServer.WaitForCallback(timeout)
-	//   if err != nil { return err }
-	//   token = result.Token
-
-	// Read token from stdin (current manual flow)
-	reader := bufio.NewReader(cmd.InOrStdin())
-	token, err := reader.ReadString('\n')
+	// Generate cryptographically secure state for this authentication session
+	// This state correlates the browser authentication with this CLI session
+	state, err := auth.GenerateState()
 	if err != nil {
-		return fmt.Errorf("failed to read token: %w", err)
-	}
-	token = strings.TrimSpace(token)
-
-	if token == "" {
-		return fmt.Errorf("no token provided")
+		return fmt.Errorf("failed to generate authentication state: %w", err)
 	}
 
-	// Save session
+	if verbose {
+		fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Generated state: %s (256-bit entropy)\n", state)
+	}
+
+	// Build CLI login URL with state parameter
+	// The server will store this state and redirect to OIDC provider
+	loginURL := fmt.Sprintf("%s/api/admin/cli-login?state=%s", oidcBaseURL, state)
+
+	if verbose {
+		fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Login URL: %s\n", loginURL)
+	}
+
+	// IMPORTANT: Initiate login via HTTP request BEFORE opening browser
+	// This creates the pending auth on the server, avoiding a race condition where
+	// polling starts before the browser request creates the pending auth.
+	if verbose {
+		fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Initiating login to create pending auth...\n")
+	}
+
+	redirectURL, err := initiateCliLogin(ctx, loginURL)
+	if err != nil {
+		return fmt.Errorf("failed to initiate CLI login: %w", err)
+	}
+
+	if verbose {
+		fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Pending auth created, redirect URL: %s\n", redirectURL)
+	}
+
+	// Open browser to the OIDC provider (redirect URL) unless --no-browser flag is set
+	browserURL := redirectURL
+	if browserURL == "" {
+		// Fallback to original login URL if no redirect (shouldn't happen)
+		browserURL = loginURL
+	}
+
+	if !loginNoBrowser {
+		if verbose {
+			fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Opening browser (--no-browser: false)\n")
+		}
+		fmt.Fprintln(cmd.OutOrStderr(), "Opening browser for OIDC authentication...")
+		if err := utils.OpenBrowser(browserURL); err != nil {
+			// Browser open failed - not fatal, user can manually visit URL
+			fmt.Fprintf(cmd.OutOrStderr(), "Warning: Could not open browser: %v\n", err)
+			if verbose {
+				fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Browser open error: %v\n", err)
+			}
+		} else if verbose {
+			fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Browser opened successfully\n")
+		}
+	} else if verbose {
+		fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Browser opening disabled (--no-browser: true)\n")
+	}
+
+	// Print URL for manual access (in case browser doesn't open or user prefers it)
+	fmt.Fprintf(cmd.OutOrStderr(), "\nIf browser doesn't open, visit:\n  %s\n\n", browserURL)
+
+	// Start spinner to indicate we're waiting for authentication
+	// The spinner animates if terminal supports it, otherwise shows static message
+	spinner := auth.NewSpinner(cmd.OutOrStderr(), "Waiting for authentication")
+	spinner.Start()
+
+	// Create token poller with configured interval
+	// The poller will repeatedly check /api/admin/cli-token until token is ready
+	pollInterval := loginPollInterval
+	if pollInterval <= 0 {
+		pollInterval = auth.DefaultPollInterval
+	}
+	poller := auth.NewTokenPoller(oidcBaseURL, state, pollInterval)
+
+	// Wait for token with timeout
+	// The poller handles rate limiting and transient errors automatically
+	timeout := loginTimeout
+	if timeout <= 0 {
+		timeout = auth.DefaultTimeout
+	}
+
+	if verbose {
+		fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Polling configuration:\n")
+		fmt.Fprintf(cmd.OutOrStderr(), "[verbose]   Endpoint: %s/api/admin/cli-token?state=%s\n", oidcBaseURL, state)
+		fmt.Fprintf(cmd.OutOrStderr(), "[verbose]   Poll interval: %v\n", pollInterval)
+		fmt.Fprintf(cmd.OutOrStderr(), "[verbose]   Timeout: %v\n", timeout)
+		fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Starting polling loop...\n")
+	}
+
+	token, err := poller.WaitForToken(ctx, timeout)
+
+	// Stop spinner before showing result
+	if err != nil {
+		// Authentication failed - show error with helpful fallback instructions
+		if verbose {
+			fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Polling failed: %v\n", err)
+		}
+		spinner.Error(fmt.Sprintf("Authentication failed: %v", err))
+		fmt.Fprintf(cmd.OutOrStderr(), "\nTip: You can manually provide a token using:\n")
+		fmt.Fprintf(cmd.OutOrStderr(), "  iz login --oidc --url %s --token \"your-jwt-token\"\n", oidcBaseURL)
+		return err
+	}
+
+	// Authentication successful!
+	if verbose {
+		fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Polling successful, token received\n")
+		fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Token: <redacted> (%d chars)\n", len(token))
+	}
+	spinner.Success("Authentication complete!")
+
+	// Save the session with the received token
 	return saveOIDCSession(cmd, oidcBaseURL, token)
 }
 
 // saveOIDCSession saves the OIDC session with the provided token
 func saveOIDCSession(cmd *cobra.Command, baseURL, token string) error {
+	if verbose {
+		fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Saving OIDC session...\n")
+		fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Base URL: %s\n", baseURL)
+		fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Token: <redacted> (%d chars)\n", len(token))
+	}
+
 	// Decode username from JWT
 	username := decodeJWTUsername(token)
+
+	if verbose {
+		fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Decoded username from JWT: %s\n", username)
+	}
 
 	// Determine profile name
 	profileName, profileCreated, profileUpdated := determineProfileName(cmd.InOrStdin(), cmd.OutOrStderr(), baseURL, username)
@@ -402,10 +590,20 @@ func saveOIDCSession(cmd *cobra.Command, baseURL, token string) error {
 		sessionName = fmt.Sprintf("%s-%s-oidc", profileName, username)
 	}
 
+	if verbose {
+		fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Profile: %s (created: %v, updated: %v)\n", profileName, profileCreated, profileUpdated)
+		fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Session name: %s\n", sessionName)
+	}
+
 	// Load existing sessions
 	sessions, err := izanami.LoadSessions()
 	if err != nil {
+		if verbose {
+			fmt.Fprintf(cmd.OutOrStderr(), "[verbose] No existing sessions found, creating new session store\n")
+		}
 		sessions = &izanami.Sessions{Sessions: make(map[string]*izanami.Session)}
+	} else if verbose {
+		fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Loaded %d existing sessions\n", len(sessions.Sessions))
 	}
 
 	// Create session
@@ -420,6 +618,9 @@ func saveOIDCSession(cmd *cobra.Command, baseURL, token string) error {
 	for name, existingSession := range sessions.Sessions {
 		if existingSession.URL == baseURL && existingSession.Username == username {
 			if name != sessionName {
+				if verbose {
+					fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Found existing session with same URL+username: %s\n", name)
+				}
 				delete(sessions.Sessions, name)
 				fmt.Fprintf(cmd.OutOrStderr(), "   Replacing existing session: %s\n", name)
 			}
@@ -429,8 +630,16 @@ func saveOIDCSession(cmd *cobra.Command, baseURL, token string) error {
 
 	sessions.AddSession(sessionName, session)
 
+	if verbose {
+		fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Saving session to disk...\n")
+	}
+
 	if err := sessions.Save(); err != nil {
 		return fmt.Errorf("failed to save session: %w", err)
+	}
+
+	if verbose {
+		fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Session saved successfully\n")
 	}
 
 	// Update profile with session reference
@@ -461,6 +670,50 @@ func saveOIDCSession(cmd *cobra.Command, baseURL, token string) error {
 	fmt.Fprintf(cmd.OutOrStderr(), "  iz features list --tenant <tenant>\n")
 
 	return nil
+}
+
+// initiateCliLogin makes an HTTP request to the CLI login endpoint to create
+// the pending auth on the server. This must be called BEFORE opening the browser
+// to avoid a race condition where polling starts before the pending auth exists.
+//
+// Returns the redirect URL (to the OIDC provider) that should be opened in the browser.
+func initiateCliLogin(ctx context.Context, loginURL string) (string, error) {
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+		// Don't follow redirects - we want to capture the redirect URL
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, loginURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to initiate login: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// We expect a 302 redirect to the OIDC provider
+	if resp.StatusCode == http.StatusFound || resp.StatusCode == http.StatusTemporaryRedirect ||
+		resp.StatusCode == http.StatusMovedPermanently || resp.StatusCode == http.StatusSeeOther {
+		location := resp.Header.Get("Location")
+		if location != "" {
+			return location, nil
+		}
+		return "", fmt.Errorf("redirect response missing Location header")
+	}
+
+	// If we get 400, the state format might be invalid
+	if resp.StatusCode == http.StatusBadRequest {
+		return "", fmt.Errorf("invalid state format (server returned 400)")
+	}
+
+	// Any other response is unexpected
+	return "", fmt.Errorf("unexpected response from server (status %d)", resp.StatusCode)
 }
 
 // decodeJWTUsername extracts the username from a JWT token without validation
@@ -530,10 +783,8 @@ func init() {
 
 	// OIDC flags
 	loginCmd.Flags().BoolVar(&loginOIDC, "oidc", false, "Use OIDC authentication")
-	loginCmd.Flags().StringVar(&loginToken, "token", "", "JWT token for OIDC (skip browser flow)")
+	loginCmd.Flags().StringVar(&loginToken, "token", "", "JWT token for OIDC (skip browser/polling flow)")
 	loginCmd.Flags().BoolVar(&loginNoBrowser, "no-browser", false, "Don't open browser, just print URL")
-
-	// TODO: Future enhancement - Add callback server flags when Izanami supports dynamic redirect_uri
-	// loginCmd.Flags().IntVar(&loginCallbackPort, "callback-port", 0, "Local callback server port (0 = random)")
-	// loginCmd.Flags().DurationVar(&loginTimeout, "timeout", 5*time.Minute, "OIDC authentication timeout")
+	loginCmd.Flags().DurationVar(&loginTimeout, "timeout", 5*time.Minute, "OIDC authentication timeout")
+	loginCmd.Flags().DurationVar(&loginPollInterval, "poll-interval", 2*time.Second, "Token polling interval")
 }

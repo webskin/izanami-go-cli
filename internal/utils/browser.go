@@ -35,9 +35,10 @@ func OpenBrowser(url string) error {
 		args = []string{url}
 	case "linux":
 		if isWSL() {
-			// In WSL, use cmd.exe to open Windows browser
-			cmd = "cmd.exe"
-			args = []string{"/c", "start", "", url}
+			// In WSL, use rundll32.exe to open Windows browser
+			// This avoids shell interpretation issues with special chars like & in URLs
+			cmd = "rundll32.exe"
+			args = []string{"url.dll,FileProtocolHandler", url}
 		} else {
 			cmd = "xdg-open"
 			args = []string{url}
