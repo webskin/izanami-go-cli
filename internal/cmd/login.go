@@ -314,7 +314,7 @@ func updateProfileWithSession(profileName, baseURL, username, sessionName string
 // 6. Shutdown callback server
 //
 // This would eliminate the need for manual token copy-paste.
-// See TODO_OIDC.md for detailed implementation plan.
+// See feat-0003-oidc-login.md for detailed implementation plan.
 //
 // New flags needed:
 //   --callback-port int    Local callback server port (default: random available port)
