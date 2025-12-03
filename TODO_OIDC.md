@@ -1,5 +1,27 @@
 # OIDC Login Implementation - Authorization Code + Local Callback Server
 
+## Current Implementation Status
+
+✅ **Phase 1 (Implemented)**: Token copy-paste flow
+- `iz login --oidc --url <url>` opens browser for OIDC authentication
+- User manually copies JWT token from browser cookies
+- User pastes token into CLI
+- Session saved to `~/.izsessions`
+
+⏳ **Phase 2 (Future)**: Automatic callback flow (requires Izanami server changes)
+- Local callback server receives token automatically
+- No manual copy-paste needed
+
+### Comparison
+
+| Aspect | Current (Copy-Paste) | Future (Callback) |
+|--------|---------------------|-------------------|
+| User steps | 5 (open, login, find cookie, copy, paste) | 2 (open, login) |
+| Error-prone | Yes (wrong token, typos) | No |
+| Server changes | None required | Required |
+| Headless support | Yes (`--token` flag) | Yes (`--token` flag) |
+| WSL support | ✅ Opens Windows browser | ✅ Opens Windows browser |
+
 ## Overview
 
 Implement OIDC authentication for the Izanami CLI using the Authorization Code flow with a local callback server. This is the standard approach used by major CLI tools like `gcloud`, `az`, `gh`, and `aws`.
@@ -165,8 +187,20 @@ func (cs *CallbackServer) Shutdown() {
 
 ### Step 3: Browser Opening Utility
 
+✅ **Implemented** in `internal/utils/browser.go` with WSL support:
+
 ```go
-// internal/auth/browser.go
+// internal/utils/browser.go
+
+// isWSL detects if running in Windows Subsystem for Linux
+func isWSL() bool {
+    data, err := os.ReadFile("/proc/version")
+    if err != nil {
+        return false
+    }
+    version := strings.ToLower(string(data))
+    return strings.Contains(version, "microsoft") || strings.Contains(version, "wsl")
+}
 
 func OpenBrowser(url string) error {
     var cmd string
@@ -180,8 +214,14 @@ func OpenBrowser(url string) error {
         cmd = "open"
         args = []string{url}
     case "linux":
-        cmd = "xdg-open"
-        args = []string{url}
+        if isWSL() {
+            // In WSL, use cmd.exe to open Windows browser
+            cmd = "cmd.exe"
+            args = []string{"/c", "start", "", url}
+        } else {
+            cmd = "xdg-open"
+            args = []string{url}
+        }
     default:
         return fmt.Errorf("unsupported platform")
     }
@@ -238,7 +278,7 @@ func OIDCLogin(serverURL string, port int, timeout time.Duration) error {
 
 The current Izanami OIDC flow may need modifications to support CLI authentication:
 
-### Option A: Custom Redirect URI Support
+### Option A: Custom Redirect URI Support (Recommended)
 
 Izanami needs to accept a `redirect_uri` parameter that allows redirecting to `localhost` after successful authentication.
 
@@ -251,6 +291,51 @@ After successful OIDC authentication, Izanami redirects to:
 http://localhost:8085/callback?token=<jwt_or_session_token>
 ```
 
+#### Required Server Changes (Scala)
+
+In `LoginController.scala`, the `openIdConnect` method needs to:
+
+1. Accept optional `redirect_uri` query parameter
+2. Validate it's a localhost URL (security)
+3. Store it in session for use after OIDC completes
+4. Redirect to it with token after successful authentication
+
+```scala
+def openIdConnect: Action[AnyContent] = Action.async { implicit request =>
+  // Get CLI redirect URI if provided (for CLI authentication)
+  val cliRedirectUri = request.getQueryString("redirect_uri")
+
+  // Validate redirect_uri is localhost only (security)
+  val isValidCliRedirect = cliRedirectUri.exists(uri =>
+    uri.startsWith("http://localhost:") || uri.startsWith("http://127.0.0.1:")
+  )
+
+  // ... existing OIDC flow ...
+
+  // Store CLI redirect in session if valid
+  val sessionWithCliRedirect = if (isValidCliRedirect) {
+    session + ("cli_redirect_uri" -> cliRedirectUri.get)
+  } else session
+
+  Redirect(authorizeUrl).withSession(sessionWithCliRedirect)
+}
+
+def openIdCodeReturn: Action[AnyContent] = Action.async { implicit request =>
+  // ... existing token exchange logic ...
+
+  // After successful authentication, check for CLI redirect
+  request.session.get("cli_redirect_uri") match {
+    case Some(cliRedirect) =>
+      // Redirect to CLI's localhost callback with token
+      Redirect(s"$cliRedirect?token=$jwtToken")
+        .withSession(request.session - "cli_redirect_uri")
+    case None =>
+      // Normal web flow - set cookie and redirect to frontend
+      NoContent.withCookies(Cookie(name = "token", value = jwtToken, ...))
+  }
+}
+```
+
 ### Option B: CLI-Specific Endpoint
 
 Create a dedicated endpoint for CLI authentication:
@@ -261,12 +346,14 @@ GET /api/admin/cli-auth/start?callback_port=8085
 
 This initiates the OIDC flow and handles the callback internally, then redirects to the CLI's localhost server.
 
-### Option C: Token Exchange
+### Option C: Token Exchange (Device Flow)
 
 After browser authentication completes:
 1. Izanami shows the user a one-time code
 2. CLI polls or receives the code
 3. CLI exchanges code for API token
+
+This follows [RFC 8628 - Device Authorization Grant](https://tools.ietf.org/html/rfc8628).
 
 ## Security Considerations
 
