@@ -162,7 +162,7 @@ func TestClient_Export_ServerError(t *testing.T) {
 	assert.Empty(t, result)
 }
 
-func TestClient_Import(t *testing.T) {
+func TestClient_ImportV2(t *testing.T) {
 	// Create a temporary file for import
 	tempDir := t.TempDir()
 	importFile := filepath.Join(tempDir, "import.ndjson")
@@ -175,6 +175,7 @@ func TestClient_Import(t *testing.T) {
 	server := mockServer(t, func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/api/admin/tenants/test-tenant/_import", r.URL.Path)
 		assert.Equal(t, "POST", r.Method)
+		assert.Equal(t, "2", r.URL.Query().Get("version"))
 
 		// Verify multipart form data
 		contentType := r.Header.Get("Content-Type")
@@ -195,10 +196,8 @@ func TestClient_Import(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(ImportStatus{
-			ID:      "import-123",
-			Status:  "COMPLETED",
-			Message: "Import completed successfully",
+		json.NewEncoder(w).Encode(ImportV2Response{
+			Messages: []string{"Import completed successfully"},
 		})
 	})
 	defer server.Close()
@@ -214,15 +213,15 @@ func TestClient_Import(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	status, err := client.Import(ctx, "test-tenant", importFile, ImportRequest{})
+	result, err := client.ImportV2(ctx, "test-tenant", importFile, ImportRequest{})
 
 	assert.NoError(t, err)
-	assert.NotNil(t, status)
-	assert.Equal(t, "import-123", status.ID)
-	assert.Equal(t, "COMPLETED", status.Status)
+	assert.NotNil(t, result)
+	assert.Len(t, result.Messages, 1)
+	assert.Equal(t, "Import completed successfully", result.Messages[0])
 }
 
-func TestClient_Import_WithAllOptions(t *testing.T) {
+func TestClient_ImportV1_WithAllOptions(t *testing.T) {
 	// Create a temporary file for import
 	tempDir := t.TempDir()
 	importFile := filepath.Join(tempDir, "import.ndjson")
@@ -232,9 +231,9 @@ func TestClient_Import_WithAllOptions(t *testing.T) {
 	server := mockServer(t, func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/api/admin/tenants/test-tenant/_import", r.URL.Path)
 
-		// Verify query parameters
+		// Verify query parameters for V1 import
 		query := r.URL.Query()
-		assert.Equal(t, "2", query.Get("version"))
+		assert.Equal(t, "1", query.Get("version"))
 		assert.Equal(t, "OVERWRITE", query.Get("conflict"))
 		assert.Equal(t, "Europe/Paris", query.Get("timezone"))
 		assert.Equal(t, "true", query.Get("deduceProject"))
@@ -244,10 +243,9 @@ func TestClient_Import_WithAllOptions(t *testing.T) {
 		assert.Equal(t, "true", query.Get("inlineScript"))
 
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(ImportStatus{
-			ID:     "import-456",
-			Status: "COMPLETED",
+		w.WriteHeader(http.StatusAccepted)
+		json.NewEncoder(w).Encode(ImportV1Response{
+			ID: "import-456",
 		})
 	})
 	defer server.Close()
@@ -264,7 +262,6 @@ func TestClient_Import_WithAllOptions(t *testing.T) {
 
 	ctx := context.Background()
 	importReq := ImportRequest{
-		Version:         2,
 		Conflict:        "OVERWRITE",
 		Timezone:        "Europe/Paris",
 		DeduceProject:   true,
@@ -274,14 +271,14 @@ func TestClient_Import_WithAllOptions(t *testing.T) {
 		InlineScript:    true,
 	}
 
-	status, err := client.Import(ctx, "test-tenant", importFile, importReq)
+	result, err := client.ImportV1(ctx, "test-tenant", importFile, importReq)
 
 	assert.NoError(t, err)
-	assert.NotNil(t, status)
-	assert.Equal(t, "import-456", status.ID)
+	assert.NotNil(t, result)
+	assert.Equal(t, "import-456", result.ID)
 }
 
-func TestClient_Import_PartialOptions(t *testing.T) {
+func TestClient_ImportV2_WithConflict(t *testing.T) {
 	// Create a temporary file for import
 	tempDir := t.TempDir()
 	importFile := filepath.Join(tempDir, "import.ndjson")
@@ -291,23 +288,14 @@ func TestClient_Import_PartialOptions(t *testing.T) {
 	server := mockServer(t, func(w http.ResponseWriter, r *http.Request) {
 		query := r.URL.Query()
 
-		// Only conflict and timezone should be set
+		// V2 import only uses version and conflict
+		assert.Equal(t, "2", query.Get("version"))
 		assert.Equal(t, "SKIP", query.Get("conflict"))
-		assert.Equal(t, "UTC", query.Get("timezone"))
-
-		// These should not be set (empty/zero values)
-		assert.Empty(t, query.Get("version"))
-		assert.Empty(t, query.Get("deduceProject"))
-		assert.Empty(t, query.Get("create"))
-		assert.Empty(t, query.Get("project"))
-		assert.Empty(t, query.Get("projectPartSize"))
-		assert.Empty(t, query.Get("inlineScript"))
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(ImportStatus{
-			ID:     "import-789",
-			Status: "COMPLETED",
+		json.NewEncoder(w).Encode(ImportV2Response{
+			Messages: []string{"Import completed"},
 		})
 	})
 	defer server.Close()
@@ -325,16 +313,15 @@ func TestClient_Import_PartialOptions(t *testing.T) {
 	ctx := context.Background()
 	importReq := ImportRequest{
 		Conflict: "SKIP",
-		Timezone: "UTC",
 	}
 
-	status, err := client.Import(ctx, "test-tenant", importFile, importReq)
+	result, err := client.ImportV2(ctx, "test-tenant", importFile, importReq)
 
 	assert.NoError(t, err)
-	assert.NotNil(t, status)
+	assert.NotNil(t, result)
 }
 
-func TestClient_Import_NotFound(t *testing.T) {
+func TestClient_ImportV2_NotFound(t *testing.T) {
 	// Create a temporary file for import
 	tempDir := t.TempDir()
 	importFile := filepath.Join(tempDir, "import.ndjson")
@@ -359,13 +346,13 @@ func TestClient_Import_NotFound(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	status, err := client.Import(ctx, "nonexistent-tenant", importFile, ImportRequest{})
+	result, err := client.ImportV2(ctx, "nonexistent-tenant", importFile, ImportRequest{})
 
 	assert.Error(t, err)
-	assert.Nil(t, status)
+	assert.Nil(t, result)
 }
 
-func TestClient_Import_Unauthorized(t *testing.T) {
+func TestClient_ImportV2_Unauthorized(t *testing.T) {
 	// Create a temporary file for import
 	tempDir := t.TempDir()
 	importFile := filepath.Join(tempDir, "import.ndjson")
@@ -390,13 +377,13 @@ func TestClient_Import_Unauthorized(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	status, err := client.Import(ctx, "test-tenant", importFile, ImportRequest{})
+	result, err := client.ImportV2(ctx, "test-tenant", importFile, ImportRequest{})
 
 	assert.Error(t, err)
-	assert.Nil(t, status)
+	assert.Nil(t, result)
 }
 
-func TestClient_Import_BadRequest(t *testing.T) {
+func TestClient_ImportV2_BadRequest(t *testing.T) {
 	// Create a temporary file for import
 	tempDir := t.TempDir()
 	importFile := filepath.Join(tempDir, "import.ndjson")
@@ -421,13 +408,13 @@ func TestClient_Import_BadRequest(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	status, err := client.Import(ctx, "test-tenant", importFile, ImportRequest{})
+	result, err := client.ImportV2(ctx, "test-tenant", importFile, ImportRequest{})
 
 	assert.Error(t, err)
-	assert.Nil(t, status)
+	assert.Nil(t, result)
 }
 
-func TestClient_Import_ServerError(t *testing.T) {
+func TestClient_ImportV2_ServerError(t *testing.T) {
 	// Create a temporary file for import
 	tempDir := t.TempDir()
 	importFile := filepath.Join(tempDir, "import.ndjson")
@@ -452,13 +439,13 @@ func TestClient_Import_ServerError(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	status, err := client.Import(ctx, "test-tenant", importFile, ImportRequest{})
+	result, err := client.ImportV2(ctx, "test-tenant", importFile, ImportRequest{})
 
 	assert.Error(t, err)
-	assert.Nil(t, status)
+	assert.Nil(t, result)
 }
 
-func TestClient_Import_Status201Created(t *testing.T) {
+func TestClient_ImportV2_Conflict(t *testing.T) {
 	// Create a temporary file for import
 	tempDir := t.TempDir()
 	importFile := filepath.Join(tempDir, "import.ndjson")
@@ -467,10 +454,10 @@ func TestClient_Import_Status201Created(t *testing.T) {
 
 	server := mockServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated) // 201 instead of 200
-		json.NewEncoder(w).Encode(ImportStatus{
-			ID:     "import-created",
-			Status: "COMPLETED",
+		w.WriteHeader(http.StatusConflict) // 409 Conflict
+		json.NewEncoder(w).Encode(ImportV2Response{
+			Messages:  []string{"Some items imported"},
+			Conflicts: []string{"feature-1 already exists", "feature-2 already exists"},
 		})
 	})
 	defer server.Close()
@@ -486,14 +473,16 @@ func TestClient_Import_Status201Created(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	status, err := client.Import(ctx, "test-tenant", importFile, ImportRequest{})
+	result, err := client.ImportV2(ctx, "test-tenant", importFile, ImportRequest{})
 
-	assert.NoError(t, err)
-	assert.NotNil(t, status)
-	assert.Equal(t, "import-created", status.ID)
+	// Should return error but also populate result
+	assert.Error(t, err)
+	assert.NotNil(t, result)
+	assert.Len(t, result.Conflicts, 2)
+	assert.Contains(t, result.Conflicts[0], "feature-1")
 }
 
-func TestClient_Import_ConflictOptions(t *testing.T) {
+func TestClient_ImportV2_ConflictOptions(t *testing.T) {
 	conflictOptions := []string{"FAIL", "SKIP", "OVERWRITE"}
 
 	for _, conflict := range conflictOptions {
@@ -508,9 +497,8 @@ func TestClient_Import_ConflictOptions(t *testing.T) {
 
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
-				json.NewEncoder(w).Encode(ImportStatus{
-					ID:     "import-" + conflict,
-					Status: "COMPLETED",
+				json.NewEncoder(w).Encode(ImportV2Response{
+					Messages: []string{"Import completed with " + conflict},
 				})
 			})
 			defer server.Close()
@@ -526,13 +514,51 @@ func TestClient_Import_ConflictOptions(t *testing.T) {
 			require.NoError(t, err)
 
 			ctx := context.Background()
-			status, err := client.Import(ctx, "test-tenant", importFile, ImportRequest{
+			result, err := client.ImportV2(ctx, "test-tenant", importFile, ImportRequest{
 				Conflict: conflict,
 			})
 
 			assert.NoError(t, err)
-			assert.NotNil(t, status)
-			assert.Equal(t, "import-"+conflict, status.ID)
+			assert.NotNil(t, result)
+			assert.Contains(t, result.Messages[0], conflict)
 		})
 	}
+}
+
+func TestClient_GetImportStatus(t *testing.T) {
+	server := mockServer(t, func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/admin/tenants/test-tenant/_import/import-123", r.URL.Path)
+		assert.Equal(t, "GET", r.Method)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(ImportV1Status{
+			ID:       "import-123",
+			Status:   "Success",
+			Features: 10,
+			Users:    5,
+			Scripts:  2,
+			Keys:     3,
+		})
+	})
+	defer server.Close()
+
+	config := &Config{
+		BaseURL:  server.URL,
+		Username: "test-user",
+		JwtToken: "test-jwt-token",
+		Timeout:  30,
+	}
+
+	client, err := NewClient(config)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	status, err := client.GetImportStatus(ctx, "test-tenant", "import-123")
+
+	assert.NoError(t, err)
+	assert.NotNil(t, status)
+	assert.Equal(t, "import-123", status.ID)
+	assert.Equal(t, "Success", status.Status)
+	assert.Equal(t, 10, status.Features)
 }

@@ -770,15 +770,30 @@ type ImportRequest struct {
 	InlineScript    bool   `json:"inlineScript,omitempty"`    // Whether to inline WASM scripts
 }
 
-// ImportStatus represents the status of an import operation
-type ImportStatus struct {
-	ID         string    `json:"id"`
-	Status     string    `json:"status"` // PENDING, RUNNING, COMPLETED, FAILED
-	Message    string    `json:"message,omitempty"`
-	Progress   int       `json:"progress,omitempty"`
-	Total      int       `json:"total,omitempty"`
-	StartedAt  time.Time `json:"startedAt,omitempty"`
-	FinishedAt time.Time `json:"finishedAt,omitempty"`
+// ImportV2Response represents the response from a V2 import operation
+// V2 imports are synchronous and return immediately with messages
+type ImportV2Response struct {
+	Messages  []string `json:"messages"`            // Import messages (always present)
+	Conflicts []string `json:"conflicts,omitempty"` // Conflict details (only on HTTP 409)
+}
+
+// ImportV1Response represents the response from a V1 import operation
+// V1 imports are asynchronous - server returns an ID to poll for status
+type ImportV1Response struct {
+	ID string `json:"id"` // Import job ID to poll for status
+}
+
+// ImportV1Status represents the status of an async V1 import operation
+// Use GetImportStatus to poll this after initiating a V1 import
+type ImportV1Status struct {
+	ID                  string   `json:"id"`
+	Status              string   `json:"status"` // Pending, Success, Failed
+	Features            int      `json:"features,omitempty"`
+	Users               int      `json:"users,omitempty"`
+	Scripts             int      `json:"scripts,omitempty"`
+	Keys                int      `json:"keys,omitempty"`
+	IncompatibleScripts []string `json:"incompatibleScripts,omitempty"`
+	Errors              []string `json:"errors,omitempty"`
 }
 
 // HealthStatus represents the health status of Izanami
