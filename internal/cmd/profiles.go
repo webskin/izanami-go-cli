@@ -622,6 +622,90 @@ var profileSetCmd = &cobra.Command{
 	},
 }
 
+// profileUnsetCmd represents the profile unset command
+var profileUnsetCmd = &cobra.Command{
+	Use:   "unset <key>",
+	Short: "Remove a value from active profile",
+	Long: `Remove a configuration value from the active profile.
+
+This clears the specified key in the active profile.
+
+Valid keys:
+  base-url                       Izanami server URL
+  tenant                         Default tenant name
+  project                        Default project name
+  context                        Default context path
+  session                        Session name reference
+  personal-access-token          Personal access token
+  personal-access-token-username Username for PAT authentication
+  client-id                      Client ID for API authentication
+  client-secret                  Client secret for API authentication
+
+Examples:
+  iz profiles unset project
+  iz profiles unset personal-access-token`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		key := args[0]
+
+		// Validate key
+		if _, valid := profileSettableKeys[key]; !valid {
+			// Build valid keys list for error message
+			keys := make([]string, 0, len(profileSettableKeys))
+			for k := range profileSettableKeys {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+			return fmt.Errorf("invalid key '%s'.\n\nValid keys:\n  %s", key, strings.Join(keys, "\n  "))
+		}
+
+		// Get active profile name
+		profileName, err := izanami.GetActiveProfileName()
+		if err != nil {
+			return err
+		}
+		if profileName == "" {
+			return fmt.Errorf("no active profile. Use 'iz profiles use <name>' to select a profile first")
+		}
+
+		// Get existing profile
+		profile, err := izanami.GetProfile(profileName)
+		if err != nil {
+			return err
+		}
+
+		// Clear the specified field
+		switch key {
+		case "session":
+			profile.Session = ""
+		case "base-url":
+			profile.BaseURL = ""
+		case "tenant":
+			profile.Tenant = ""
+		case "project":
+			profile.Project = ""
+		case "context":
+			profile.Context = ""
+		case "personal-access-token":
+			profile.PersonalAccessToken = ""
+		case "personal-access-token-username":
+			profile.PersonalAccessTokenUsername = ""
+		case "client-id":
+			profile.ClientID = ""
+		case "client-secret":
+			profile.ClientSecret = ""
+		}
+
+		// Save updated profile
+		if err := izanami.AddProfile(profileName, profile); err != nil {
+			return fmt.Errorf("failed to update profile: %w", err)
+		}
+
+		fmt.Fprintf(cmd.OutOrStdout(), "✓ Removed %s from profile '%s'\n", key, profileName)
+		return nil
+	},
+}
+
 // profileDeleteCmd represents the profile delete command
 var profileDeleteCmd = &cobra.Command{
 	Use:   "delete <name>",
@@ -827,6 +911,7 @@ func init() {
 	profileCmd.AddCommand(profileAddCmd)
 	profileCmd.AddCommand(profileInitCmd)
 	profileCmd.AddCommand(profileSetCmd)
+	profileCmd.AddCommand(profileUnsetCmd)
 	profileCmd.AddCommand(profileDeleteCmd)
 	profileCmd.AddCommand(profileClientKeysCmd)
 
