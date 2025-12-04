@@ -240,6 +240,9 @@ func init() {
 	adminProjectsCmd.AddCommand(adminProjectsCreateCmd)
 	adminProjectsCmd.AddCommand(adminProjectsDeleteCmd)
 
+	// Dynamic completion for project name argument
+	adminProjectsGetCmd.ValidArgsFunction = completeProjectNames
+
 	adminProjectsCreateCmd.Flags().StringVar(&projectDesc, "description", "", "Project description")
 	adminProjectsCreateCmd.Flags().StringVar(&projectData, "data", "", "JSON project data")
 	adminProjectsDeleteCmd.Flags().BoolVarP(&projectsDeleteForce, "force", "f", false, "Skip confirmation prompt")

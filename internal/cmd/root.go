@@ -139,6 +139,9 @@ func init() {
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Verbose output")
 	rootCmd.PersistentFlags().StringVarP(&outputFormat, "output", "o", "table", "Output format: json or table")
 	rootCmd.PersistentFlags().BoolVar(&compactJSON, "compact", false, "Output compact JSON (no pretty-printing)")
+
+	// Register dynamic flag completions (must be after flags are defined)
+	RegisterFlagCompletions()
 }
 
 // GetConfig returns the global configuration
