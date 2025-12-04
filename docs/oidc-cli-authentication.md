@@ -47,11 +47,11 @@ iz login --oidc --url https://izanami.example.com --token "eyJhbGciOiJIUzI1NiIs.
      │ <──────────────────────────    │ 3. Store pending auth            │
      │    302 Redirect to OIDC        │    Return redirect URL           │
      │                                │                                  │
-     │ 4. Open browser to OIDC ───────┼──────────────────────────────────>
+     │ 4. Open browser to OIDC ───────┼────────────────────────────────> │
      │                                │                                  │
      │ 5. Start polling               │                                  │
      │ ──────────────────────────>    │    6. User authenticates         │
-     │    GET /api/admin/cli-token    │ <─────────────────────────────────
+     │    GET /api/admin/cli-token    │ <─────────────────────────────── │
      │                                │    Callback with code + state    │
      │ <──────────────────────────    │                                  │
      │    202 Accepted (pending)      │ 7. Detect CLI flow (cli: prefix) │

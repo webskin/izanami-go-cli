@@ -43,7 +43,7 @@ the attacker's account:
      │                    │                      │    Gets ATTACKER's token!
      │                    │                      │                       │
      │                    │ 7. Victim is now logged in as ATTACKER       │
-     │                    │ <───────────────────│                       │
+     │                    │ <────────────────────│                       │
      │                    │                      │                       │
      ▼                    ▼                      ▼                       ▼
 
@@ -89,7 +89,7 @@ the attacker's account:
      │                    │                      │<─┘ NO! Reject!        │
      │                    │                      │                       │
      │                    │ 6. ERROR: Invalid state                      │
-     │                    │ <───────────────────│                       │
+     │                    │ <────────────────────│                       │
      │                    │                      │                       │
      ▼                    ▼                      ▼                       ▼
 
@@ -292,7 +292,7 @@ When used together, state and PKCE protect against different attack vectors:
 │   │                                                                     │   │
 │   │   Protects: Session integrity                                       │   │
 │   │   Prevents: CSRF, session fixation                                  │   │
-│   │   Binding:  Links callback to the user who initiated auth          │   │
+│   │   Binding:  Links callback to the user who initiated auth           │   │
 │   │                                                                     │   │
 │   │   ┌─────────────────────────────────────────────────────────────┐   │   │
 │   │   │                    PKCE (Code Verifier)                     │   │   │
