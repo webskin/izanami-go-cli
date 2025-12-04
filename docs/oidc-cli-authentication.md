@@ -62,7 +62,10 @@ iz login --oidc --url https://izanami.example.com --token "eyJhbGciOiJIUzI1NiIs.
      │ <──────────────────────────    │                                  │
      │    { "token": "jwt..." }       │                                  │
      │                                │                                  │
-     │ 9. Save session & use token    │                                  │
+     │                                │ 9. Delete pending auth & token   │
+     │                                │    (single-use, prevents replay) │
+     │                                │                                  │
+     │ 10. Save session & use token   │                                  │
      └────────────────────────────────┴──────────────────────────────────┘
 ```
 
@@ -98,8 +101,12 @@ iz login --oidc --url https://izanami.example.com --token "eyJhbGciOiJIUzI1NiIs.
    - `404 Not Found`: Invalid or expired state
    - `429 Too Many Requests`: Slow down (rate limited)
 
-9. **Session Saved**: The CLI receives the JWT token and saves it to your
-   session file (`~/.izsessions`).
+9. **Cleanup**: After delivering the token, the server deletes both the pending
+   auth and the stored token. This ensures tokens are single-use and prevents
+   replay attacks.
+
+10. **Session Saved**: The CLI receives the JWT token and saves it to your
+    session file (`~/.izsessions`).
 
 ## Command Options
 
