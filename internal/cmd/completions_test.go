@@ -409,3 +409,157 @@ func TestCompleter_CompleteProjectNames(t *testing.T) {
 		})
 	}
 }
+
+func TestCompleteConfigKeys(t *testing.T) {
+	tests := []struct {
+		name          string
+		args          []string
+		toComplete    string
+		wantCount     int
+		wantContains  string
+		wantDirective cobra.ShellCompDirective
+	}{
+		{
+			name:          "returns all keys when empty",
+			args:          []string{},
+			toComplete:    "",
+			wantCount:     4,
+			wantContains:  "timeout",
+			wantDirective: cobra.ShellCompDirectiveNoFileComp,
+		},
+		{
+			name:          "filters by prefix",
+			args:          []string{},
+			toComplete:    "time",
+			wantCount:     1,
+			wantContains:  "timeout",
+			wantDirective: cobra.ShellCompDirectiveNoFileComp,
+		},
+		{
+			name:          "filters output-format",
+			args:          []string{},
+			toComplete:    "output",
+			wantCount:     1,
+			wantContains:  "output-format",
+			wantDirective: cobra.ShellCompDirectiveNoFileComp,
+		},
+		{
+			name:          "no completion when arg exists",
+			args:          []string{"timeout"},
+			toComplete:    "",
+			wantCount:     0,
+			wantDirective: cobra.ShellCompDirectiveNoFileComp,
+		},
+		{
+			name:          "no matches for invalid prefix",
+			args:          []string{},
+			toComplete:    "invalid",
+			wantCount:     0,
+			wantDirective: cobra.ShellCompDirectiveNoFileComp,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, directive := completeConfigKeys(nil, tt.args, tt.toComplete)
+
+			if directive != tt.wantDirective {
+				t.Errorf("completeConfigKeys() directive = %v, want %v", directive, tt.wantDirective)
+			}
+
+			if len(got) != tt.wantCount {
+				t.Errorf("completeConfigKeys() returned %d results, want %d", len(got), tt.wantCount)
+			}
+
+			if tt.wantContains != "" && tt.wantCount > 0 {
+				found := false
+				for _, item := range got {
+					if len(item) >= len(tt.wantContains) && item[:len(tt.wantContains)] == tt.wantContains {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("completeConfigKeys() results should contain %q, got %v", tt.wantContains, got)
+				}
+			}
+		})
+	}
+}
+
+func TestCompleteProfileKeys(t *testing.T) {
+	tests := []struct {
+		name          string
+		args          []string
+		toComplete    string
+		wantCount     int
+		wantContains  string
+		wantDirective cobra.ShellCompDirective
+	}{
+		{
+			name:          "returns all keys when empty",
+			args:          []string{},
+			toComplete:    "",
+			wantCount:     9,
+			wantContains:  "tenant",
+			wantDirective: cobra.ShellCompDirectiveNoFileComp,
+		},
+		{
+			name:          "filters client keys",
+			args:          []string{},
+			toComplete:    "client",
+			wantCount:     2,
+			wantContains:  "client-id",
+			wantDirective: cobra.ShellCompDirectiveNoFileComp,
+		},
+		{
+			name:          "filters personal keys",
+			args:          []string{},
+			toComplete:    "personal",
+			wantCount:     2,
+			wantContains:  "personal-access-token",
+			wantDirective: cobra.ShellCompDirectiveNoFileComp,
+		},
+		{
+			name:          "no completion when arg exists",
+			args:          []string{"tenant"},
+			toComplete:    "",
+			wantCount:     0,
+			wantDirective: cobra.ShellCompDirectiveNoFileComp,
+		},
+		{
+			name:          "no matches for invalid prefix",
+			args:          []string{},
+			toComplete:    "invalid",
+			wantCount:     0,
+			wantDirective: cobra.ShellCompDirectiveNoFileComp,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, directive := completeProfileKeys(nil, tt.args, tt.toComplete)
+
+			if directive != tt.wantDirective {
+				t.Errorf("completeProfileKeys() directive = %v, want %v", directive, tt.wantDirective)
+			}
+
+			if len(got) != tt.wantCount {
+				t.Errorf("completeProfileKeys() returned %d results, want %d", len(got), tt.wantCount)
+			}
+
+			if tt.wantContains != "" && tt.wantCount > 0 {
+				found := false
+				for _, item := range got {
+					if len(item) >= len(tt.wantContains) && item[:len(tt.wantContains)] == tt.wantContains {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("completeProfileKeys() results should contain %q, got %v", tt.wantContains, got)
+				}
+			}
+		})
+	}
+}

@@ -462,6 +462,11 @@ func init() {
 	configCmd.AddCommand(configValidateCmd)
 	configCmd.AddCommand(configResetCmd)
 
+	// Dynamic completion for config keys (same keys for get/set/unset)
+	configSetCmd.ValidArgsFunction = completeConfigKeys
+	configGetCmd.ValidArgsFunction = completeConfigKeys
+	configUnsetCmd.ValidArgsFunction = completeConfigKeys
+
 	// Add flags
 	configListCmd.Flags().Bool("show-secrets", false, "Show sensitive values (tokens, secrets)")
 	configInitCmd.Flags().Bool("defaults", false, "Create config with defaults only (non-interactive)")

@@ -918,6 +918,10 @@ func init() {
 	// Add client-keys subcommands
 	profileClientKeysCmd.AddCommand(profileClientKeysAddCmd)
 
+	// Dynamic completion for profile keys (same keys for set/unset)
+	profileSetCmd.ValidArgsFunction = completeProfileKeys
+	profileUnsetCmd.ValidArgsFunction = completeProfileKeys
+
 	// Flags for profile delete
 	profileDeleteCmd.Flags().BoolVarP(&profileDeleteForce, "force", "f", false, "Skip confirmation prompt")
 

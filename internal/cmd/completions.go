@@ -165,6 +165,51 @@ func completeProjectNames(cmd *cobra.Command, args []string, toComplete string) 
 	return defaultCompleter.CompleteProjectNames(cmd, args, toComplete)
 }
 
+// completeConfigKeys provides completion for global config keys.
+// These are static keys that don't require API calls.
+func completeConfigKeys(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	if len(args) != 0 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	keys := []struct{ Name, Desc string }{
+		{"timeout", "Request timeout in seconds"},
+		{"verbose", "Verbose output (true/false)"},
+		{"output-format", "Default output format (table/json)"},
+		{"color", "Color output (auto/always/never)"},
+	}
+
+	return buildCompletions(keys, toComplete,
+		func(k struct{ Name, Desc string }) string { return k.Name },
+		func(k struct{ Name, Desc string }) string { return k.Desc },
+	), cobra.ShellCompDirectiveNoFileComp
+}
+
+// completeProfileKeys provides completion for profile setting keys.
+// These are static keys that don't require API calls.
+func completeProfileKeys(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	if len(args) != 0 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	keys := []struct{ Name, Desc string }{
+		{"base-url", "Izanami server URL"},
+		{"tenant", "Default tenant name"},
+		{"project", "Default project name"},
+		{"context", "Default context path"},
+		{"session", "Session name to reference"},
+		{"personal-access-token", "Personal access token"},
+		{"personal-access-token-username", "Username for PAT auth"},
+		{"client-id", "Client ID for API auth"},
+		{"client-secret", "Client secret for API auth"},
+	}
+
+	return buildCompletions(keys, toComplete,
+		func(k struct{ Name, Desc string }) string { return k.Name },
+		func(k struct{ Name, Desc string }) string { return k.Desc },
+	), cobra.ShellCompDirectiveNoFileComp
+}
+
 // RegisterFlagCompletions registers dynamic completions for global flags.
 // This should be called from root.go init() after flags are defined.
 func RegisterFlagCompletions() {
