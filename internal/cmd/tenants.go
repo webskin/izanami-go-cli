@@ -312,6 +312,9 @@ func init() {
 	adminTenantsCmd.AddCommand(adminTenantsUpdateCmd)
 	adminTenantsCmd.AddCommand(adminTenantsDeleteCmd)
 
+	// Dynamic completion for tenant name argument
+	adminTenantsGetCmd.ValidArgsFunction = completeTenantNames
+
 	adminTenantsCreateCmd.Flags().StringVar(&tenantDesc, "description", "", "Tenant description")
 	adminTenantsCreateCmd.Flags().StringVar(&tenantData, "data", "", "JSON tenant data")
 	adminTenantsUpdateCmd.Flags().StringVar(&tenantDesc, "description", "", "Tenant description")
