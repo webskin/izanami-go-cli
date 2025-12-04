@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/webskin/izanami-go-cli/internal/izanami"
+	"github.com/webskin/izanami-go-cli/internal/output"
 )
 
 var (
@@ -119,6 +120,12 @@ func runImportV2(cmd *cobra.Command, client *izanami.Client, ctx context.Context
 
 	// Handle conflict case - result is populated even on conflict error
 	if apiErr, ok := err.(*izanami.APIError); ok && apiErr.StatusCode == 409 {
+		// JSON output: return the result directly
+		if outputFormat == "json" {
+			return output.PrintTo(cmd.OutOrStdout(), result, output.JSON)
+		}
+
+		// Table output: formatted display
 		fmt.Fprintf(cmd.OutOrStderr(), "⚠️  Import completed with conflicts\n\n")
 
 		if len(result.Messages) > 0 {
@@ -147,6 +154,12 @@ func runImportV2(cmd *cobra.Command, client *izanami.Client, ctx context.Context
 		return err
 	}
 
+	// JSON output: return the result directly
+	if outputFormat == "json" {
+		return output.PrintTo(cmd.OutOrStdout(), result, output.JSON)
+	}
+
+	// Table output: formatted display
 	fmt.Fprintf(cmd.OutOrStderr(), "✅ Import completed successfully\n")
 
 	if len(result.Messages) > 0 {
@@ -174,6 +187,12 @@ func runImportV1(cmd *cobra.Command, client *izanami.Client, ctx context.Context
 		return err
 	}
 
+	// JSON output: return the result directly
+	if outputFormat == "json" {
+		return output.PrintTo(cmd.OutOrStdout(), result, output.JSON)
+	}
+
+	// Table output: formatted display
 	fmt.Fprintf(cmd.OutOrStderr(), "Import job started: %s\n", result.ID)
 	fmt.Fprintf(cmd.OutOrStderr(), "V1 imports run asynchronously. Use 'iz admin import-status %s' to check progress.\n", result.ID)
 
@@ -212,6 +231,12 @@ Examples:
 			return err
 		}
 
+		// JSON output: return the status directly
+		if outputFormat == "json" {
+			return output.PrintTo(cmd.OutOrStdout(), status, output.JSON)
+		}
+
+		// Table output: formatted display
 		switch status.Status {
 		case "Success":
 			fmt.Fprintf(cmd.OutOrStderr(), "✅ Import completed successfully\n\n")
