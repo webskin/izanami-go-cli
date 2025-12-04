@@ -91,6 +91,12 @@ func createTestConfig(t *testing.T, configPath string, profiles map[string]*izan
 			if profile.ClientSecret != "" {
 				profileMap["client-secret"] = profile.ClientSecret
 			}
+			if profile.PersonalAccessToken != "" {
+				profileMap["personal-access-token"] = profile.PersonalAccessToken
+			}
+			if profile.PersonalAccessTokenUsername != "" {
+				profileMap["personal-access-token-username"] = profile.PersonalAccessTokenUsername
+			}
 			if profile.ClientKeys != nil && len(profile.ClientKeys) > 0 {
 				profileMap["client-keys"] = profile.ClientKeys
 			}
@@ -637,6 +643,196 @@ func TestProfileSetCmd_InvalidKey(t *testing.T) {
 	err := cmd.Execute()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid key")
+}
+
+// TestProfileUnsetCmd_ClearTenant tests clearing tenant from active profile
+func TestProfileUnsetCmd_ClearTenant(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	profiles := map[string]*izanami.Profile{
+		"test": {
+			BaseURL: "http://localhost:9000",
+			Tenant:  "my-tenant",
+			Project: "my-project",
+		},
+	}
+	createTestConfig(t, paths.configPath, profiles, "test")
+
+	var buf bytes.Buffer
+	cmd, cleanup := setupProfileCommand(&buf, nil, []string{"profiles", "unset", "tenant"})
+	defer cleanup()
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	// Verify output
+	output := buf.String()
+	assert.Contains(t, output, "Removed tenant from profile 'test'")
+
+	// Verify tenant was cleared in config but other fields remain
+	data, err := os.ReadFile(paths.configPath)
+	require.NoError(t, err)
+	var config map[string]interface{}
+	yaml.Unmarshal(data, &config)
+	profilesMap := config["profiles"].(map[string]interface{})
+	profile := profilesMap["test"].(map[string]interface{})
+	_, hasTenant := profile["tenant"]
+	assert.False(t, hasTenant, "Tenant should be cleared")
+	assert.Equal(t, "my-project", profile["project"], "Project should remain")
+	assert.Equal(t, "http://localhost:9000", profile["base-url"], "BaseURL should remain")
+}
+
+// TestProfileUnsetCmd_ClearSensitiveValue tests clearing personal-access-token
+func TestProfileUnsetCmd_ClearSensitiveValue(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	profiles := map[string]*izanami.Profile{
+		"test": {
+			BaseURL:                     "http://localhost:9000",
+			PersonalAccessToken:         "secret-token-123",
+			PersonalAccessTokenUsername: "admin",
+		},
+	}
+	createTestConfig(t, paths.configPath, profiles, "test")
+
+	var buf bytes.Buffer
+	cmd, cleanup := setupProfileCommand(&buf, nil, []string{"profiles", "unset", "personal-access-token"})
+	defer cleanup()
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	// Verify output
+	output := buf.String()
+	assert.Contains(t, output, "Removed personal-access-token from profile 'test'")
+
+	// Verify token was cleared but username remains
+	data, err := os.ReadFile(paths.configPath)
+	require.NoError(t, err)
+	var config map[string]interface{}
+	yaml.Unmarshal(data, &config)
+	profilesMap := config["profiles"].(map[string]interface{})
+	profile := profilesMap["test"].(map[string]interface{})
+	_, hasToken := profile["personal-access-token"]
+	assert.False(t, hasToken, "Personal access token should be cleared")
+	assert.Equal(t, "admin", profile["personal-access-token-username"], "Username should remain")
+}
+
+// TestProfileUnsetCmd_ClearSession tests clearing session reference
+func TestProfileUnsetCmd_ClearSession(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	profiles := map[string]*izanami.Profile{
+		"test": {
+			Session: "my-session",
+			Tenant:  "my-tenant",
+		},
+	}
+	createTestConfig(t, paths.configPath, profiles, "test")
+
+	var buf bytes.Buffer
+	cmd, cleanup := setupProfileCommand(&buf, nil, []string{"profiles", "unset", "session"})
+	defer cleanup()
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	// Verify session was cleared
+	data, err := os.ReadFile(paths.configPath)
+	require.NoError(t, err)
+	var config map[string]interface{}
+	yaml.Unmarshal(data, &config)
+	profilesMap := config["profiles"].(map[string]interface{})
+	profile := profilesMap["test"].(map[string]interface{})
+	_, hasSession := profile["session"]
+	assert.False(t, hasSession, "Session should be cleared")
+	assert.Equal(t, "my-tenant", profile["tenant"], "Tenant should remain")
+}
+
+// TestProfileUnsetCmd_NoActiveProfile tests error when no active profile
+func TestProfileUnsetCmd_NoActiveProfile(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	createTestConfig(t, paths.configPath, nil, "")
+
+	var buf bytes.Buffer
+	cmd, cleanup := setupProfileCommand(&buf, nil, []string{"profiles", "unset", "tenant"})
+	defer cleanup()
+
+	err := cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no active profile")
+}
+
+// TestProfileUnsetCmd_InvalidKey tests error for invalid key
+func TestProfileUnsetCmd_InvalidKey(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	profiles := map[string]*izanami.Profile{
+		"test": {BaseURL: "http://localhost:9000"},
+	}
+	createTestConfig(t, paths.configPath, profiles, "test")
+
+	var buf bytes.Buffer
+	cmd, cleanup := setupProfileCommand(&buf, nil, []string{"profiles", "unset", "invalid-key"})
+	defer cleanup()
+
+	err := cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid key")
+}
+
+// TestProfileUnsetCmd_AllKeys tests unsetting each valid key
+func TestProfileUnsetCmd_AllKeys(t *testing.T) {
+	keys := []string{
+		"base-url",
+		"tenant",
+		"project",
+		"context",
+		"session",
+		"personal-access-token",
+		"personal-access-token-username",
+		"client-id",
+		"client-secret",
+	}
+
+	for _, key := range keys {
+		t.Run(key, func(t *testing.T) {
+			paths := setupTestPaths(t)
+			overridePathFunctions(t, paths)
+
+			// Create profile with all fields populated
+			profiles := map[string]*izanami.Profile{
+				"test": {
+					BaseURL:                     "http://localhost:9000",
+					Tenant:                      "tenant",
+					Project:                     "project",
+					Context:                     "context",
+					Session:                     "session",
+					PersonalAccessToken:         "token",
+					PersonalAccessTokenUsername: "user",
+					ClientID:                    "client-id",
+					ClientSecret:                "client-secret",
+				},
+			}
+			createTestConfig(t, paths.configPath, profiles, "test")
+
+			var buf bytes.Buffer
+			cmd, cleanup := setupProfileCommand(&buf, nil, []string{"profiles", "unset", key})
+			defer cleanup()
+
+			err := cmd.Execute()
+			require.NoError(t, err, "Should be able to unset %s", key)
+
+			output := buf.String()
+			assert.Contains(t, output, "Removed "+key)
+		})
+	}
 }
 
 // TestProfileDeleteCmd_WithForceFlag tests deleting with --force
