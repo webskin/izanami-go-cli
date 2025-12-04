@@ -159,7 +159,7 @@ func logAuthenticationMode(cmd *cobra.Command, cfg *izanami.Config) {
 	var adminAuth, clientAuth string
 
 	// Check admin authentication (for admin operations)
-	if cfg.PatToken != "" {
+	if cfg.PersonalAccessToken != "" {
 		adminAuth = "Personal Access Token (PAT)"
 	} else if cfg.JwtToken != "" {
 		adminAuth = "JWT Cookie (session)"

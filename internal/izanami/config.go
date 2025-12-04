@@ -39,16 +39,17 @@ const (
 // Profile-specific fields are populated from the active profile
 type Config struct {
 	// Runtime fields (populated from active profile, not stored in top-level YAML)
-	BaseURL      string                            `yaml:"-" mapstructure:"-"` // Comes from active profile
-	ClientID     string                            `yaml:"-" mapstructure:"-"` // Comes from active profile
-	ClientSecret string                            `yaml:"-" mapstructure:"-"` // Comes from active profile
-	Username     string                            `yaml:"-" mapstructure:"-"` // Comes from session/profile
-	JwtToken     string                            `yaml:"-" mapstructure:"-"` // Comes from session/profile
-	PatToken     string                            `yaml:"-" mapstructure:"-"` // Comes from profile
-	Tenant       string                            `yaml:"-" mapstructure:"-"` // Comes from active profile
-	Project      string                            `yaml:"-" mapstructure:"-"` // Comes from active profile
-	Context      string                            `yaml:"-" mapstructure:"-"` // Comes from active profile
-	ClientKeys   map[string]TenantClientKeysConfig `yaml:"-" mapstructure:"-"` // Comes from active profile
+	BaseURL                     string                            `yaml:"-" mapstructure:"-"` // Comes from active profile
+	ClientID                    string                            `yaml:"-" mapstructure:"-"` // Comes from active profile
+	ClientSecret                string                            `yaml:"-" mapstructure:"-"` // Comes from active profile
+	Username                    string                            `yaml:"-" mapstructure:"-"` // Display username from session (not used for auth)
+	PersonalAccessTokenUsername string                            `yaml:"-" mapstructure:"-"` // Username for PAT authentication (Basic Auth)
+	JwtToken                    string                            `yaml:"-" mapstructure:"-"` // Comes from session
+	PersonalAccessToken         string                            `yaml:"-" mapstructure:"-"` // Comes from profile (PAT auth)
+	Tenant                      string                            `yaml:"-" mapstructure:"-"` // Comes from active profile
+	Project                     string                            `yaml:"-" mapstructure:"-"` // Comes from active profile
+	Context                     string                            `yaml:"-" mapstructure:"-"` // Comes from active profile
+	ClientKeys                  map[string]TenantClientKeysConfig `yaml:"-" mapstructure:"-"` // Comes from active profile
 
 	// Global settings (stored in top-level YAML)
 	Timeout      int    `yaml:"timeout" mapstructure:"timeout"`
@@ -76,32 +77,32 @@ type ProjectClientKeysConfig struct {
 
 // Profile holds configuration for a specific environment (e.g., local, sandbox, build, prod)
 type Profile struct {
-	Session      string                            `yaml:"session,omitempty" mapstructure:"session"`                                               // Reference to session name in ~/.izsessions
-	BaseURL      string                            `yaml:"base-url,omitempty" mapstructure:"base-url"`                                             // Alternative to session
-	Username     string                            `yaml:"personal-access-token-username,omitempty" mapstructure:"personal-access-token-username"` // Username for PAT authentication (required with personal-access-token)
-	PatToken     string                            `yaml:"personal-access-token,omitempty" mapstructure:"personal-access-token"`                   // Personal Access Token (long-lived)
-	Tenant       string                            `yaml:"tenant,omitempty" mapstructure:"tenant"`                                                 // Default tenant for this profile
-	Project      string                            `yaml:"project,omitempty" mapstructure:"project"`                                               // Default project for this profile
-	Context      string                            `yaml:"context,omitempty" mapstructure:"context"`                                               // Default context for this profile
-	ClientID     string                            `yaml:"client-id,omitempty" mapstructure:"client-id"`                                           // Client ID for this profile
-	ClientSecret string                            `yaml:"client-secret,omitempty" mapstructure:"client-secret"`                                   // Client secret for this profile
-	ClientKeys   map[string]TenantClientKeysConfig `yaml:"client-keys,omitempty" mapstructure:"client-keys"`                                       // Profile-specific hierarchical client keys
+	Session                     string                            `yaml:"session,omitempty" mapstructure:"session"`                                               // Reference to session name in ~/.izsessions
+	BaseURL                     string                            `yaml:"base-url,omitempty" mapstructure:"base-url"`                                             // Alternative to session
+	PersonalAccessTokenUsername string                            `yaml:"personal-access-token-username,omitempty" mapstructure:"personal-access-token-username"` // Username for PAT authentication (required with personal-access-token)
+	PersonalAccessToken         string                            `yaml:"personal-access-token,omitempty" mapstructure:"personal-access-token"`                   // Personal Access Token (long-lived)
+	Tenant                      string                            `yaml:"tenant,omitempty" mapstructure:"tenant"`                                                 // Default tenant for this profile
+	Project                     string                            `yaml:"project,omitempty" mapstructure:"project"`                                               // Default project for this profile
+	Context                     string                            `yaml:"context,omitempty" mapstructure:"context"`                                               // Default context for this profile
+	ClientID                    string                            `yaml:"client-id,omitempty" mapstructure:"client-id"`                                           // Client ID for this profile
+	ClientSecret                string                            `yaml:"client-secret,omitempty" mapstructure:"client-secret"`                                   // Client secret for this profile
+	ClientKeys                  map[string]TenantClientKeysConfig `yaml:"client-keys,omitempty" mapstructure:"client-keys"`                                       // Profile-specific hierarchical client keys
 }
 
 // FlagValues holds command-line flag values for merging with config
 type FlagValues struct {
-	BaseURL      string
-	ClientID     string
-	ClientSecret string
-	Username     string
-	JwtToken     string
-	PatToken     string
-	Tenant       string
-	Project      string
-	Context      string
-	Timeout      int
-	Verbose      bool
-	OutputFormat string
+	BaseURL                     string
+	ClientID                    string
+	ClientSecret                string
+	PersonalAccessTokenUsername string
+	JwtToken                    string
+	PersonalAccessToken         string
+	Tenant                      string
+	Project                     string
+	Context                     string
+	Timeout                     int
+	Verbose                     bool
+	OutputFormat                string
 	Color        string
 }
 
@@ -159,14 +160,14 @@ func (c *Config) MergeWithFlags(flags FlagValues) {
 	if flags.ClientSecret != "" {
 		c.ClientSecret = flags.ClientSecret
 	}
-	if flags.Username != "" {
-		c.Username = flags.Username
+	if flags.PersonalAccessTokenUsername != "" {
+		c.PersonalAccessTokenUsername = flags.PersonalAccessTokenUsername
 	}
 	if flags.JwtToken != "" {
 		c.JwtToken = flags.JwtToken
 	}
-	if flags.PatToken != "" {
-		c.PatToken = flags.PatToken
+	if flags.PersonalAccessToken != "" {
+		c.PersonalAccessToken = flags.PersonalAccessToken
 	}
 	if flags.Tenant != "" {
 		c.Tenant = flags.Tenant
@@ -198,13 +199,13 @@ func (c *Config) Validate() error {
 	}
 
 	// Personal access token requires username
-	if c.PatToken != "" && c.Username == "" {
+	if c.PersonalAccessToken != "" && c.PersonalAccessTokenUsername == "" {
 		return fmt.Errorf("personal-access-token-username is required when using personal access token (set IZ_PERSONAL_ACCESS_TOKEN_USERNAME or --personal-access-token-username)")
 	}
 
-	// Check authentication: either client ID/secret, jwtToken, or patToken+username
+	// Check authentication: either client ID/secret, jwt-token, or personal-access-token+username
 	hasClientAuth := c.ClientID != "" && c.ClientSecret != ""
-	hasUserAuth := c.JwtToken != "" || (c.Username != "" && c.PatToken != "")
+	hasUserAuth := c.JwtToken != "" || (c.PersonalAccessTokenUsername != "" && c.PersonalAccessToken != "")
 
 	if !hasClientAuth && !hasUserAuth {
 		return fmt.Errorf("authentication required: either client-id/client-secret, jwt-token, or personal-access-token with personal-access-token-username must be set")
@@ -220,7 +221,7 @@ func (c *Config) ValidateAdminAuth() error {
 	}
 
 	// Check authentication: PAT token OR JWT token (username not required for JWT)
-	hasPatAuth := c.PatToken != ""
+	hasPatAuth := c.PersonalAccessToken != ""
 	hasJwtAuth := c.JwtToken != ""
 
 	if !hasPatAuth && !hasJwtAuth {
@@ -228,7 +229,7 @@ func (c *Config) ValidateAdminAuth() error {
 	}
 
 	// If using PAT, username is required (for Basic auth)
-	if hasPatAuth && c.Username == "" {
+	if hasPatAuth && c.PersonalAccessTokenUsername == "" {
 		return fmt.Errorf("personal-access-token-username required when using personal access token (set IZ_PERSONAL_ACCESS_TOKEN_USERNAME or --personal-access-token-username)")
 	}
 
@@ -841,11 +842,14 @@ func (c *Config) MergeWithProfile(profile *Profile) {
 		c.BaseURL = sessionData.URL
 	}
 
-	// Username: prefer profile.Username, fallback to session.Username
-	if profile.Username != "" && c.Username == "" {
-		c.Username = profile.Username
-	} else if sessionData != nil && sessionData.Username != "" && c.Username == "" {
+	// Username (display): from session only (for showing who's logged in)
+	if sessionData != nil && sessionData.Username != "" && c.Username == "" {
 		c.Username = sessionData.Username
+	}
+
+	// PersonalAccessTokenUsername: from profile only (for PAT authentication)
+	if profile.PersonalAccessTokenUsername != "" && c.PersonalAccessTokenUsername == "" {
+		c.PersonalAccessTokenUsername = profile.PersonalAccessTokenUsername
 	}
 
 	// JwtToken: ONLY from session (short-lived, not stored in profiles)
@@ -853,9 +857,9 @@ func (c *Config) MergeWithProfile(profile *Profile) {
 		c.JwtToken = sessionData.JwtToken
 	}
 
-	// PatToken: only from profile (long-lived, not stored in sessions)
-	if profile.PatToken != "" && c.PatToken == "" {
-		c.PatToken = profile.PatToken
+	// PersonalAccessToken: only from profile (long-lived, not stored in sessions)
+	if profile.PersonalAccessToken != "" && c.PersonalAccessToken == "" {
+		c.PersonalAccessToken = profile.PersonalAccessToken
 	}
 
 	// Merge environment-specific settings (only from profile, not from session)
@@ -1036,11 +1040,11 @@ func AddProfile(name string, profile *Profile) error {
 	if profile.BaseURL != "" {
 		profileMap["base-url"] = profile.BaseURL
 	}
-	if profile.Username != "" {
-		profileMap["username"] = profile.Username
+	if profile.PersonalAccessTokenUsername != "" {
+		profileMap["personal-access-token-username"] = profile.PersonalAccessTokenUsername
 	}
-	if profile.PatToken != "" {
-		profileMap["personal-access-token"] = profile.PatToken
+	if profile.PersonalAccessToken != "" {
+		profileMap["personal-access-token"] = profile.PersonalAccessToken
 	}
 	if profile.Tenant != "" {
 		profileMap["tenant"] = profile.Tenant

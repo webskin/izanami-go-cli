@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"syscall"
 
@@ -12,6 +13,20 @@ import (
 	"github.com/webskin/izanami-go-cli/internal/izanami"
 	"golang.org/x/term"
 )
+
+// profileSettableKeys defines keys that can be set via 'iz profiles set'
+// Maps key name to description
+var profileSettableKeys = map[string]string{
+	"base-url":                       "Izanami server URL",
+	"tenant":                         "Default tenant name",
+	"project":                        "Default project name",
+	"context":                        "Default context path",
+	"session":                        "Session name to reference (clears base-url)",
+	"personal-access-token":          "Personal access token",
+	"personal-access-token-username": "Username for PAT authentication",
+	"client-id":                      "Client ID for API authentication",
+	"client-secret":                  "Client secret for API authentication",
+}
 
 var (
 	profileDeleteForce bool
@@ -455,31 +470,89 @@ Examples:
 	},
 }
 
+// buildProfileSetLongHelp builds the long help text for profiles set command
+func buildProfileSetLongHelp() string {
+	var sb strings.Builder
+	sb.WriteString("Update a specific setting in the active profile.\n\n")
+	sb.WriteString("First switch to the profile you want to modify with 'iz profiles use <name>',\n")
+	sb.WriteString("then use this command to update individual settings.\n\n")
+
+	// Sort keys for consistent output
+	keys := make([]string, 0, len(profileSettableKeys))
+	for key := range profileSettableKeys {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	sb.WriteString("Profile-specific keys (settable via 'iz profiles set'):\n")
+	for _, key := range keys {
+		sb.WriteString(fmt.Sprintf("  %-33s - %s\n", key, profileSettableKeys[key]))
+	}
+
+	sb.WriteString("\nExamples:\n")
+	sb.WriteString("  # First switch to the profile you want to modify\n")
+	sb.WriteString("  iz profiles use sandbox\n\n")
+	sb.WriteString("  # Then set values on the active profile\n")
+	sb.WriteString("  iz profiles set tenant new-tenant\n")
+	sb.WriteString("  iz profiles set base-url https://izanami.example.com\n")
+	sb.WriteString("  iz profiles set session sandbox-session\n")
+	sb.WriteString("  iz profiles set client-id my-client-id\n")
+	sb.WriteString("  iz profiles set personal-access-token my-pat-token\n")
+
+	return sb.String()
+}
+
+// printValidProfileKeys prints all valid profile keys
+func printValidProfileKeys(w io.Writer) {
+	// Sort keys for consistent output
+	keys := make([]string, 0, len(profileSettableKeys))
+	for key := range profileSettableKeys {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	fmt.Fprintln(w, "Profile-specific keys (settable via 'iz profiles set'):")
+	for _, key := range keys {
+		fmt.Fprintf(w, "  %-33s - %s\n", key, profileSettableKeys[key])
+	}
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Usage:")
+	fmt.Fprintln(w, "  iz profiles set <key> <value>")
+}
+
 // profileSetCmd represents the profile set command
 var profileSetCmd = &cobra.Command{
 	Use:   "set <key> <value>",
 	Short: "Update active profile setting",
-	Long: `Update a specific setting in the active profile.
-
-Valid keys:
-  session   - Session name to reference
-  base-url  - Server URL (clears session if set)
-  tenant    - Default tenant
-  project   - Default project
-  context   - Default context
-
-Examples:
-  # First switch to the profile you want to modify
-  iz profiles use sandbox
-
-  # Then set values on the active profile
-  iz profiles set tenant new-tenant
-  iz profiles set base-url https://izanami.example.com
-  iz profiles set session sandbox-session`,
-	Args: cobra.ExactArgs(2),
+	Long:  buildProfileSetLongHelp(),
+	Args: func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 {
+			// No arguments provided - show valid keys
+			printValidProfileKeys(cmd.OutOrStdout())
+			return fmt.Errorf("missing required arguments")
+		}
+		if len(args) == 1 {
+			return fmt.Errorf("missing value for key '%s'\nUsage: iz profiles set <key> <value>", args[0])
+		}
+		if len(args) > 2 {
+			return fmt.Errorf("too many arguments\nUsage: iz profiles set <key> <value>")
+		}
+		return nil
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		key := args[0]
 		value := args[1]
+
+		// Validate key
+		if _, valid := profileSettableKeys[key]; !valid {
+			// Build valid keys list for error message
+			keys := make([]string, 0, len(profileSettableKeys))
+			for k := range profileSettableKeys {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+			return fmt.Errorf("invalid key '%s'.\n\nValid keys:\n  %s", key, strings.Join(keys, "\n  "))
+		}
 
 		// Get active profile name
 		profileName, err := izanami.GetActiveProfileName()
@@ -496,6 +569,9 @@ Examples:
 			return err
 		}
 
+		// Track if we're setting a sensitive value
+		isSensitive := false
+
 		// Update the specified field
 		switch key {
 		case "session":
@@ -510,8 +586,16 @@ Examples:
 			profile.Project = value
 		case "context":
 			profile.Context = value
-		default:
-			return fmt.Errorf("invalid key '%s'. Valid keys: session, base-url, tenant, project, context", key)
+		case "personal-access-token":
+			profile.PersonalAccessToken = value
+			isSensitive = true
+		case "personal-access-token-username":
+			profile.PersonalAccessTokenUsername = value
+		case "client-id":
+			profile.ClientID = value
+		case "client-secret":
+			profile.ClientSecret = value
+			isSensitive = true
 		}
 
 		// Save updated profile
@@ -519,7 +603,20 @@ Examples:
 			return fmt.Errorf("failed to update profile: %w", err)
 		}
 
-		fmt.Fprintf(cmd.OutOrStdout(), "✓ Updated %s.%s = %s\n", profileName, key, value)
+		// Display value (redact sensitive values)
+		displayValue := value
+		if isSensitive {
+			displayValue = "<redacted>"
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "✓ Updated %s.%s = %s\n", profileName, key, displayValue)
+
+		// Security warning for sensitive values
+		if isSensitive {
+			fmt.Fprintln(cmd.OutOrStdout(), "\n⚠️  SECURITY WARNING:")
+			fmt.Fprintln(cmd.OutOrStdout(), "   Credentials are stored in plaintext in the config file.")
+			fmt.Fprintln(cmd.OutOrStdout(), "   File permissions are set to 0600 (owner read/write only).")
+			fmt.Fprintln(cmd.OutOrStdout(), "   Never commit config.yaml to version control.")
+		}
 
 		return nil
 	},

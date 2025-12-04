@@ -6,9 +6,9 @@ import (
 
 var (
 	// Admin authentication flags
-	adminPATUsername string
-	adminJwtToken    string
-	adminPatToken    string
+	adminPATUsername          string
+	adminJwtToken             string
+	adminPersonalAccessToken  string
 )
 
 // adminCmd represents the admin command
@@ -35,13 +35,13 @@ These operations require authentication via JWT token (from 'iz login') or Perso
 
 		// Apply admin-specific authentication flags
 		if adminPATUsername != "" {
-			cfg.Username = adminPATUsername
+			cfg.PersonalAccessTokenUsername = adminPATUsername
 		}
 		if adminJwtToken != "" {
 			cfg.JwtToken = adminJwtToken
 		}
-		if adminPatToken != "" {
-			cfg.PatToken = adminPatToken
+		if adminPersonalAccessToken != "" {
+			cfg.PersonalAccessToken = adminPersonalAccessToken
 		}
 
 		// Validate admin authentication
@@ -59,7 +59,7 @@ func init() {
 	// Admin authentication flags (persistent for all admin commands)
 	adminCmd.PersistentFlags().StringVar(&adminPATUsername, "personal-access-token-username", "", "Username for PAT authentication (env: IZ_PERSONAL_ACCESS_TOKEN_USERNAME)")
 	adminCmd.PersistentFlags().StringVar(&adminJwtToken, "jwt-token", "", "JWT token for admin authentication (env: IZ_JWT_TOKEN)")
-	adminCmd.PersistentFlags().StringVar(&adminPatToken, "personal-access-token", "", "Personal access token for admin authentication (env: IZ_PERSONAL_ACCESS_TOKEN)")
+	adminCmd.PersistentFlags().StringVar(&adminPersonalAccessToken, "personal-access-token", "", "Personal access token for admin authentication (env: IZ_PERSONAL_ACCESS_TOKEN)")
 
 	// Features (admin operations)
 	adminCmd.AddCommand(featuresCmd)

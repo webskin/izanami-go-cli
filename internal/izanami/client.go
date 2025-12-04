@@ -62,17 +62,17 @@ func NewClientNoAuth(config *Config) (*Client, error) {
 func newClientInternal(config *Config) (*Client, error) {
 	// Make a defensive copy of the config to prevent external mutations
 	configCopy := &Config{
-		BaseURL:      config.BaseURL,
-		ClientID:     config.ClientID,
-		ClientSecret: config.ClientSecret,
-		Username:     config.Username,
-		JwtToken:     config.JwtToken,
-		PatToken:     config.PatToken,
-		Tenant:       config.Tenant,
-		Project:      config.Project,
-		Context:      config.Context,
-		Timeout:      config.Timeout,
-		Verbose:      config.Verbose,
+		BaseURL:                     config.BaseURL,
+		ClientID:                    config.ClientID,
+		ClientSecret:                config.ClientSecret,
+		PersonalAccessTokenUsername: config.PersonalAccessTokenUsername,
+		JwtToken:                    config.JwtToken,
+		PersonalAccessToken:         config.PersonalAccessToken,
+		Tenant:                      config.Tenant,
+		Project:                     config.Project,
+		Context:                     config.Context,
+		Timeout:                     config.Timeout,
+		Verbose:                     config.Verbose,
 	}
 
 	client := resty.New().
@@ -186,10 +186,10 @@ func truncateString(s string, maxLength int) string {
 // setAdminAuth sets authentication for admin API requests (PAT or JWT)
 func (c *Client) setAdminAuth(req *resty.Request) {
 	// Priority: PAT token > JWT cookie
-	if c.config.PatToken != "" {
+	if c.config.PersonalAccessToken != "" {
 		// Personal Access Token authentication - Uses Basic Auth with username:token
 		// Username is required and sent to server for PAT authentication
-		req.SetBasicAuth(c.config.Username, c.config.PatToken)
+		req.SetBasicAuth(c.config.PersonalAccessTokenUsername, c.config.PersonalAccessToken)
 	} else if c.config.JwtToken != "" {
 		// JWT cookie authentication - ONLY sends JWT token cookie
 		// Username is NOT sent to server (JWT is self-contained)

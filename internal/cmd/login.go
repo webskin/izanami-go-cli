@@ -169,8 +169,8 @@ Examples:
 			return fmt.Errorf("failed to save session: %w", err)
 		}
 
-		// Update profile with session reference
-		if err := updateProfileWithSession(profileName, baseURL, username, sessionName); err != nil {
+		// Update profile with session reference (username is stored in session, not profile)
+		if err := updateProfileWithSession(profileName, sessionName); err != nil {
 			fmt.Fprintf(cmd.OutOrStderr(), "\n   Warning: failed to update profile: %v\n", err)
 		}
 
@@ -311,15 +311,15 @@ func determineProfileName(r io.Reader, w io.Writer, baseURL, username string) (s
 }
 
 // updateProfileWithSession creates or updates a profile with session reference
-func updateProfileWithSession(profileName, baseURL, username, sessionName string) error {
+// Note: Username is stored in sessions, not profiles. Profile only references the session.
+func updateProfileWithSession(profileName, sessionName string) error {
 	// Try to load existing profile
 	existingProfile, err := izanami.GetProfile(profileName)
 	if err != nil {
 		// Profile doesn't exist - create new one
 		// Note: BaseURL is intentionally empty - it will be resolved from the session
 		profile := &izanami.Profile{
-			Session:  sessionName,
-			Username: username,
+			Session: sessionName,
 		}
 
 		if err := izanami.AddProfile(profileName, profile); err != nil {
@@ -328,7 +328,6 @@ func updateProfileWithSession(profileName, baseURL, username, sessionName string
 	} else {
 		// Profile exists - update session reference
 		existingProfile.Session = sessionName
-		existingProfile.Username = username
 
 		if err := izanami.AddProfile(profileName, existingProfile); err != nil {
 			return fmt.Errorf("failed to update profile: %w", err)
@@ -642,8 +641,8 @@ func saveOIDCSession(cmd *cobra.Command, baseURL, token string) error {
 		fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Session saved successfully\n")
 	}
 
-	// Update profile with session reference
-	if err := updateProfileWithSession(profileName, baseURL, username, sessionName); err != nil {
+	// Update profile with session reference (username is stored in session, not profile)
+	if err := updateProfileWithSession(profileName, sessionName); err != nil {
 		fmt.Fprintf(cmd.OutOrStderr(), "\n   Warning: failed to update profile: %v\n", err)
 	}
 
