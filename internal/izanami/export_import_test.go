@@ -456,8 +456,11 @@ func TestClient_ImportV2_Conflict(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusConflict) // 409 Conflict
 		json.NewEncoder(w).Encode(ImportV2Response{
-			Messages:  []string{"Some items imported"},
-			Conflicts: []string{"feature-1 already exists", "feature-2 already exists"},
+			Messages: []string{"Some items imported"},
+			Conflicts: []ImportConflict{
+				{ID: "feature-1-id", Name: "feature-1", Description: "First feature"},
+				{ID: "feature-2-id", Name: "feature-2", Description: ""},
+			},
 		})
 	})
 	defer server.Close()
@@ -479,7 +482,8 @@ func TestClient_ImportV2_Conflict(t *testing.T) {
 	assert.Error(t, err)
 	assert.NotNil(t, result)
 	assert.Len(t, result.Conflicts, 2)
-	assert.Contains(t, result.Conflicts[0], "feature-1")
+	assert.Equal(t, "feature-1", result.Conflicts[0].Name)
+	assert.Equal(t, "feature-1-id", result.Conflicts[0].ID)
 }
 
 func TestClient_ImportV2_ConflictOptions(t *testing.T) {

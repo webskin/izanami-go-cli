@@ -770,11 +770,18 @@ type ImportRequest struct {
 	InlineScript    bool   `json:"inlineScript,omitempty"`    // Whether to inline WASM scripts
 }
 
+// ImportConflict represents a conflicting entity during import
+type ImportConflict struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+}
+
 // ImportV2Response represents the response from a V2 import operation
 // V2 imports are synchronous and return immediately with messages
 type ImportV2Response struct {
-	Messages  []string `json:"messages"`            // Import messages (always present)
-	Conflicts []string `json:"conflicts,omitempty"` // Conflict details (only on HTTP 409)
+	Messages  []string         `json:"messages"`            // Import messages (always present)
+	Conflicts []ImportConflict `json:"conflicts,omitempty"` // Conflict details (only on HTTP 409)
 }
 
 // ImportV1Response represents the response from a V1 import operation

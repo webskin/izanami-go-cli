@@ -131,7 +131,11 @@ func runImportV2(cmd *cobra.Command, client *izanami.Client, ctx context.Context
 		if len(result.Conflicts) > 0 {
 			fmt.Fprintf(cmd.OutOrStderr(), "\nConflicts:\n")
 			for _, conflict := range result.Conflicts {
-				fmt.Fprintf(cmd.OutOrStderr(), "  • %s\n", conflict)
+				if conflict.Description != "" {
+					fmt.Fprintf(cmd.OutOrStderr(), "  • %s (%s): %s\n", conflict.Name, conflict.ID, conflict.Description)
+				} else {
+					fmt.Fprintf(cmd.OutOrStderr(), "  • %s (%s)\n", conflict.Name, conflict.ID)
+				}
 			}
 		}
 
