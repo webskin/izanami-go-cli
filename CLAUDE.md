@@ -71,3 +71,38 @@ Do not implement any subcommands for legacy endpoints.
 - Prefer the usage of `cmd.OutOrStdout()` and `cmd.OutOrStderr()` instead of `os.Stdout`, `os.Stderr`, and direct `fmt.Print` when possible.
 - **For input**: Prefer `cmd.InOrStdin()` instead of `os.Stdin` or `fmt.Scanln()`. This allows tests to provide mock input via `cmd.SetIn()`. Use `bufio.NewReader(cmd.InOrStdin())` for reading user input.
 - **Avoid `os.Exit()`**: In command `RunE` functions, return errors instead of calling `os.Exit()`. This allows proper testing and lets Cobra handle the exit code.
+
+## Output Format Handling (-o option)
+
+Commands that return data should support the global `-o` / `--output-format` flag (`json` or `table`).
+
+### Implementation Pattern
+
+```go
+import "github.com/webskin/izanami-go-cli/internal/output"
+
+// In your RunE function:
+func(cmd *cobra.Command, args []string) error {
+    // ... fetch data ...
+
+    // JSON output: return structured data directly
+    if outputFormat == "json" {
+        return output.PrintTo(cmd.OutOrStdout(), result, output.JSON)
+    }
+
+    // Table output (default): formatted display
+    // Use fmt.Fprintf(cmd.OutOrStderr(), ...) for status messages
+    // Use output.PrintTo(cmd.OutOrStdout(), data, output.Table) for tabular data
+    fmt.Fprintf(cmd.OutOrStderr(), "Operation completed\n")
+    return nil
+}
+```
+
+### Key Points
+
+- Check `outputFormat` variable (global, defined in `root.go`)
+- For **JSON**: Use `output.PrintTo(cmd.OutOrStdout(), data, output.JSON)` to print structured data
+- For **table**: Use `output.PrintTo(cmd.OutOrStdout(), data, output.Table)` for lists/structs, or `fmt.Fprintf(cmd.OutOrStderr(), ...)` for formatted messages
+- Status messages (success, warnings) go to **stderr** so they don't pollute JSON output
+- Data goes to **stdout** via `output.PrintTo()`
+- See `internal/cmd/keys.go` or `internal/cmd/import_export.go` for examples
