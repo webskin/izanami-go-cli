@@ -95,6 +95,29 @@ func (c *Client) CreateProject(ctx context.Context, tenant string, project inter
 	return nil
 }
 
+// UpdateProject updates an existing project
+// The project parameter accepts either a *Project or any compatible struct
+func (c *Client) UpdateProject(ctx context.Context, tenant, name string, project interface{}) error {
+	path := apiAdminTenants + buildPath(tenant, "projects", name)
+
+	req := c.http.R().
+		SetContext(ctx).
+		SetHeader("Content-Type", "application/json").
+		SetBody(project)
+	c.setAdminAuth(req)
+	resp, err := req.Put(path)
+
+	if err != nil {
+		return fmt.Errorf("%s: %w", errmsg.MsgFailedToUpdateProject, err)
+	}
+
+	if resp.StatusCode() != http.StatusOK && resp.StatusCode() != http.StatusNoContent {
+		return c.handleError(resp)
+	}
+
+	return nil
+}
+
 // DeleteProject deletes a project
 func (c *Client) DeleteProject(ctx context.Context, tenant, project string) error {
 	path := apiAdminTenants + buildPath(tenant, "projects", project)

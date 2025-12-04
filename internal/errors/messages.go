@@ -54,6 +54,7 @@ const (
 	MsgFailedToListProjects    = "failed to list projects"
 	MsgFailedToGetProject      = "failed to get project"
 	MsgFailedToCreateProject   = "failed to create project"
+	MsgFailedToUpdateProject   = "failed to update project"
 	MsgFailedToDeleteProject   = "failed to delete project"
 	MsgFailedToListProjectLogs = "failed to list project logs"
 

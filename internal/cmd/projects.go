@@ -130,6 +130,79 @@ var adminProjectsCreateCmd = &cobra.Command{
 	},
 }
 
+var adminProjectsUpdateCmd = &cobra.Command{
+	Use:   "update <project-name>",
+	Short: "Update a project",
+	Long: `Update a project's properties.
+
+You can provide the updated data via:
+  - --description flag (merged with existing data)
+  - --data flag with JSON data
+  - Both flags (--description takes precedence)
+
+Examples:
+  # Update description only
+  iz admin projects update my-project --tenant my-tenant --description "New description"
+
+  # Update with JSON data
+  iz admin projects update my-project --tenant my-tenant --data '{"name":"my-project","description":"Updated"}'
+
+  # Update with both (description flag takes precedence)
+  iz admin projects update my-project --tenant my-tenant --data @project.json --description "Override desc"`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := cfg.ValidateTenant(); err != nil {
+			return err
+		}
+
+		client, err := izanami.NewClient(cfg)
+		if err != nil {
+			return err
+		}
+
+		projectName := args[0]
+		var data map[string]interface{}
+
+		// Parse JSON data if provided
+		if cmd.Flags().Changed("data") {
+			var jsonData interface{}
+			if err := parseJSONData(projectData, &jsonData); err != nil {
+				return err
+			}
+			// Convert to map
+			if dataMap, ok := jsonData.(map[string]interface{}); ok {
+				data = dataMap
+			} else {
+				return fmt.Errorf("invalid data format: expected JSON object")
+			}
+		} else {
+			// Start with empty map if no data provided
+			data = make(map[string]interface{})
+		}
+
+		// Always set the name field
+		data["name"] = projectName
+
+		// Merge description flag if provided
+		if cmd.Flags().Changed("description") {
+			data["description"] = projectDesc
+		}
+
+		// Validate that we have at least name and description
+		if _, hasDesc := data["description"]; !hasDesc {
+			return fmt.Errorf("description is required (use --description flag or --data)")
+		}
+
+		ctx := context.Background()
+		if err := client.UpdateProject(ctx, cfg.Tenant, projectName, data); err != nil {
+			return err
+		}
+
+		fmt.Fprintf(cmd.OutOrStderr(), "Project updated successfully: %s\n", projectName)
+		return nil
+	},
+}
+
 var adminProjectsDeleteCmd = &cobra.Command{
 	Use:   "delete <project-name>",
 	Short: "Delete a project",
@@ -238,13 +311,19 @@ func init() {
 	adminProjectsCmd.AddCommand(adminProjectsListCmd)
 	adminProjectsCmd.AddCommand(adminProjectsGetCmd)
 	adminProjectsCmd.AddCommand(adminProjectsCreateCmd)
+	adminProjectsCmd.AddCommand(adminProjectsUpdateCmd)
 	adminProjectsCmd.AddCommand(adminProjectsDeleteCmd)
 
 	// Dynamic completion for project name argument
 	adminProjectsGetCmd.ValidArgsFunction = completeProjectNames
+	adminProjectsUpdateCmd.ValidArgsFunction = completeProjectNames
+	adminProjectsDeleteCmd.ValidArgsFunction = completeProjectNames
+	adminProjectsLogsCmd.ValidArgsFunction = completeProjectNames
 
 	adminProjectsCreateCmd.Flags().StringVar(&projectDesc, "description", "", "Project description")
 	adminProjectsCreateCmd.Flags().StringVar(&projectData, "data", "", "JSON project data")
+	adminProjectsUpdateCmd.Flags().StringVar(&projectDesc, "description", "", "Project description")
+	adminProjectsUpdateCmd.Flags().StringVar(&projectData, "data", "", "JSON project data")
 	adminProjectsDeleteCmd.Flags().BoolVarP(&projectsDeleteForce, "force", "f", false, "Skip confirmation prompt")
 
 	// Project logs
