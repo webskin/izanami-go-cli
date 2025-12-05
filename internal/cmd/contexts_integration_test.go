@@ -183,7 +183,6 @@ func setupContextsTest(t *testing.T, env *IntegrationTestEnv) func() {
 	tenant = "" // Will be set per-test
 
 	// Reset global flags to defaults
-	contextProject = ""
 	contextAll = false
 	contextParent = ""
 	contextProtected = false
@@ -196,7 +195,6 @@ func setupContextsTest(t *testing.T, env *IntegrationTestEnv) func() {
 		cfg = origCfg
 		outputFormat = origOutputFormat
 		tenant = origTenant
-		contextProject = ""
 		contextAll = false
 		contextParent = ""
 		contextProtected = false

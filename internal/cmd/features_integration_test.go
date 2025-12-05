@@ -173,7 +173,6 @@ func setupFeaturesTest(t *testing.T, env *IntegrationTestEnv) func() {
 	compactJSON = false
 
 	// Reset feature-specific flags to defaults
-	featureProject = ""
 	featureTag = ""
 	featureTags = []string{}
 	featureName = ""
@@ -195,7 +194,6 @@ func setupFeaturesTest(t *testing.T, env *IntegrationTestEnv) func() {
 		outputFormat = origOutputFormat
 		tenant = origTenant
 		compactJSON = origCompactJSON
-		featureProject = ""
 		featureTag = ""
 		featureTags = []string{}
 		featureName = ""
@@ -357,9 +355,9 @@ func TestIntegration_FeaturesListWithProjectFilter(t *testing.T) {
 	feature2 := NewTempFeature(t, client, tempTenant.Name, tempProject2.Name).WithName("feature-in-proj2").MustCreate(t).Cleanup(t)
 
 	tenant = tempTenant.Name
-	featureProject = tempProject1.Name
+	cfg.Project = tempProject1.Name
 
-	output, err := executeFeaturesCommand(t, []string{"list", "--project", tempProject1.Name})
+	output, err := executeFeaturesCommand(t, []string{"list"})
 
 	require.NoError(t, err, "features list with --project should succeed")
 	assert.Contains(t, output, feature1.Name, "Output should contain feature from project 1")
@@ -472,9 +470,9 @@ func TestIntegration_FeaturesCreateSimple(t *testing.T) {
 	})
 
 	tenant = tempTenant.Name
-	featureProject = tempProject.Name
+	cfg.Project = tempProject.Name
 
-	output, err := executeFeaturesCommand(t, []string{"create", featureName, "--project", tempProject.Name, "--description", "Test feature", "--enabled"})
+	output, err := executeFeaturesCommand(t, []string{"create", featureName, "--description", "Test feature", "--enabled"})
 
 	require.NoError(t, err, "features create should succeed")
 	assert.Contains(t, output, "created successfully", "Output should confirm creation")

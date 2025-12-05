@@ -52,7 +52,7 @@ This command accepts either a feature UUID or feature name:
   Name mode:
     - Provide a feature name (e.g., my-feature)
     - --tenant flag is REQUIRED
-    - --project flag is optional (helps disambiguate if multiple features have same name)
+    - --project flag is optional (helps disambiguate if multiple features have same name, use global --project flag)
     - If multiple features match, an error is returned
 
 This uses the client API (v2) to evaluate the feature, taking into account:
@@ -81,13 +81,10 @@ Examples:
   iz features check e878a149-df86-4f28-b1db-059580304e1e --data '{"age": 25}'`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Build projects list for credential resolution
+		// Build projects list for credential resolution (uses global --project flag)
 		var projects []string
 		if cfg.Project != "" {
 			projects = append(projects, cfg.Project)
-		}
-		if featureProject != "" && featureProject != cfg.Project {
-			projects = append(projects, featureProject)
 		}
 
 		resolveClientCredentials(cmd, cfg, checkClientID, checkClientSecret, projects)
@@ -135,11 +132,11 @@ Examples:
 				}
 			}
 
-			// Further filter by project if specified
-			if featureProject != "" {
+			// Further filter by project if specified (uses global --project flag)
+			if cfg.Project != "" {
 				var projectMatches []izanami.Feature
 				for _, f := range matches {
-					if f.Project == featureProject {
+					if f.Project == cfg.Project {
 						projectMatches = append(projectMatches, f)
 					}
 				}
@@ -148,8 +145,8 @@ Examples:
 
 			// Validate matches
 			if len(matches) == 0 {
-				if featureProject != "" {
-					return fmt.Errorf("no feature named '%s' found in tenant '%s' and project '%s'", featureIDOrName, cfg.Tenant, featureProject)
+				if cfg.Project != "" {
+					return fmt.Errorf("no feature named '%s' found in tenant '%s' and project '%s'", featureIDOrName, cfg.Tenant, cfg.Project)
 				}
 				return fmt.Errorf("no feature named '%s' found in tenant '%s'", featureIDOrName, cfg.Tenant)
 			}
@@ -553,7 +550,7 @@ func init() {
 	// Check flags
 	featuresCheckCmd.Flags().StringVar(&featureUser, "user", "", "User ID for evaluation")
 	featuresCheckCmd.Flags().StringVar(&featureContextStr, "context", "", "Context path for evaluation")
-	featuresCheckCmd.Flags().StringVar(&featureProject, "project", "", "Project name (for disambiguating feature names)")
+	// Project disambiguation uses global --project flag
 	featuresCheckCmd.Flags().StringVar(&checkClientID, "client-id", "", "Client ID for authentication (env: IZ_CLIENT_ID)")
 	featuresCheckCmd.Flags().StringVar(&checkClientSecret, "client-secret", "", "Client secret for authentication (env: IZ_CLIENT_SECRET)")
 	featuresCheckCmd.Flags().StringVar(&featureData, "data", "", "JSON payload for script features (from file with @file.json, stdin with -, or inline)")

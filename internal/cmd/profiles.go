@@ -790,7 +790,7 @@ Examples:
   iz profiles client-keys add --tenant my-tenant
 
   # Add project-specific credentials to the active profile
-  iz profiles client-keys add --tenant my-tenant --project proj1 --project proj2
+  iz profiles client-keys add --tenant my-tenant --projects proj1,proj2
 
 Security:
   Credentials are stored in plaintext in ~/.config/iz/config.yaml
@@ -798,7 +798,7 @@ Security:
   Never commit config.yaml to version control`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		tenant, _ := cmd.Flags().GetString("tenant")
-		projects, _ := cmd.Flags().GetStringSlice("project")
+		projects, _ := cmd.Flags().GetStringSlice("projects")
 
 		// Validate tenant is provided
 		if tenant == "" {
@@ -940,7 +940,7 @@ func init() {
 
 	// Flags for client-keys add
 	profileClientKeysAddCmd.Flags().String("tenant", "", "Tenant name (required)")
-	profileClientKeysAddCmd.Flags().StringSlice("project", []string{}, "Project name(s) - can be specified multiple times")
+	profileClientKeysAddCmd.Flags().StringSlice("projects", []string{}, "Project names (comma-separated)")
 	profileClientKeysAddCmd.MarkFlagRequired("tenant")
 }
 

@@ -34,7 +34,6 @@ func setupFeaturesCheckTest(t *testing.T, env *IntegrationTestEnv) func() {
 	origTenant := tenant
 	origFeatureUser := featureUser
 	origFeatureContextStr := featureContextStr
-	origFeatureProject := featureProject
 	origFeatureData := featureData
 	origCheckClientID := checkClientID
 	origCheckClientSecret := checkClientSecret
@@ -59,7 +58,6 @@ func setupFeaturesCheckTest(t *testing.T, env *IntegrationTestEnv) func() {
 	// Reset command-specific flags to defaults
 	featureUser = ""
 	featureContextStr = ""
-	featureProject = ""
 	featureData = ""
 	checkClientID = ""
 	checkClientSecret = ""
@@ -77,7 +75,6 @@ func setupFeaturesCheckTest(t *testing.T, env *IntegrationTestEnv) func() {
 		tenant = origTenant
 		featureUser = origFeatureUser
 		featureContextStr = origFeatureContextStr
-		featureProject = origFeatureProject
 		featureData = origFeatureData
 		checkClientID = origCheckClientID
 		checkClientSecret = origCheckClientSecret
@@ -231,7 +228,7 @@ func TestIntegration_FeaturesCheckByNameWithProject(t *testing.T) {
 	// Set tenant and project (for disambiguation)
 	tenant = tempTenant.Name
 	cfg.Tenant = tempTenant.Name
-	featureProject = tempProject.Name
+	cfg.Project = tempProject.Name
 
 	// Create a temporary API key with project access for the temp tenant
 	tempAPIKey := NewTempAPIKey(t, client, tempTenant.Name).

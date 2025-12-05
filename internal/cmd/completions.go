@@ -27,6 +27,9 @@ type Completer struct {
 	// ListTags fetches tags from the API for a given tenant.
 	ListTags func(cfg *izanami.Config, ctx context.Context, tenant string) ([]izanami.Tag, error)
 
+	// ListContexts fetches contexts from the API for a given tenant and optional project.
+	ListContexts func(cfg *izanami.Config, ctx context.Context, tenant, project string) ([]izanami.Context, error)
+
 	// Timeout for API calls. Defaults to completionTimeout if zero.
 	Timeout time.Duration
 }
@@ -37,6 +40,7 @@ var defaultCompleter = &Completer{
 	ListTenants:  listTenantsAPI,
 	ListProjects: listProjectsAPI,
 	ListTags:     listTagsAPI,
+	ListContexts: listContextsAPI,
 	Timeout:      completionTimeout,
 }
 
@@ -65,6 +69,16 @@ func listTagsAPI(cfg *izanami.Config, ctx context.Context, tenant string) ([]iza
 		return nil, err
 	}
 	return izanami.ListTags(client, ctx, tenant, izanami.ParseTags)
+}
+
+// listContextsAPI is the production implementation for listing contexts.
+func listContextsAPI(cfg *izanami.Config, ctx context.Context, tenant, project string) ([]izanami.Context, error) {
+	client, err := izanami.NewClient(cfg)
+	if err != nil {
+		return nil, err
+	}
+	// Use all=true to get all nested contexts for completion
+	return izanami.ListContexts(client, ctx, tenant, project, true, izanami.ParseContexts)
 }
 
 // getTimeout returns the configured timeout or the default.
@@ -187,6 +201,92 @@ func (c *Completer) CompleteTagNames(cmd *cobra.Command, args []string, toComple
 	), cobra.ShellCompDirectiveNoFileComp
 }
 
+// CompleteContextNames provides dynamic completion for context paths.
+// Requires tenant to be specified (via --tenant flag or profile).
+// Optionally uses --project flag to list project-specific contexts.
+// Fails silently if tenant is not set or API is unreachable.
+func (c *Completer) CompleteContextNames(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	// Only complete the first argument
+	if len(args) != 0 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	cfg := c.LoadConfig()
+	if cfg == nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	// Tenant is required for context listing
+	if cfg.Tenant == "" {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	// Validate admin auth is configured
+	if err := cfg.ValidateAdminAuth(); err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	// Check for --project flag (local flag on context commands)
+	project := ""
+	if cmd != nil {
+		if p, err := cmd.Flags().GetString("project"); err == nil {
+			project = p
+		}
+	}
+
+	// Fetch contexts with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), c.getTimeout())
+	defer cancel()
+
+	contexts, err := c.ListContexts(cfg, ctx, cfg.Tenant, project)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	// Flatten nested contexts and use path for completion
+	return buildContextCompletions(contexts, toComplete), cobra.ShellCompDirectiveNoFileComp
+}
+
+// buildContextCompletions flattens nested contexts and builds completions from paths.
+func buildContextCompletions(contexts []izanami.Context, toComplete string) []string {
+	var completions []string
+	var flatten func(ctxs []izanami.Context)
+	flatten = func(ctxs []izanami.Context) {
+		for _, c := range ctxs {
+			// Use path without leading slash, or name if path is empty
+			path := strings.TrimPrefix(c.Path, "/")
+			if path == "" {
+				path = c.Name
+			}
+			if toComplete == "" || strings.HasPrefix(strings.ToLower(path), strings.ToLower(toComplete)) {
+				// Add description based on context type
+				desc := ""
+				if c.Global {
+					desc = "global"
+				} else if c.IsProtected {
+					desc = "protected"
+				}
+				if desc != "" {
+					completions = append(completions, path+"\t"+desc)
+				} else {
+					completions = append(completions, path)
+				}
+			}
+			// Recurse into children
+			if len(c.Children) > 0 {
+				// Convert []*Context to []Context for recursion
+				children := make([]izanami.Context, len(c.Children))
+				for i, child := range c.Children {
+					children[i] = *child
+				}
+				flatten(children)
+			}
+		}
+	}
+	flatten(contexts)
+	return completions
+}
+
 // buildCompletions filters items by prefix and formats them for shell completion.
 // Uses tab-separated format "name\tdescription" when description is available.
 func buildCompletions[T any](items []T, toComplete string, getName func(T) string, getDesc func(T) string) []string {
@@ -220,6 +320,11 @@ func completeProjectNames(cmd *cobra.Command, args []string, toComplete string) 
 // completeTagNames provides dynamic completion for tag names.
 func completeTagNames(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	return defaultCompleter.CompleteTagNames(cmd, args, toComplete)
+}
+
+// completeContextNames provides dynamic completion for context paths.
+func completeContextNames(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	return defaultCompleter.CompleteContextNames(cmd, args, toComplete)
 }
 
 // completeConfigKeys provides completion for global config keys.

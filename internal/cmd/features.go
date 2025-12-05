@@ -10,7 +10,6 @@ import (
 )
 
 var (
-	featureProject      string
 	featureTag          string   // For filtering features list by tag
 	featureTags         []string // For assigning tags to a feature when creating
 	featureName         string
@@ -19,12 +18,12 @@ var (
 	featuresDeleteForce bool
 
 	// Test command flags
-	featureTestDate     string   // Date for feature evaluation (ISO 8601)
-	featureTestFeatures []string // Feature IDs for bulk testing
-	featureTestProjects []string // Project IDs for bulk testing
-	featureTestOneTagIn []string // Tag filter: at least one must match
+	featureTestDate      string   // Date for feature evaluation (ISO 8601)
+	featureTestFeatures  []string // Feature IDs for bulk testing
+	featureTestProjects  []string // Project IDs for bulk testing
+	featureTestOneTagIn  []string // Tag filter: at least one must match
 	featureTestAllTagsIn []string // Tag filter: all must match
-	featureTestNoTagIn  []string // Tag filter: none can match
+	featureTestNoTagIn   []string // Tag filter: none can match
 )
 
 // featuresCmd represents the admin features command
@@ -57,7 +56,7 @@ var featuresListCmd = &cobra.Command{
 
 The list endpoint supports filtering by:
   --tag: Filter by tag (server-side filtering by Izanami API)
-  --project: Filter by project (client-side filtering - Izanami API does not support this)`,
+  --project: Filter by project (client-side filtering, use global --project flag)`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := cfg.Validate(); err != nil {
 			return err
@@ -88,13 +87,13 @@ The list endpoint supports filtering by:
 			return err
 		}
 
-		// Client-side filtering by project
+		// Client-side filtering by project (uses global --project flag)
 		// Note: Izanami API does not support project filtering on the list features endpoint,
 		// so we filter the results here on the client side
-		if featureProject != "" {
+		if cfg.Project != "" {
 			filtered := make([]izanami.Feature, 0, len(features))
 			for _, f := range features {
-				if f.Project == featureProject {
+				if f.Project == cfg.Project {
 					filtered = append(filtered, f)
 				}
 			}
@@ -174,12 +173,8 @@ Examples:
 			return err
 		}
 
-		// Determine project
-		proj := featureProject
-		if proj == "" {
-			proj = cfg.Project
-		}
-		if proj == "" {
+		// Project is required for creating features (use global --project flag)
+		if cfg.Project == "" {
 			return fmt.Errorf("project is required (use --project flag or IZ_PROJECT)")
 		}
 
@@ -236,7 +231,7 @@ Examples:
 		}
 
 		ctx := context.Background()
-		created, err := client.CreateFeature(ctx, cfg.Tenant, proj, payload)
+		created, err := client.CreateFeature(ctx, cfg.Tenant, cfg.Project, payload)
 		if err != nil {
 			return err
 		}
@@ -287,22 +282,16 @@ Examples:
 
 		featureID := args[0]
 
-		// Determine project from flags or config
-		proj := featureProject
-		if proj == "" {
-			proj = cfg.Project
-		}
-
 		// Merge required fields into the payload
 		if updateMap, ok := updateData.(map[string]interface{}); ok {
 			// Set the ID field if not already present
 			if _, hasID := updateMap["id"]; !hasID {
 				updateMap["id"] = featureID
 			}
-			// Set the project field if not already present and we have a project
-			if proj != "" {
+			// Set the project field if not already present and we have a project (from global --project flag)
+			if cfg.Project != "" {
 				if _, hasProject := updateMap["project"]; !hasProject {
-					updateMap["project"] = proj
+					updateMap["project"] = cfg.Project
 				}
 			}
 			updateData = updateMap
@@ -736,10 +725,10 @@ Examples:
 func init() {
 	// List flags
 	featuresListCmd.Flags().StringVar(&featureTag, "tag", "", "Filter by tag (server-side)")
-	featuresListCmd.Flags().StringVar(&featureProject, "project", "", "Filter by project (client-side)")
+	// Project filtering uses global --project flag
 
 	// Create flags
-	featuresCreateCmd.Flags().StringVar(&featureProject, "project", "", "Project for the feature (required)")
+	// Project uses global --project flag
 	featuresCreateCmd.Flags().StringVar(&featureDesc, "description", "", "Feature description")
 	featuresCreateCmd.Flags().BoolVar(&featureEnabled, "enabled", false, "Enable the feature")
 	featuresCreateCmd.Flags().StringSliceVar(&featureTags, "tags", []string{}, "Feature tags")

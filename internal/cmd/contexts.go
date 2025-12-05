@@ -10,13 +10,12 @@ import (
 )
 
 var (
-	contextProject        string
-	contextAll            bool
-	contextParent         string
-	contextProtected      bool
-	contextGlobal         bool
-	contextData           string
-	contextsDeleteForce   bool
+	contextAll             bool
+	contextParent          string
+	contextProtected       bool
+	contextGlobal          bool
+	contextData            string
+	contextsDeleteForce    bool
 	contextUpdateProtected string
 )
 
@@ -67,8 +66,9 @@ By default, only shows root-level contexts. Use --all to show all nested context
 		ctx := context.Background()
 
 		// For JSON output, use Identity mapper to get raw JSON
+		// Uses global --project flag to filter by project
 		if outputFormat == "json" {
-			raw, err := izanami.ListContexts(client, ctx, cfg.Tenant, contextProject, contextAll, izanami.Identity)
+			raw, err := izanami.ListContexts(client, ctx, cfg.Tenant, cfg.Project, contextAll, izanami.Identity)
 			if err != nil {
 				return err
 			}
@@ -76,7 +76,7 @@ By default, only shows root-level contexts. Use --all to show all nested context
 		}
 
 		// For table output, use ParseContexts mapper
-		contexts, err := izanami.ListContexts(client, ctx, cfg.Tenant, contextProject, contextAll, izanami.ParseContexts)
+		contexts, err := izanami.ListContexts(client, ctx, cfg.Tenant, cfg.Project, contextAll, izanami.ParseContexts)
 		if err != nil {
 			return err
 		}
@@ -84,7 +84,7 @@ By default, only shows root-level contexts. Use --all to show all nested context
 		// For table output, convert to table view (PATH first, no CHILDREN)
 		// Hide overload column when listing tenant-level contexts (no --project flag)
 		// Show overload column only when --project flag is provided
-		if contextProject != "" {
+		if cfg.Project != "" {
 			tableView := izanami.FlattenContextsForTable(contexts)
 			return output.PrintTo(cmd.OutOrStdout(), tableView, output.Format(outputFormat))
 		} else {
@@ -115,20 +115,15 @@ The context path should be the full hierarchical path, e.g.:
 
 		contextName := args[0]
 
-		// Determine project
-		proj := contextProject
-		if proj == "" {
-			proj = cfg.Project
-		}
-
 		client, err := izanami.NewClient(cfg)
 		if err != nil {
 			return err
 		}
 
 		// List all contexts (without 'all' to get root + immediate children)
+		// Uses global --project flag
 		ctx := context.Background()
-		contexts, err := izanami.ListContexts(client, ctx, cfg.Tenant, proj, false, izanami.ParseContexts)
+		contexts, err := izanami.ListContexts(client, ctx, cfg.Tenant, cfg.Project, false, izanami.ParseContexts)
 		if err != nil {
 			return err
 		}
@@ -150,19 +145,20 @@ var contextsCreateCmd = &cobra.Command{
 	Long: `Create a new feature context.
 
 Contexts can be created at the root level or as children of existing contexts.
+Use the global --project flag to specify the project, or --global for tenant-wide contexts.
 
 Examples:
   # Create a root-level global context
-  iz contexts create prod --global
+  iz admin contexts create prod --global
 
   # Create a root-level project context
-  iz contexts create prod --project my-project
+  iz --project my-project admin contexts create prod
 
   # Create a nested context
-  iz contexts create france --parent prod/eu --project my-project
+  iz --project my-project admin contexts create france --parent prod/eu
 
   # Create with custom data
-  iz contexts create prod --data '{"name":"prod","protected":true}'`,
+  iz admin contexts create prod --data '{"name":"prod","protected":true}'`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := cfg.Validate(); err != nil {
@@ -174,12 +170,8 @@ Examples:
 
 		contextName := args[0]
 
-		// Determine if this is a project or global context
-		proj := contextProject
-		if proj == "" && !contextGlobal {
-			proj = cfg.Project
-		}
-		if proj == "" && !contextGlobal {
+		// Determine if this is a project or global context (uses global --project flag)
+		if cfg.Project == "" && !contextGlobal {
 			return fmt.Errorf("either --project or --global is required")
 		}
 
@@ -202,7 +194,7 @@ Examples:
 		}
 
 		ctx := context.Background()
-		if err := client.CreateContext(ctx, cfg.Tenant, proj, contextName, contextParent, data); err != nil {
+		if err := client.CreateContext(ctx, cfg.Tenant, cfg.Project, contextName, contextParent, data); err != nil {
 			return err
 		}
 
@@ -298,19 +290,14 @@ The context path should be the full hierarchical path.`,
 			}
 		}
 
-		// Determine project
-		proj := contextProject
-		if proj == "" {
-			proj = cfg.Project
-		}
-
 		client, err := izanami.NewClient(cfg)
 		if err != nil {
 			return err
 		}
 
+		// Uses global --project flag
 		ctx := context.Background()
-		if err := client.DeleteContext(ctx, cfg.Tenant, proj, contextPath); err != nil {
+		if err := client.DeleteContext(ctx, cfg.Tenant, cfg.Project, contextPath); err != nil {
 			return err
 		}
 
@@ -351,29 +338,28 @@ func init() {
 	contextsCmd.AddCommand(contextsUpdateCmd)
 	contextsCmd.AddCommand(contextsDeleteCmd)
 
-	// List flags
-	contextsListCmd.Flags().StringVar(&contextProject, "project", "", "List project-specific contexts")
-	contextsListCmd.Flags().BoolVar(&contextAll, "all", false, "Show all nested contexts")
-	contextsListCmd.RegisterFlagCompletionFunc("project", completeProjectNames)
+	// Dynamic completion for context path argument
+	contextsGetCmd.ValidArgsFunction = completeContextNames
+	contextsUpdateCmd.ValidArgsFunction = completeContextNames
+	contextsDeleteCmd.ValidArgsFunction = completeContextNames
 
-	// Get flags
-	contextsGetCmd.Flags().StringVar(&contextProject, "project", "", "Project for the context")
-	contextsGetCmd.RegisterFlagCompletionFunc("project", completeProjectNames)
+	// List flags
+	// Project filtering uses global --project flag
+	contextsListCmd.Flags().BoolVar(&contextAll, "all", false, "Show all nested contexts")
+
+	// Get flags - uses global --project flag
 
 	// Create flags
-	contextsCreateCmd.Flags().StringVar(&contextProject, "project", "", "Create context in this project")
+	// Project uses global --project flag
 	contextsCreateCmd.Flags().BoolVar(&contextGlobal, "global", false, "Create global context")
 	contextsCreateCmd.Flags().StringVar(&contextParent, "parent", "", "Parent context path")
 	contextsCreateCmd.Flags().BoolVar(&contextProtected, "protected", false, "Mark context as protected")
 	contextsCreateCmd.Flags().StringVar(&contextData, "data", "", "JSON context data")
-	contextsCreateCmd.RegisterFlagCompletionFunc("project", completeProjectNames)
 
-	// Update flags
+	// Update flags - uses global --project flag
 	contextsUpdateCmd.Flags().StringVar(&contextUpdateProtected, "protected", "", "Set protected status (true/false)")
 	_ = contextsUpdateCmd.MarkFlagRequired("protected")
 
-	// Delete flags
-	contextsDeleteCmd.Flags().StringVar(&contextProject, "project", "", "Project for the context")
+	// Delete flags - uses global --project flag
 	contextsDeleteCmd.Flags().BoolVarP(&contextsDeleteForce, "force", "f", false, "Skip confirmation prompt")
-	contextsDeleteCmd.RegisterFlagCompletionFunc("project", completeProjectNames)
 }
