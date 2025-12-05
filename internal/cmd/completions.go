@@ -275,6 +275,12 @@ func RegisterFlagCompletions() {
 	rootCmd.RegisterFlagCompletionFunc("tenant", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		return completeTenantNames(cmd, nil, toComplete)
 	})
+
+	// Register --project flag completion globally
+	// This enables: iz admin contexts list --project <TAB>
+	rootCmd.RegisterFlagCompletionFunc("project", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return completeProjectNames(cmd, nil, toComplete)
+	})
 }
 
 // loadCompletionConfig loads configuration for completion functions.

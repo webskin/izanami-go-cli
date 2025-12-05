@@ -354,9 +354,11 @@ func init() {
 	// List flags
 	contextsListCmd.Flags().StringVar(&contextProject, "project", "", "List project-specific contexts")
 	contextsListCmd.Flags().BoolVar(&contextAll, "all", false, "Show all nested contexts")
+	contextsListCmd.RegisterFlagCompletionFunc("project", completeProjectNames)
 
 	// Get flags
 	contextsGetCmd.Flags().StringVar(&contextProject, "project", "", "Project for the context")
+	contextsGetCmd.RegisterFlagCompletionFunc("project", completeProjectNames)
 
 	// Create flags
 	contextsCreateCmd.Flags().StringVar(&contextProject, "project", "", "Create context in this project")
@@ -364,6 +366,7 @@ func init() {
 	contextsCreateCmd.Flags().StringVar(&contextParent, "parent", "", "Parent context path")
 	contextsCreateCmd.Flags().BoolVar(&contextProtected, "protected", false, "Mark context as protected")
 	contextsCreateCmd.Flags().StringVar(&contextData, "data", "", "JSON context data")
+	contextsCreateCmd.RegisterFlagCompletionFunc("project", completeProjectNames)
 
 	// Update flags
 	contextsUpdateCmd.Flags().StringVar(&contextUpdateProtected, "protected", "", "Set protected status (true/false)")
@@ -372,4 +375,5 @@ func init() {
 	// Delete flags
 	contextsDeleteCmd.Flags().StringVar(&contextProject, "project", "", "Project for the context")
 	contextsDeleteCmd.Flags().BoolVarP(&contextsDeleteForce, "force", "f", false, "Skip confirmation prompt")
+	contextsDeleteCmd.RegisterFlagCompletionFunc("project", completeProjectNames)
 }
