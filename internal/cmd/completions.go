@@ -24,6 +24,9 @@ type Completer struct {
 	// ListProjects fetches projects from the API for a given tenant.
 	ListProjects func(cfg *izanami.Config, ctx context.Context, tenant string) ([]izanami.Project, error)
 
+	// ListTags fetches tags from the API for a given tenant.
+	ListTags func(cfg *izanami.Config, ctx context.Context, tenant string) ([]izanami.Tag, error)
+
 	// Timeout for API calls. Defaults to completionTimeout if zero.
 	Timeout time.Duration
 }
@@ -33,6 +36,7 @@ var defaultCompleter = &Completer{
 	LoadConfig:   loadCompletionConfig,
 	ListTenants:  listTenantsAPI,
 	ListProjects: listProjectsAPI,
+	ListTags:     listTagsAPI,
 	Timeout:      completionTimeout,
 }
 
@@ -52,6 +56,15 @@ func listProjectsAPI(cfg *izanami.Config, ctx context.Context, tenant string) ([
 		return nil, err
 	}
 	return izanami.ListProjects(client, ctx, tenant, izanami.ParseProjects)
+}
+
+// listTagsAPI is the production implementation for listing tags.
+func listTagsAPI(cfg *izanami.Config, ctx context.Context, tenant string) ([]izanami.Tag, error) {
+	client, err := izanami.NewClient(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return izanami.ListTags(client, ctx, tenant, izanami.ParseTags)
 }
 
 // getTimeout returns the configured timeout or the default.
@@ -135,6 +148,45 @@ func (c *Completer) CompleteProjectNames(cmd *cobra.Command, args []string, toCo
 	), cobra.ShellCompDirectiveNoFileComp
 }
 
+// CompleteTagNames provides dynamic completion for tag names.
+// Requires tenant to be specified (via --tenant flag or profile).
+// Fails silently if tenant is not set or API is unreachable.
+func (c *Completer) CompleteTagNames(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	// Only complete the first argument
+	if len(args) != 0 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	cfg := c.LoadConfig()
+	if cfg == nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	// Tenant is required for tag listing
+	if cfg.Tenant == "" {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	// Validate admin auth is configured
+	if err := cfg.ValidateAdminAuth(); err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	// Fetch tags with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), c.getTimeout())
+	defer cancel()
+
+	tags, err := c.ListTags(cfg, ctx, cfg.Tenant)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	return buildCompletions(tags, toComplete,
+		func(t izanami.Tag) string { return t.Name },
+		func(t izanami.Tag) string { return t.Description },
+	), cobra.ShellCompDirectiveNoFileComp
+}
+
 // buildCompletions filters items by prefix and formats them for shell completion.
 // Uses tab-separated format "name\tdescription" when description is available.
 func buildCompletions[T any](items []T, toComplete string, getName func(T) string, getDesc func(T) string) []string {
@@ -163,6 +215,11 @@ func completeTenantNames(cmd *cobra.Command, args []string, toComplete string) (
 // completeProjectNames provides dynamic completion for project names.
 func completeProjectNames(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	return defaultCompleter.CompleteProjectNames(cmd, args, toComplete)
+}
+
+// completeTagNames provides dynamic completion for tag names.
+func completeTagNames(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	return defaultCompleter.CompleteTagNames(cmd, args, toComplete)
 }
 
 // completeConfigKeys provides completion for global config keys.

@@ -171,6 +171,10 @@ func init() {
 	adminTagsCmd.AddCommand(adminTagsCreateCmd)
 	adminTagsCmd.AddCommand(adminTagsDeleteCmd)
 
+	// Dynamic completion for tag name argument
+	adminTagsGetCmd.ValidArgsFunction = completeTagNames
+	adminTagsDeleteCmd.ValidArgsFunction = completeTagNames
+
 	adminTagsCreateCmd.Flags().StringVar(&tagDesc, "description", "", "Tag description")
 	adminTagsCreateCmd.Flags().StringVar(&tagData, "data", "", "JSON tag data")
 	adminTagsDeleteCmd.Flags().BoolVarP(&tagsDeleteForce, "force", "f", false, "Skip confirmation prompt")

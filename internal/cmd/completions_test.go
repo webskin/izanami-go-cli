@@ -410,6 +410,177 @@ func TestCompleter_CompleteProjectNames(t *testing.T) {
 	}
 }
 
+func TestCompleter_CompleteTagNames(t *testing.T) {
+	tests := []struct {
+		name          string
+		args          []string
+		toComplete    string
+		loadConfig    func() *izanami.Config
+		listTags      func(cfg *izanami.Config, ctx context.Context, tenant string) ([]izanami.Tag, error)
+		wantResults   []string
+		wantDirective cobra.ShellCompDirective
+	}{
+		{
+			name:       "returns tags on success",
+			args:       []string{},
+			toComplete: "",
+			loadConfig: func() *izanami.Config {
+				return &izanami.Config{
+					PersonalAccessToken:         "test-token",
+					PersonalAccessTokenUsername: "test-user",
+					BaseURL:                     "http://localhost",
+					Tenant:                      "my-tenant",
+				}
+			},
+			listTags: func(cfg *izanami.Config, ctx context.Context, tenant string) ([]izanami.Tag, error) {
+				if tenant != "my-tenant" {
+					t.Errorf("listTags called with tenant %q, want %q", tenant, "my-tenant")
+				}
+				return []izanami.Tag{
+					{Name: "tag-1", Description: "First tag"},
+					{Name: "tag-2", Description: ""},
+				}, nil
+			},
+			wantResults:   []string{"tag-1\tFirst tag", "tag-2"},
+			wantDirective: cobra.ShellCompDirectiveNoFileComp,
+		},
+		{
+			name:       "returns nil when tenant not set",
+			args:       []string{},
+			toComplete: "",
+			loadConfig: func() *izanami.Config {
+				return &izanami.Config{
+					PersonalAccessToken:         "test-token",
+					PersonalAccessTokenUsername: "test-user",
+					BaseURL:                     "http://localhost",
+					Tenant:                      "", // No tenant
+				}
+			},
+			listTags: func(cfg *izanami.Config, ctx context.Context, tenant string) ([]izanami.Tag, error) {
+				t.Error("listTags should not be called when tenant is empty")
+				return nil, nil
+			},
+			wantResults:   nil,
+			wantDirective: cobra.ShellCompDirectiveNoFileComp,
+		},
+		{
+			name:       "returns nil when args not empty",
+			args:       []string{"existing-arg"},
+			toComplete: "",
+			loadConfig: func() *izanami.Config {
+				return &izanami.Config{
+					PersonalAccessToken: "token",
+					Tenant:              "tenant",
+				}
+			},
+			listTags: func(cfg *izanami.Config, ctx context.Context, tenant string) ([]izanami.Tag, error) {
+				t.Error("listTags should not be called when args not empty")
+				return nil, nil
+			},
+			wantResults:   nil,
+			wantDirective: cobra.ShellCompDirectiveNoFileComp,
+		},
+		{
+			name:       "returns nil when config is nil",
+			args:       []string{},
+			toComplete: "",
+			loadConfig: func() *izanami.Config {
+				return nil
+			},
+			listTags: func(cfg *izanami.Config, ctx context.Context, tenant string) ([]izanami.Tag, error) {
+				t.Error("listTags should not be called when config is nil")
+				return nil, nil
+			},
+			wantResults:   nil,
+			wantDirective: cobra.ShellCompDirectiveNoFileComp,
+		},
+		{
+			name:       "returns nil when no admin auth",
+			args:       []string{},
+			toComplete: "",
+			loadConfig: func() *izanami.Config {
+				return &izanami.Config{
+					BaseURL: "http://localhost",
+					Tenant:  "my-tenant",
+					// No PersonalAccessToken or JwtToken
+				}
+			},
+			listTags: func(cfg *izanami.Config, ctx context.Context, tenant string) ([]izanami.Tag, error) {
+				t.Error("listTags should not be called when no admin auth")
+				return nil, nil
+			},
+			wantResults:   nil,
+			wantDirective: cobra.ShellCompDirectiveNoFileComp,
+		},
+		{
+			name:       "returns nil on API error",
+			args:       []string{},
+			toComplete: "",
+			loadConfig: func() *izanami.Config {
+				return &izanami.Config{
+					PersonalAccessToken:         "test-token",
+					PersonalAccessTokenUsername: "test-user",
+					BaseURL:                     "http://localhost",
+					Tenant:                      "my-tenant",
+				}
+			},
+			listTags: func(cfg *izanami.Config, ctx context.Context, tenant string) ([]izanami.Tag, error) {
+				return nil, errors.New("API error")
+			},
+			wantResults:   nil,
+			wantDirective: cobra.ShellCompDirectiveNoFileComp,
+		},
+		{
+			name:       "filters by prefix",
+			args:       []string{},
+			toComplete: "tag-1",
+			loadConfig: func() *izanami.Config {
+				return &izanami.Config{
+					PersonalAccessToken:         "test-token",
+					PersonalAccessTokenUsername: "test-user",
+					BaseURL:                     "http://localhost",
+					Tenant:                      "my-tenant",
+				}
+			},
+			listTags: func(cfg *izanami.Config, ctx context.Context, tenant string) ([]izanami.Tag, error) {
+				return []izanami.Tag{
+					{Name: "tag-1", Description: "First"},
+					{Name: "tag-2", Description: "Second"},
+				}, nil
+			},
+			wantResults:   []string{"tag-1\tFirst"},
+			wantDirective: cobra.ShellCompDirectiveNoFileComp,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &Completer{
+				LoadConfig: tt.loadConfig,
+				ListTags:   tt.listTags,
+				Timeout:    completionTimeout,
+			}
+
+			got, directive := c.CompleteTagNames(nil, tt.args, tt.toComplete)
+
+			if directive != tt.wantDirective {
+				t.Errorf("CompleteTagNames() directive = %v, want %v", directive, tt.wantDirective)
+			}
+
+			if len(got) != len(tt.wantResults) {
+				t.Errorf("CompleteTagNames() returned %d results, want %d", len(got), len(tt.wantResults))
+				return
+			}
+
+			for i, want := range tt.wantResults {
+				if got[i] != want {
+					t.Errorf("CompleteTagNames()[%d] = %q, want %q", i, got[i], want)
+				}
+			}
+		})
+	}
+}
+
 func TestCompleteConfigKeys(t *testing.T) {
 	tests := []struct {
 		name          string
