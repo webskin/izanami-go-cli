@@ -140,11 +140,11 @@ var keysListCmd = &cobra.Command{
 
 // keysGetCmd gets a specific API key
 var keysGetCmd = &cobra.Command{
-	Use:   "get <client-id>",
-	Short: "Get details of a specific API key",
+	Use:   "get <name>",
+	Short: "Get details of a specific API key by name",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		clientID := args[0]
+		name := args[0]
 
 		if cfg.Tenant == "" {
 			return fmt.Errorf(errors.MsgTenantRequired)
@@ -156,9 +156,9 @@ var keysGetCmd = &cobra.Command{
 		}
 
 		ctx := context.Background()
-		// Note: GetAPIKey doesn't have a dedicated endpoint, it filters from list
+		// Note: GetAPIKeyByName doesn't have a dedicated endpoint, it filters from list
 		// So raw JSON output isn't available for a single key
-		key, err := client.GetAPIKey(ctx, cfg.Tenant, clientID)
+		key, err := client.GetAPIKeyByName(ctx, cfg.Tenant, name)
 		if err != nil {
 			return err
 		}
@@ -231,14 +231,25 @@ var keysCreateCmd = &cobra.Command{
 
 // keysUpdateCmd updates an API key
 var keysUpdateCmd = &cobra.Command{
-	Use:   "update <client-id>",
-	Short: "Update an existing API key",
+	Use:   "update <name>",
+	Short: "Update an existing API key by name",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		clientID := args[0]
+		name := args[0]
 
 		if cfg.Tenant == "" {
 			return fmt.Errorf(errors.MsgTenantRequired)
+		}
+
+		// Check if any update flags were provided
+		hasUpdates := cmd.Flags().Changed("name") ||
+			cmd.Flags().Changed("description") ||
+			cmd.Flags().Changed("projects") ||
+			cmd.Flags().Changed("enabled") ||
+			cmd.Flags().Changed("admin")
+
+		if !hasUpdates {
+			return fmt.Errorf("no fields to update (use --name, --description, --projects, --enabled, or --admin)")
 		}
 
 		client, err := izanami.NewClient(cfg)
@@ -246,9 +257,24 @@ var keysUpdateCmd = &cobra.Command{
 			return err
 		}
 
-		// Build update data from changed flags
-		keyData := make(map[string]interface{})
+		ctx := context.Background()
 
+		// Fetch current key by name to get clientID and existing values (API requires full object)
+		currentKey, err := client.GetAPIKeyByName(ctx, cfg.Tenant, name)
+		if err != nil {
+			return fmt.Errorf("failed to get current key: %w", err)
+		}
+
+		// Start with current values
+		keyData := map[string]interface{}{
+			"name":        currentKey.Name,
+			"description": currentKey.Description,
+			"projects":    currentKey.Projects,
+			"enabled":     currentKey.Enabled,
+			"admin":       currentKey.Admin,
+		}
+
+		// Override with user-provided values
 		if cmd.Flags().Changed("name") {
 			keyData["name"] = keyName
 		}
@@ -265,12 +291,7 @@ var keysUpdateCmd = &cobra.Command{
 			keyData["admin"] = keyAdmin
 		}
 
-		if len(keyData) == 0 {
-			return fmt.Errorf("no fields to update (use --name, --description, --projects, --enabled, or --admin)")
-		}
-
-		ctx := context.Background()
-		if err := client.UpdateAPIKey(ctx, cfg.Tenant, clientID, keyData); err != nil {
+		if err := client.UpdateAPIKey(ctx, cfg.Tenant, name, keyData); err != nil {
 			return err
 		}
 
@@ -281,11 +302,11 @@ var keysUpdateCmd = &cobra.Command{
 
 // keysDeleteCmd deletes an API key
 var keysDeleteCmd = &cobra.Command{
-	Use:   "delete <client-id>",
-	Short: "Delete an API key",
+	Use:   "delete <name>",
+	Short: "Delete an API key by name",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		clientID := args[0]
+		name := args[0]
 
 		if cfg.Tenant == "" {
 			return fmt.Errorf(errors.MsgTenantRequired)
@@ -293,7 +314,7 @@ var keysDeleteCmd = &cobra.Command{
 
 		// Confirm deletion unless --force is used
 		if !keysDeleteForce {
-			if !confirmDeletion(cmd, "API key", clientID) {
+			if !confirmDeletion(cmd, "API key", name) {
 				return nil
 			}
 		}
@@ -304,7 +325,7 @@ var keysDeleteCmd = &cobra.Command{
 		}
 
 		ctx := context.Background()
-		if err := client.DeleteAPIKey(ctx, cfg.Tenant, clientID); err != nil {
+		if err := client.DeleteAPIKey(ctx, cfg.Tenant, name); err != nil {
 			return err
 		}
 

@@ -42,26 +42,26 @@ func (c *Client) listAPIKeysRaw(ctx context.Context, tenant string) ([]byte, err
 	return resp.Body(), nil
 }
 
-// GetAPIKey retrieves a specific API key by clientID.
+// GetAPIKeyByName retrieves a specific API key by name.
 // Note: The Izanami API doesn't have a dedicated endpoint for getting a single key,
-// so this method lists all keys and filters by clientID.
+// so this method lists all keys and filters by name.
 // Because of client-side filtering, this method returns a parsed key rather than raw JSON.
-func (c *Client) GetAPIKey(ctx context.Context, tenant, clientID string) (*APIKey, error) {
+func (c *Client) GetAPIKeyByName(ctx context.Context, tenant, name string) (*APIKey, error) {
 	keys, err := ListAPIKeys(c, ctx, tenant, ParseAPIKeys)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", errmsg.MsgFailedToGetAPIKey, err)
 	}
 
-	// Find the key with matching clientID
+	// Find the key with matching name
 	for i := range keys {
-		if keys[i].ClientID == clientID {
+		if keys[i].Name == name {
 			return &keys[i], nil
 		}
 	}
 
 	return nil, &APIError{
 		StatusCode: http.StatusNotFound,
-		Message:    fmt.Sprintf("API key with clientID '%s' not found", clientID),
+		Message:    fmt.Sprintf("API key with name '%s' not found", name),
 		RawBody:    "",
 	}
 }
@@ -91,10 +91,10 @@ func (c *Client) CreateAPIKey(ctx context.Context, tenant string, key interface{
 	return &result, nil
 }
 
-// UpdateAPIKey updates an existing API key
+// UpdateAPIKey updates an existing API key by name
 // The key parameter accepts either an *APIKey or any compatible struct
-func (c *Client) UpdateAPIKey(ctx context.Context, tenant, clientID string, key interface{}) error {
-	path := apiAdminTenants + buildPath(tenant, "keys", clientID)
+func (c *Client) UpdateAPIKey(ctx context.Context, tenant, name string, key interface{}) error {
+	path := apiAdminTenants + buildPath(tenant, "keys", name)
 
 	req := c.http.R().
 		SetContext(ctx).
@@ -114,9 +114,9 @@ func (c *Client) UpdateAPIKey(ctx context.Context, tenant, clientID string, key 
 	return nil
 }
 
-// DeleteAPIKey deletes an API key
-func (c *Client) DeleteAPIKey(ctx context.Context, tenant, clientID string) error {
-	path := apiAdminTenants + buildPath(tenant, "keys", clientID)
+// DeleteAPIKey deletes an API key by name
+func (c *Client) DeleteAPIKey(ctx context.Context, tenant, name string) error {
+	path := apiAdminTenants + buildPath(tenant, "keys", name)
 
 	req := c.http.R().SetContext(ctx)
 	c.setAdminAuth(req)

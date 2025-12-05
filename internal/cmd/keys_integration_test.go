@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/webskin/izanami-go-cli/internal/izanami"
@@ -114,14 +115,14 @@ func (tk *TempAPIKey) MustCreate(t *testing.T) *TempAPIKey {
 // Delete removes the API key from server
 func (tk *TempAPIKey) Delete(t *testing.T) {
 	t.Helper()
-	if !tk.created || tk.ClientID == "" {
+	if !tk.created || tk.Name == "" {
 		return
 	}
-	err := tk.client.DeleteAPIKey(tk.ctx, tk.Tenant, tk.ClientID)
+	err := tk.client.DeleteAPIKey(tk.ctx, tk.Tenant, tk.Name)
 	if err != nil {
-		t.Logf("Warning: failed to delete temp API key %s: %v", tk.ClientID, err)
+		t.Logf("Warning: failed to delete temp API key %s: %v", tk.Name, err)
 	} else {
-		t.Logf("TempAPIKey deleted: %s", tk.ClientID)
+		t.Logf("TempAPIKey deleted: %s", tk.Name)
 		tk.created = false
 	}
 }
@@ -214,6 +215,11 @@ func executeKeysCommand(t *testing.T, args []string) (string, error) {
 	keysDeleteCmd.SetOut(&buf)
 	keysDeleteCmd.SetErr(&buf)
 
+	// Reset flag Changed state before execution to avoid pollution between tests
+	keysUpdateCmd.Flags().VisitAll(func(f *pflag.Flag) { f.Changed = false })
+	keysCreateCmd.Flags().VisitAll(func(f *pflag.Flag) { f.Changed = false })
+	keysDeleteCmd.Flags().VisitAll(func(f *pflag.Flag) { f.Changed = false })
+
 	fullArgs := append([]string{"admin", "keys"}, args...)
 	cmd.SetArgs(fullArgs)
 	err := cmd.Execute()
@@ -257,6 +263,11 @@ func executeKeysCommandWithInput(t *testing.T, args []string, input string) (str
 	keysDeleteCmd.SetOut(&buf)
 	keysDeleteCmd.SetErr(&buf)
 	keysDeleteCmd.SetIn(inputBuf)
+
+	// Reset flag Changed state before execution to avoid pollution between tests
+	keysUpdateCmd.Flags().VisitAll(func(f *pflag.Flag) { f.Changed = false })
+	keysCreateCmd.Flags().VisitAll(func(f *pflag.Flag) { f.Changed = false })
+	keysDeleteCmd.Flags().VisitAll(func(f *pflag.Flag) { f.Changed = false })
 
 	fullArgs := append([]string{"admin", "keys"}, args...)
 	cmd.SetArgs(fullArgs)
@@ -399,7 +410,7 @@ func TestIntegration_KeysGetExisting(t *testing.T) {
 		MustCreate(t)
 	defer tempKey.Delete(t)
 
-	output, err := executeKeysCommand(t, []string{"get", tempKey.ClientID})
+	output, err := executeKeysCommand(t, []string{"get", tempKey.Name})
 	require.NoError(t, err)
 
 	t.Logf("Keys get output:\n%s", output)
@@ -428,7 +439,7 @@ func TestIntegration_KeysGetJSONOutput(t *testing.T) {
 		MustCreate(t)
 	defer tempKey.Delete(t)
 
-	output, err := executeKeysCommand(t, []string{"get", tempKey.ClientID})
+	output, err := executeKeysCommand(t, []string{"get", tempKey.Name})
 	require.NoError(t, err)
 
 	t.Logf("Keys get JSON output:\n%s", output)
@@ -455,7 +466,7 @@ func TestIntegration_KeysGetNotFound(t *testing.T) {
 
 	tenant = tempTenant.Name
 
-	_, err := executeKeysCommand(t, []string{"get", "nonexistent-client-id-12345"})
+	_, err := executeKeysCommand(t, []string{"get", "nonexistent-key-name-12345"})
 	require.Error(t, err)
 	// Should get a 404 or "not found" error
 	assert.Contains(t, err.Error(), "not found")
@@ -759,20 +770,22 @@ func TestIntegration_KeysUpdateName(t *testing.T) {
 
 	// Create a key to update
 	tempKey := NewTempAPIKey(t, client, tempTenant.Name).MustCreate(t)
-	defer tempKey.Delete(t)
 
 	newName := fmt.Sprintf("updatedkey%d", time.Now().UnixNano())
-	keyName = newName
 
-	output, err := executeKeysCommand(t, []string{"update", tempKey.ClientID})
+	output, err := executeKeysCommand(t, []string{"update", tempKey.Name, "--name", newName})
 	require.NoError(t, err)
+
+	// Update tempKey.Name for cleanup since we renamed it
+	tempKey.Name = newName
+	defer tempKey.Delete(t)
 
 	t.Logf("Keys update name output:\n%s", output)
 	assert.Contains(t, output, "API key updated successfully")
 
-	// Verify via API
+	// Verify via API - use newName since we renamed the key
 	ctx := context.Background()
-	key, err := client.GetAPIKey(ctx, tempTenant.Name, tempKey.ClientID)
+	key, err := client.GetAPIKeyByName(ctx, tempTenant.Name, newName)
 	require.NoError(t, err)
 	assert.Equal(t, newName, key.Name)
 }
@@ -793,9 +806,7 @@ func TestIntegration_KeysUpdateDescription(t *testing.T) {
 	tempKey := NewTempAPIKey(t, client, tempTenant.Name).MustCreate(t)
 	defer tempKey.Delete(t)
 
-	keyDescription = "Updated description via CLI"
-
-	output, err := executeKeysCommand(t, []string{"update", tempKey.ClientID})
+	output, err := executeKeysCommand(t, []string{"update", tempKey.Name, "--description", "Updated description via CLI"})
 	require.NoError(t, err)
 
 	t.Logf("Keys update description output:\n%s", output)
@@ -803,7 +814,7 @@ func TestIntegration_KeysUpdateDescription(t *testing.T) {
 
 	// Verify via API
 	ctx := context.Background()
-	key, err := client.GetAPIKey(ctx, tempTenant.Name, tempKey.ClientID)
+	key, err := client.GetAPIKeyByName(ctx, tempTenant.Name, tempKey.Name)
 	require.NoError(t, err)
 	assert.Equal(t, "Updated description via CLI", key.Description)
 }
@@ -825,9 +836,7 @@ func TestIntegration_KeysUpdateEnabled(t *testing.T) {
 	defer tempKey.Delete(t)
 
 	// Disable it
-	keyEnabled = false
-
-	output, err := executeKeysCommand(t, []string{"update", tempKey.ClientID})
+	output, err := executeKeysCommand(t, []string{"update", tempKey.Name, "--enabled=false"})
 	require.NoError(t, err)
 
 	t.Logf("Keys update enabled output:\n%s", output)
@@ -835,7 +844,7 @@ func TestIntegration_KeysUpdateEnabled(t *testing.T) {
 
 	// Verify via API
 	ctx := context.Background()
-	key, err := client.GetAPIKey(ctx, tempTenant.Name, tempKey.ClientID)
+	key, err := client.GetAPIKeyByName(ctx, tempTenant.Name, tempKey.Name)
 	require.NoError(t, err)
 	assert.False(t, key.Enabled)
 }
@@ -861,7 +870,7 @@ func TestIntegration_KeysUpdateNoChanges(t *testing.T) {
 	keyDescription = ""
 	keyProjects = []string{}
 
-	_, err := executeKeysCommand(t, []string{"update", tempKey.ClientID})
+	_, err := executeKeysCommand(t, []string{"update", tempKey.Name})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no fields to update")
 }
@@ -905,7 +914,7 @@ func TestIntegration_KeysDeleteWithForce(t *testing.T) {
 	tempKey := NewTempAPIKey(t, client, tempTenant.Name).MustCreate(t)
 	// Don't defer delete - we're deleting it in the test
 
-	output, err := executeKeysCommand(t, []string{"delete", tempKey.ClientID})
+	output, err := executeKeysCommand(t, []string{"delete", tempKey.Name})
 	require.NoError(t, err)
 
 	t.Logf("Keys delete with force output:\n%s", output)
@@ -913,7 +922,7 @@ func TestIntegration_KeysDeleteWithForce(t *testing.T) {
 
 	// Verify key no longer exists
 	ctx := context.Background()
-	_, err = client.GetAPIKey(ctx, tempTenant.Name, tempKey.ClientID)
+	_, err = client.GetAPIKeyByName(ctx, tempTenant.Name, tempKey.Name)
 	require.Error(t, err, "Key should no longer exist")
 	assert.Contains(t, err.Error(), "not found")
 }
@@ -936,7 +945,7 @@ func TestIntegration_KeysDeleteWithConfirmation(t *testing.T) {
 	// Don't defer delete - we're deleting it in the test
 
 	// User types "y" to confirm
-	output, err := executeKeysCommandWithInput(t, []string{"delete", tempKey.ClientID}, "y\n")
+	output, err := executeKeysCommandWithInput(t, []string{"delete", tempKey.Name}, "y\n")
 	require.NoError(t, err)
 
 	t.Logf("Keys delete with confirmation output:\n%s", output)
@@ -944,7 +953,7 @@ func TestIntegration_KeysDeleteWithConfirmation(t *testing.T) {
 
 	// Verify key no longer exists
 	ctx := context.Background()
-	_, err = client.GetAPIKey(ctx, tempTenant.Name, tempKey.ClientID)
+	_, err = client.GetAPIKeyByName(ctx, tempTenant.Name, tempKey.Name)
 	require.Error(t, err, "Key should no longer exist")
 }
 
@@ -966,7 +975,7 @@ func TestIntegration_KeysDeleteCancelled(t *testing.T) {
 	defer tempKey.Delete(t) // Will still exist after cancelled delete
 
 	// User types "n" to cancel
-	output, err := executeKeysCommandWithInput(t, []string{"delete", tempKey.ClientID}, "n\n")
+	output, err := executeKeysCommandWithInput(t, []string{"delete", tempKey.Name}, "n\n")
 	require.NoError(t, err)
 
 	t.Logf("Keys delete cancelled output:\n%s", output)
@@ -974,7 +983,7 @@ func TestIntegration_KeysDeleteCancelled(t *testing.T) {
 
 	// Verify key still exists
 	ctx := context.Background()
-	key, err := client.GetAPIKey(ctx, tempTenant.Name, tempKey.ClientID)
+	key, err := client.GetAPIKeyByName(ctx, tempTenant.Name, tempKey.Name)
 	require.NoError(t, err, "Key should still exist after cancelled delete")
 	assert.Equal(t, tempKey.ClientID, key.ClientID)
 }
@@ -1082,11 +1091,11 @@ func TestIntegration_APICreateKey(t *testing.T) {
 
 	// Cleanup
 	defer func() {
-		_ = client.DeleteAPIKey(ctx, tempTenant.Name, result.ClientID)
+		_ = client.DeleteAPIKey(ctx, tempTenant.Name, keyName)
 	}()
 
 	// Verify it exists
-	key, err := client.GetAPIKey(ctx, tempTenant.Name, result.ClientID)
+	key, err := client.GetAPIKeyByName(ctx, tempTenant.Name, keyName)
 	require.NoError(t, err)
 	assert.Equal(t, keyName, key.Name)
 	assert.Equal(t, "Created via API", key.Description)
@@ -1109,14 +1118,14 @@ func TestIntegration_APIUpdateKey(t *testing.T) {
 
 	// Update via API
 	ctx := context.Background()
-	err := client.UpdateAPIKey(ctx, tempTenant.Name, tempKey.ClientID, map[string]interface{}{
+	err := client.UpdateAPIKey(ctx, tempTenant.Name, tempKey.Name, map[string]interface{}{
 		"description": "Updated via API",
 		"enabled":     false,
 	})
 	require.NoError(t, err)
 
 	// Verify update
-	key, err := client.GetAPIKey(ctx, tempTenant.Name, tempKey.ClientID)
+	key, err := client.GetAPIKeyByName(ctx, tempTenant.Name, tempKey.Name)
 	require.NoError(t, err)
 	assert.Equal(t, "Updated via API", key.Description)
 	assert.False(t, key.Enabled)
@@ -1138,11 +1147,11 @@ func TestIntegration_APIDeleteKey(t *testing.T) {
 
 	// Delete via API
 	ctx := context.Background()
-	err := client.DeleteAPIKey(ctx, tempTenant.Name, tempKey.ClientID)
+	err := client.DeleteAPIKey(ctx, tempTenant.Name, tempKey.Name)
 	require.NoError(t, err)
 
 	// Verify it no longer exists
-	_, err = client.GetAPIKey(ctx, tempTenant.Name, tempKey.ClientID)
+	_, err = client.GetAPIKeyByName(ctx, tempTenant.Name, tempKey.Name)
 	require.Error(t, err, "Key should no longer exist after deletion")
 	assert.Contains(t, err.Error(), "not found")
 }

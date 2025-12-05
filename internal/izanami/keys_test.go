@@ -54,7 +54,7 @@ func TestClient_ListAPIKeys(t *testing.T) {
 	assert.Equal(t, "key-2", keys[1].ClientID)
 }
 
-func TestClient_GetAPIKey(t *testing.T) {
+func TestClient_GetAPIKeyByName(t *testing.T) {
 	keys := []APIKey{
 		{
 			ClientID:     "other-key",
@@ -89,12 +89,44 @@ func TestClient_GetAPIKey(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	key, err := client.GetAPIKey(ctx, "test-tenant", "test-key")
+	key, err := client.GetAPIKeyByName(ctx, "test-tenant", "Test Key")
 
 	assert.NoError(t, err)
 	assert.NotNil(t, key)
 	assert.Equal(t, "test-key", key.ClientID)
 	assert.Equal(t, "Test Key", key.Name)
+}
+
+func TestClient_GetAPIKeyByName_NotFound(t *testing.T) {
+	keys := []APIKey{
+		{
+			ClientID:     "test-key",
+			Name:         "Test Key",
+			ClientSecret: "secret",
+		},
+	}
+
+	server := mockServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(keys)
+	})
+	defer server.Close()
+
+	config := &Config{
+		BaseURL:  server.URL,
+		Username: "test-user",
+		JwtToken: "test-jwt-token",
+		Timeout:  30,
+	}
+
+	client, err := NewClient(config)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	_, err = client.GetAPIKeyByName(ctx, "test-tenant", "Nonexistent Key")
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
 }
 
 func TestClient_CreateAPIKey(t *testing.T) {
