@@ -166,10 +166,11 @@ func setupMyCommandTest(t *testing.T, env *IntegrationTestEnv) func() {
     env.Login(t)
     token := env.GetJwtToken(t)
 
-    // Save original values
+    // Save original values (include ALL global flag variables!)
     origCfg := cfg
     origOutputFormat := outputFormat
     origTenant := tenant
+    origProject := project  // Don't forget project!
 
     // Set up config
     cfg = &izanami.Config{
@@ -179,7 +180,8 @@ func setupMyCommandTest(t *testing.T, env *IntegrationTestEnv) func() {
         Timeout:  30,
     }
     outputFormat = "table"
-    tenant = "" // Will be set per-test
+    tenant = ""  // Will be set per-test
+    project = "" // Reset to avoid pollution from other tests
 
     // Reset command-specific flags to defaults
     myCommandFlag = ""
@@ -189,6 +191,7 @@ func setupMyCommandTest(t *testing.T, env *IntegrationTestEnv) func() {
         cfg = origCfg
         outputFormat = origOutputFormat
         tenant = origTenant
+        project = origProject
         myCommandFlag = ""
         myOtherFlag = false
     }
@@ -200,6 +203,9 @@ func executeMyCommand(t *testing.T, args []string) (string, error) {
 
     var buf bytes.Buffer
     cmd := &cobra.Command{Use: "iz"}
+    // Add --project flag if your command uses it (binds to global 'project' variable)
+    // This allows tests to pass --project as an argument
+    cmd.PersistentFlags().StringVar(&project, "project", "", "Default project")
     cmd.AddCommand(parentCmd)
 
     // Set Out/Err on ALL commands in hierarchy
@@ -464,15 +470,16 @@ Look at these files for patterns:
    tenant = tempTenant.Name  // Set global variable explicitly
    ```
 
-2. **Global Variables vs Flags**: Set global variables directly, not via `--flag` arguments:
+2. **Global Variables vs Flags - Know When to Use Each**:
+   - For variables NOT bound to flags in your test command (e.g., `tenant`, `outputFormat`): set globals directly
+   - For variables bound via `StringVar` in your test command (e.g., `project`): pass as flag argument (see gotcha #6)
    ```go
-   // BAD - may not work in test context
-   cmd.SetArgs([]string{"list", "--tenant", "my-tenant", "--output", "json"})
-
-   // GOOD - set globals directly
+   // tenant and outputFormat: set globals (no flag binding in test cmd)
    tenant = "my-tenant"
    outputFormat = "json"
-   cmd.SetArgs([]string{"list"})
+
+   // project: pass as flag (because test cmd has StringVar(&project, "project", ...))
+   cmd.SetArgs([]string{"list", "--project", "my-project"})
    ```
 
 3. **SetOut/SetErr Inheritance**: Cobra does NOT propagate SetOut/SetErr to child commands. You must set it on EVERY command that produces output:
@@ -491,5 +498,46 @@ Look at these files for patterns:
 4. **output.Print vs output.PrintTo**: Commands must use `output.PrintTo(cmd.OutOrStdout(), ...)` not `output.Print(...)` for output to be captured in tests. If tests show empty output, check the command implementation.
 
 5. **Confirmation Prompts**: The confirmation helper uses "Cancelled" with capital C. Match exact case in assertions.
+
+6. **Cobra flag binding resets variables during Execute()**: When you add a persistent flag with `StringVar(&project, "project", "", "")`, Cobra may reset the bound variable to its default during flag parsing in `Execute()`. If you set `project = "foo"` before calling `Execute()`, it may be overwritten to `""`. **Solution**: Pass the flag as a command-line argument instead:
+   ```go
+   // BAD - project may be reset to "" during Execute()
+   project = tempProject.Name
+   output, err := executeMyCommand(t, []string{"list"})
+
+   // GOOD - pass flag as argument
+   output, err := executeMyCommand(t, []string{"list", "--project", tempProject.Name})
+   ```
+   For this to work, the test command must define the flag:
+   ```go
+   cmd := &cobra.Command{Use: "iz"}
+   cmd.PersistentFlags().StringVar(&project, "project", "", "Default project")
+   cmd.AddCommand(adminCmd)
+   ```
+
+7. **Save/restore ALL global flag variables**: Setup functions must save and restore ALL global variables that could be modified, including `project`, not just `tenant`. Otherwise tests that use `--project` will pollute subsequent tests:
+   ```go
+   func setupMyTest(t *testing.T, env *IntegrationTestEnv) func() {
+       origTenant := tenant
+       origProject := project  // Don't forget this!
+       // ...
+       tenant = ""
+       project = ""  // Reset to avoid pollution
+
+       return func() {
+           tenant = origTenant
+           project = origProject  // Restore!
+       }
+   }
+   ```
+
+8. **`-tags=integration` build tag is required**: Integration test files use `//go:build integration`. Without `-tags=integration`, tests won't compile or run:
+   ```bash
+   # WRONG - tests appear to pass instantly (they're not running!)
+   go test ./internal/cmd/... -run "TestIntegration"
+
+   # CORRECT
+   go test -tags=integration ./internal/cmd/... -run "TestIntegration"
+   ```
 
 Now analyze `{{target_file}}` and generate the integration tests.
