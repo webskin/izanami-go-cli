@@ -211,6 +211,7 @@ func executeContextsCommand(t *testing.T, args []string) (string, error) {
 
 	var buf bytes.Buffer
 	cmd := &cobra.Command{Use: "iz"}
+	cmd.PersistentFlags().StringVar(&project, "project", "", "Default project")
 	cmd.AddCommand(adminCmd)
 	cmd.SetOut(&buf)
 	cmd.SetErr(&buf)
@@ -259,6 +260,7 @@ func executeContextsCommandWithInput(t *testing.T, args []string, input string) 
 	inputBuf := bytes.NewBufferString(input)
 
 	cmd := &cobra.Command{Use: "iz"}
+	cmd.PersistentFlags().StringVar(&project, "project", "", "Default project")
 	cmd.AddCommand(adminCmd)
 	cmd.SetOut(&buf)
 	cmd.SetErr(&buf)

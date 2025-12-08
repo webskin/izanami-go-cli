@@ -3,16 +3,88 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
+	_ "github.com/lib/pq" // PostgreSQL driver
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 	"github.com/webskin/izanami-go-cli/internal/izanami"
 )
+
+// Database connection singleton for cleanup operations
+var (
+	testDB     *sql.DB
+	testDBOnce sync.Once
+	testDBErr  error
+)
+
+// getTestDB returns a singleton database connection for test cleanup operations.
+// The connection is lazily initialized on first call.
+func getTestDB(dsn string) (*sql.DB, error) {
+	testDBOnce.Do(func() {
+		testDB, testDBErr = sql.Open("postgres", dsn)
+		if testDBErr != nil {
+			return
+		}
+		// Verify connection
+		testDBErr = testDB.Ping()
+		if testDBErr != nil {
+			testDB.Close()
+			testDB = nil
+			return
+		}
+		// Set conservative pool settings for test use
+		testDB.SetMaxOpenConns(1)
+		testDB.SetMaxIdleConns(1)
+	})
+	return testDB, testDBErr
+}
+
+// cleanupPostgresConnections terminates lingering database connections after tenant deletion.
+// This prevents connection pool exhaustion. Terminates:
+// - LISTEN connections (except the main "izanami" listener)
+// - Idle vertx-pg-client connections
+// If IZ_TEST_DB_DSN is not set or connection fails, it logs a warning but does not fail the test.
+func cleanupPostgresListeners(t *testing.T) {
+	t.Helper()
+
+	dsn := os.Getenv("IZ_TEST_DB_DSN")
+	if dsn == "" {
+		// DSN not configured - skip cleanup silently
+		return
+	}
+
+	db, err := getTestDB(dsn)
+	if err != nil {
+		t.Logf("Warning: PostgreSQL cleanup skipped - connection failed: %v", err)
+		return
+	}
+
+	query := `
+		SELECT pg_terminate_backend(pid)
+		FROM pg_stat_activity
+		WHERE pid <> pg_backend_pid()
+			AND backend_type = 'client backend'
+			AND ((query LIKE 'LISTEN%' AND query <> 'LISTEN "izanami"')
+				OR application_name = 'vertx-pg-client')
+	`
+
+	result, err := db.ExecContext(context.Background(), query)
+	if err != nil {
+		t.Logf("Warning: PostgreSQL connection cleanup failed: %v", err)
+		return
+	}
+
+	if rows, _ := result.RowsAffected(); rows > 0 {
+		t.Logf("PostgreSQL cleanup: terminated %d lingering connections", rows)
+	}
+}
 
 // IntegrationTestEnv holds the test environment configuration
 type IntegrationTestEnv struct {
@@ -245,7 +317,7 @@ func (tt *TempTenant) Update(t *testing.T, description string) *TempTenant {
 	return tt
 }
 
-// Delete removes the tenant from server
+// Delete removes the tenant from server and cleans up any lingering database connections
 func (tt *TempTenant) Delete(t *testing.T) {
 	t.Helper()
 	if !tt.created {
@@ -257,6 +329,10 @@ func (tt *TempTenant) Delete(t *testing.T) {
 	} else {
 		t.Logf("TempTenant deleted: %s", tt.Name)
 		tt.created = false
+
+		// Clean up any lingering PostgreSQL LISTEN connections
+		// This prevents connection pool exhaustion after tenant deletion
+		cleanupPostgresListeners(t)
 	}
 }
 
