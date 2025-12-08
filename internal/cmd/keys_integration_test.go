@@ -1116,9 +1116,10 @@ func TestIntegration_APIUpdateKey(t *testing.T) {
 	tempKey := NewTempAPIKey(t, client, tempTenant.Name).MustCreate(t)
 	defer tempKey.Delete(t)
 
-	// Update via API
+	// Update via API (API requires name field in request body)
 	ctx := context.Background()
 	err := client.UpdateAPIKey(ctx, tempTenant.Name, tempKey.Name, map[string]interface{}{
+		"name":        tempKey.Name,
 		"description": "Updated via API",
 		"enabled":     false,
 	})

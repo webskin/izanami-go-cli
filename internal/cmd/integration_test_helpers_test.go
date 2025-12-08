@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
@@ -46,12 +47,85 @@ func getTestDB(dsn string) (*sql.DB, error) {
 	return testDB, testDBErr
 }
 
-// cleanupPostgresConnections terminates lingering database connections after tenant deletion.
-// This prevents connection pool exhaustion. Terminates:
-// - LISTEN connections (except the main "izanami" listener)
-// - Idle vertx-pg-client connections
+// cleanupSSEConnections calls DELETE /api/admin/sse to clean up SSE/event connections.
+// This mirrors the Scala cleanEvents function in beforeEach.
+// If cleanup fails, it logs a warning but does not fail the test.
+func cleanupSSEConnections(t *testing.T, baseURL, username, password string) {
+	t.Helper()
+
+	if baseURL == "" || username == "" || password == "" {
+		return
+	}
+
+	// Create a simple HTTP client for cleanup
+	client := &http.Client{Timeout: 10 * time.Second}
+
+	// Login to get session token
+	loginURL := fmt.Sprintf("%s/api/admin/login", baseURL)
+	loginReq, err := http.NewRequest("POST", loginURL, nil)
+	if err != nil {
+		t.Logf("Warning: SSE cleanup skipped - failed to create login request: %v", err)
+		return
+	}
+	loginReq.SetBasicAuth(username, password)
+
+	loginResp, err := client.Do(loginReq)
+	if err != nil {
+		t.Logf("Warning: SSE cleanup skipped - login failed: %v", err)
+		return
+	}
+	defer loginResp.Body.Close()
+
+	if loginResp.StatusCode >= 400 {
+		t.Logf("Warning: SSE cleanup skipped - login returned status %d", loginResp.StatusCode)
+		return
+	}
+
+	// Extract session cookie
+	var sessionCookie *http.Cookie
+	for _, cookie := range loginResp.Cookies() {
+		if cookie.Name == "token" {
+			sessionCookie = cookie
+			break
+		}
+	}
+
+	if sessionCookie == nil {
+		t.Logf("Warning: SSE cleanup skipped - no session token in login response")
+		return
+	}
+
+	// Call DELETE /api/admin/sse
+	sseURL := fmt.Sprintf("%s/api/admin/sse", baseURL)
+	sseReq, err := http.NewRequest("DELETE", sseURL, nil)
+	if err != nil {
+		t.Logf("Warning: SSE cleanup skipped - failed to create SSE request: %v", err)
+		return
+	}
+	sseReq.AddCookie(sessionCookie)
+
+	sseResp, err := client.Do(sseReq)
+	if err != nil {
+		t.Logf("Warning: SSE cleanup failed: %v", err)
+		return
+	}
+	defer sseResp.Body.Close()
+
+	if sseResp.StatusCode < 400 {
+		t.Logf("SSE cleanup: cleared event connections")
+	}
+}
+
+// cleanupPostgresConnections terminates lingering database connections for dynamically-created
+// test tenants before a test starts. This prevents connection pool exhaustion from lingering
+// LISTEN connections after tenant deletions.
+//
+// Unlike Scala tests which do full database cleanup (DELETE FROM tenants CASCADE), Go CLI tests
+// are external and can't reset the database. So we only clean up LISTEN connections for
+// test-tenant-NNNN patterns (our created tenants), not the main "test-tenant" or "izanami".
+//
 // If IZ_TEST_DB_DSN is not set or connection fails, it logs a warning but does not fail the test.
-func cleanupPostgresListeners(t *testing.T) {
+func cleanupPostgresConnections(t *testing.T) {
 	t.Helper()
 
 	dsn := os.Getenv("IZ_TEST_DB_DSN")
@@ -66,23 +140,36 @@ func cleanupPostgresListeners(t *testing.T) {
 		return
 	}
 
+	// Only terminate LISTEN connections for dynamically-created test tenants
+	// Pattern: LISTEN "test-tenant-<nanoseconds>" - our created tenants have numeric suffixes
+	// Keep: "izanami" (main listener) and "test-tenant" (static test tenant without suffix)
 	query := `
 		SELECT pg_terminate_backend(pid)
 		FROM pg_stat_activity
 		WHERE pid <> pg_backend_pid()
 			AND backend_type = 'client backend'
-			AND ((query LIKE 'LISTEN%' AND query <> 'LISTEN "izanami"')
-				OR application_name = 'vertx-pg-client')
+			AND query ~ 'LISTEN "test-tenant-[0-9]+'
 	`
 
-	result, err := db.ExecContext(context.Background(), query)
+	// Use QueryContext since we need to count returned rows (not affected rows)
+	rows, err := db.QueryContext(context.Background(), query)
 	if err != nil {
 		t.Logf("Warning: PostgreSQL connection cleanup failed: %v", err)
 		return
 	}
+	defer rows.Close()
 
-	if rows, _ := result.RowsAffected(); rows > 0 {
-		t.Logf("PostgreSQL cleanup: terminated %d lingering connections", rows)
+	// Count how many connections were terminated
+	count := 0
+	for rows.Next() {
+		var terminated bool
+		if err := rows.Scan(&terminated); err == nil && terminated {
+			count++
+		}
+	}
+
+	if count > 0 {
+		t.Logf("PostgreSQL cleanup: terminated %d lingering LISTEN connections for deleted test tenants", count)
 	}
 }
 
@@ -101,6 +188,7 @@ type IntegrationTestEnv struct {
 
 // setupIntegrationTest creates an isolated test environment and returns config from env vars.
 // Tests are skipped if IZ_TEST_BASE_URL is not set.
+// Like Scala's beforeEach, this cleans up lingering database and SSE connections before starting.
 func setupIntegrationTest(t *testing.T) *IntegrationTestEnv {
 	t.Helper()
 
@@ -109,6 +197,14 @@ func setupIntegrationTest(t *testing.T) *IntegrationTestEnv {
 	if baseURL == "" {
 		t.Skip("IZ_TEST_BASE_URL not set, skipping integration test")
 	}
+
+	username := os.Getenv("IZ_TEST_USERNAME")
+	password := os.Getenv("IZ_TEST_PASSWORD")
+
+	// Clean up lingering connections from previous tests (like Scala beforeEach)
+	// First clean up SSE connections via the API, then clean up database connections
+	cleanupSSEConnections(t, baseURL, username, password)
+	cleanupPostgresConnections(t)
 
 	// Create temp dir: /tmp/TestXXX<random>/
 	tempDir := t.TempDir()
@@ -317,7 +413,7 @@ func (tt *TempTenant) Update(t *testing.T, description string) *TempTenant {
 	return tt
 }
 
-// Delete removes the tenant from server and cleans up any lingering database connections
+// Delete removes the tenant from server
 func (tt *TempTenant) Delete(t *testing.T) {
 	t.Helper()
 	if !tt.created {
@@ -329,10 +425,6 @@ func (tt *TempTenant) Delete(t *testing.T) {
 	} else {
 		t.Logf("TempTenant deleted: %s", tt.Name)
 		tt.created = false
-
-		// Clean up any lingering PostgreSQL LISTEN connections
-		// This prevents connection pool exhaustion after tenant deletion
-		cleanupPostgresListeners(t)
 	}
 }
 

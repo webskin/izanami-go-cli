@@ -159,6 +159,7 @@ func setupFeaturesTest(t *testing.T, env *IntegrationTestEnv) func() {
 	origCfg := cfg
 	origOutputFormat := outputFormat
 	origTenant := tenant
+	origProject := project
 	origCompactJSON := compactJSON
 
 	// Set up config
@@ -170,6 +171,7 @@ func setupFeaturesTest(t *testing.T, env *IntegrationTestEnv) func() {
 	}
 	outputFormat = "table"
 	tenant = ""
+	project = ""
 	compactJSON = false
 
 	// Reset feature-specific flags to defaults
@@ -193,6 +195,7 @@ func setupFeaturesTest(t *testing.T, env *IntegrationTestEnv) func() {
 		cfg = origCfg
 		outputFormat = origOutputFormat
 		tenant = origTenant
+		project = origProject
 		compactJSON = origCompactJSON
 		featureTag = ""
 		featureTags = []string{}
@@ -218,6 +221,7 @@ func executeFeaturesCommand(t *testing.T, args []string) (string, error) {
 
 	var buf bytes.Buffer
 	cmd := &cobra.Command{Use: "iz"}
+	cmd.PersistentFlags().StringVar(&project, "project", "", "Default project")
 	cmd.AddCommand(adminCmd)
 	cmd.SetOut(&buf)
 	cmd.SetErr(&buf)
@@ -329,7 +333,9 @@ func TestIntegration_FeaturesListBasic(t *testing.T) {
 	tempProject := NewTempProject(t, client, tempTenant.Name, "features list project").MustCreate(t).Cleanup(t)
 	tempFeature := NewTempFeature(t, client, tempTenant.Name, tempProject.Name).MustCreate(t).Cleanup(t)
 
+	// Set both the global tenant variable and cfg.Tenant to ensure proper state
 	tenant = tempTenant.Name
+	cfg.Tenant = tempTenant.Name
 
 	output, err := executeFeaturesCommand(t, []string{"list"})
 
@@ -354,10 +360,12 @@ func TestIntegration_FeaturesListWithProjectFilter(t *testing.T) {
 	feature1 := NewTempFeature(t, client, tempTenant.Name, tempProject1.Name).WithName("feature-in-proj1").MustCreate(t).Cleanup(t)
 	feature2 := NewTempFeature(t, client, tempTenant.Name, tempProject2.Name).WithName("feature-in-proj2").MustCreate(t).Cleanup(t)
 
+	// Set tenant for global state
 	tenant = tempTenant.Name
-	cfg.Project = tempProject1.Name
+	cfg.Tenant = tempTenant.Name
 
-	output, err := executeFeaturesCommand(t, []string{"list"})
+	// Pass --project flag to filter by project 1
+	output, err := executeFeaturesCommand(t, []string{"list", "--project", tempProject1.Name})
 
 	require.NoError(t, err, "features list with --project should succeed")
 	assert.Contains(t, output, feature1.Name, "Output should contain feature from project 1")
@@ -469,10 +477,12 @@ func TestIntegration_FeaturesCreateSimple(t *testing.T) {
 		}
 	})
 
+	// Set tenant for global state
 	tenant = tempTenant.Name
-	cfg.Project = tempProject.Name
+	cfg.Tenant = tempTenant.Name
 
-	output, err := executeFeaturesCommand(t, []string{"create", featureName, "--description", "Test feature", "--enabled"})
+	// Pass --project flag explicitly
+	output, err := executeFeaturesCommand(t, []string{"create", featureName, "--project", tempProject.Name, "--description", "Test feature", "--enabled"})
 
 	require.NoError(t, err, "features create should succeed")
 	assert.Contains(t, output, "created successfully", "Output should confirm creation")
@@ -518,10 +528,13 @@ func TestIntegration_FeaturesCreateWithJSON(t *testing.T) {
 		}
 	})
 
-	tenant = tempTenant.Name
-	featureData = fmt.Sprintf(`{"name":"%s","enabled":true,"description":"JSON created"}`, featureName)
+	jsonData := fmt.Sprintf(`{"name":"%s","enabled":true,"description":"JSON created"}`, featureName)
 
-	output, err := executeFeaturesCommand(t, []string{"create", featureName, "--project", tempProject.Name, "--data", featureData})
+	// Set both global variables and cfg fields to ensure proper state after preRunSetup
+	tenant = tempTenant.Name
+	cfg.Tenant = tempTenant.Name
+
+	output, err := executeFeaturesCommand(t, []string{"create", featureName, "--project", tempProject.Name, "--data", jsonData})
 
 	require.NoError(t, err, "features create with --data should succeed")
 	assert.Contains(t, output, "created successfully", "Output should confirm creation")
@@ -538,7 +551,9 @@ func TestIntegration_FeaturesCreateMissingProject(t *testing.T) {
 
 	tempTenant := NewTempTenant(t, client, "features create missing project test").MustCreate(t).Cleanup(t)
 
+	// Set tenant but no project to test that project is required
 	tenant = tempTenant.Name
+	cfg.Tenant = tempTenant.Name
 
 	_, err := executeFeaturesCommand(t, []string{"create", "some-feature"})
 

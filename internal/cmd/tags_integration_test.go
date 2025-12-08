@@ -495,13 +495,14 @@ func TestIntegration_TagsCreateWithJSONData(t *testing.T) {
 	tenant = tempTenant.Name
 
 	tagName := fmt.Sprintf("clitag%d", time.Now().UnixNano())
-	tagData = fmt.Sprintf(`{"name":"%s","description":"JSON data description"}`, tagName)
+	jsonData := fmt.Sprintf(`{"name":"%s","description":"JSON data description"}`, tagName)
 
 	// Create a TempTag to track for cleanup
 	tempTag := NewTempTag(t, client, tempTenant.Name).WithName(tagName)
 	defer tempTag.Delete(t)
 
-	output, err := executeTagsCommand(t, []string{"create", tagName})
+	// Pass --data flag explicitly (setting tagData variable doesn't mark flag as "changed")
+	output, err := executeTagsCommand(t, []string{"create", tagName, "--data", jsonData})
 	require.NoError(t, err)
 	tempTag.MarkCreated()
 

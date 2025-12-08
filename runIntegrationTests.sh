@@ -18,4 +18,4 @@ IZ_TEST_BASE_URL=http://localhost:9000 \
 IZ_TEST_USERNAME=RESERVED_ADMIN_USER \
 IZ_TEST_PASSWORD=password \
 IZ_TEST_DB_DSN=${IZ_TEST_DB_DSN:-postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable} \
-go test ./internal/cmd/... -run "$PATTERN" -v
+go test -tags=integration ./internal/cmd/... -run "$PATTERN" -v

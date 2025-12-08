@@ -170,7 +170,8 @@ func setupContextsTest(t *testing.T, env *IntegrationTestEnv) func() {
 	// Save original values
 	origCfg := cfg
 	origOutputFormat := outputFormat
-	origTenant := tenant // Save the global tenant flag
+	origTenant := tenant   // Save the global tenant flag
+	origProject := project // Save the global project flag
 
 	// Set up config
 	cfg = &izanami.Config{
@@ -180,7 +181,8 @@ func setupContextsTest(t *testing.T, env *IntegrationTestEnv) func() {
 		Timeout:  30,
 	}
 	outputFormat = "table"
-	tenant = "" // Will be set per-test
+	tenant = ""  // Will be set per-test
+	project = "" // Reset project to avoid polluting other tests
 
 	// Reset global flags to defaults
 	contextAll = false
@@ -195,6 +197,7 @@ func setupContextsTest(t *testing.T, env *IntegrationTestEnv) func() {
 		cfg = origCfg
 		outputFormat = origOutputFormat
 		tenant = origTenant
+		project = origProject
 		contextAll = false
 		contextParent = ""
 		contextProtected = false
