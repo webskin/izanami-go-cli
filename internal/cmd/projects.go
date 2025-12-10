@@ -24,8 +24,9 @@ var adminProjectsCmd = &cobra.Command{
 }
 
 var adminProjectsListCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List all projects",
+	Use:         "list",
+	Short:       "List all projects",
+	Annotations: map[string]string{"route": "GET /api/admin/tenants/:tenant/projects"},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := cfg.ValidateTenant(); err != nil {
 			return err
@@ -58,9 +59,10 @@ var adminProjectsListCmd = &cobra.Command{
 }
 
 var adminProjectsGetCmd = &cobra.Command{
-	Use:   "get <project-name>",
-	Short: "Get a specific project",
-	Args:  cobra.ExactArgs(1),
+	Use:         "get <project-name>",
+	Short:       "Get a specific project",
+	Annotations: map[string]string{"route": "GET /api/admin/tenants/:tenant/projects/:project"},
+	Args:        cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := cfg.ValidateTenant(); err != nil {
 			return err
@@ -93,9 +95,10 @@ var adminProjectsGetCmd = &cobra.Command{
 }
 
 var adminProjectsCreateCmd = &cobra.Command{
-	Use:   "create <project-name>",
-	Short: "Create a new project",
-	Args:  cobra.ExactArgs(1),
+	Use:         "create <project-name>",
+	Short:       "Create a new project",
+	Annotations: map[string]string{"route": "POST /api/admin/tenants/:tenant/projects"},
+	Args:        cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := cfg.ValidateTenant(); err != nil {
 			return err
@@ -131,8 +134,9 @@ var adminProjectsCreateCmd = &cobra.Command{
 }
 
 var adminProjectsUpdateCmd = &cobra.Command{
-	Use:   "update <project-name>",
-	Short: "Update a project",
+	Use:         "update <project-name>",
+	Short:       "Update a project",
+	Annotations: map[string]string{"route": "PUT /api/admin/tenants/:tenant/projects/:project"},
 	Long: `Update a project's properties.
 
 You can provide the updated data via:
@@ -204,10 +208,11 @@ Examples:
 }
 
 var adminProjectsDeleteCmd = &cobra.Command{
-	Use:   "delete <project-name>",
-	Short: "Delete a project",
-	Long:  `Delete a project. WARNING: This will delete all features in the project.`,
-	Args:  cobra.ExactArgs(1),
+	Use:         "delete <project-name>",
+	Short:       "Delete a project",
+	Annotations: map[string]string{"route": "DELETE /api/admin/tenants/:tenant/projects/:project"},
+	Long:        `Delete a project. WARNING: This will delete all features in the project.`,
+	Args:        cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := cfg.ValidateTenant(); err != nil {
 			return err
@@ -238,8 +243,9 @@ var adminProjectsDeleteCmd = &cobra.Command{
 }
 
 var adminProjectsLogsCmd = &cobra.Command{
-	Use:   "logs <project-name>",
-	Short: "View project event logs",
+	Use:         "logs <project-name>",
+	Short:       "View project event logs",
+	Annotations: map[string]string{"route": "GET /api/admin/tenants/:tenant/projects/:project/logs"},
 	Long: `View event logs for a project. Shows audit events like feature changes, user actions, etc.
 
 Examples:

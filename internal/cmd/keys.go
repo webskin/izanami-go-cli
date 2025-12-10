@@ -88,8 +88,9 @@ Examples:
 
 // keysListCmd lists API keys
 var keysListCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List all API keys in a tenant",
+	Use:         "list",
+	Short:       "List all API keys in a tenant",
+	Annotations: map[string]string{"route": "GET /api/admin/tenants/:tenant/keys"},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if cfg.Tenant == "" {
 			return fmt.Errorf(errors.MsgTenantRequired)
@@ -140,9 +141,10 @@ var keysListCmd = &cobra.Command{
 
 // keysGetCmd gets a specific API key
 var keysGetCmd = &cobra.Command{
-	Use:   "get <name>",
-	Short: "Get details of a specific API key by name",
-	Args:  cobra.ExactArgs(1),
+	Use:         "get <name>",
+	Short:       "Get details of a specific API key by name",
+	Annotations: map[string]string{"route": "GET /api/admin/tenants/:tenant/keys"},
+	Args:        cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]
 
@@ -174,9 +176,10 @@ var keysGetCmd = &cobra.Command{
 
 // keysCreateCmd creates a new API key
 var keysCreateCmd = &cobra.Command{
-	Use:   "create <name>",
-	Short: "Create a new API key",
-	Args:  cobra.ExactArgs(1),
+	Use:         "create <name>",
+	Short:       "Create a new API key",
+	Annotations: map[string]string{"route": "POST /api/admin/tenants/:tenant/keys"},
+	Args:        cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]
 
@@ -231,9 +234,10 @@ var keysCreateCmd = &cobra.Command{
 
 // keysUpdateCmd updates an API key
 var keysUpdateCmd = &cobra.Command{
-	Use:   "update <name>",
-	Short: "Update an existing API key by name",
-	Args:  cobra.ExactArgs(1),
+	Use:         "update <name>",
+	Short:       "Update an existing API key by name",
+	Annotations: map[string]string{"route": "PUT /api/admin/tenants/:tenant/keys/:name"},
+	Args:        cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]
 
@@ -302,9 +306,10 @@ var keysUpdateCmd = &cobra.Command{
 
 // keysDeleteCmd deletes an API key
 var keysDeleteCmd = &cobra.Command{
-	Use:   "delete <name>",
-	Short: "Delete an API key by name",
-	Args:  cobra.ExactArgs(1),
+	Use:         "delete <name>",
+	Short:       "Delete an API key by name",
+	Annotations: map[string]string{"route": "DELETE /api/admin/tenants/:tenant/keys/:name"},
+	Args:        cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]
 
@@ -336,8 +341,9 @@ var keysDeleteCmd = &cobra.Command{
 
 // keysUsersCmd lists users with rights on an API key
 var keysUsersCmd = &cobra.Command{
-	Use:   "users <client-id>",
-	Short: "List users with rights on an API key",
+	Use:         "users <client-id>",
+	Short:       "List users with rights on an API key",
+	Annotations: map[string]string{"route": "GET /api/admin/tenants/:tenant/keys/:name/users"},
 	Long: `List all users who have been granted rights to access a specific API key.
 
 Shows each user's right level (Read, Write, Admin) and whether they are a tenant admin.

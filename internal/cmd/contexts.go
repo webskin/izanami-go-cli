@@ -45,9 +45,10 @@ or change behavior based on the context.`,
 
 // contextsListCmd lists contexts
 var contextsListCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List all contexts",
-	Long: `List all contexts for a tenant or project.
+	Use:         "list",
+	Short:       "List all contexts",
+	Annotations: map[string]string{"route": "GET /api/admin/tenants/:tenant/contexts"},
+	Long:        `List all contexts for a tenant or project.
 
 By default, only shows root-level contexts. Use --all to show all nested contexts.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -96,9 +97,10 @@ By default, only shows root-level contexts. Use --all to show all nested context
 
 // contextsGetCmd gets a specific context
 var contextsGetCmd = &cobra.Command{
-	Use:   "get <context-path>",
-	Short: "Get a specific context",
-	Long: `Get detailed information about a specific context.
+	Use:         "get <context-path>",
+	Short:       "Get a specific context",
+	Annotations: map[string]string{"route": "GET /api/admin/tenants/:tenant/contexts"},
+	Long:        `Get detailed information about a specific context.
 
 The context path should be the full hierarchical path, e.g.:
   - prod
@@ -140,9 +142,10 @@ The context path should be the full hierarchical path, e.g.:
 
 // contextsCreateCmd creates a new context
 var contextsCreateCmd = &cobra.Command{
-	Use:   "create <context-name>",
-	Short: "Create a new context",
-	Long: `Create a new feature context.
+	Use:         "create <context-name>",
+	Short:       "Create a new context",
+	Annotations: map[string]string{"route": "POST /api/admin/tenants/:tenant/contexts"},
+	Long:        `Create a new feature context.
 
 Contexts can be created at the root level or as children of existing contexts.
 Use the global --project flag to specify the project, or --global for tenant-wide contexts.
@@ -205,9 +208,10 @@ Examples:
 
 // contextsUpdateCmd updates a global context
 var contextsUpdateCmd = &cobra.Command{
-	Use:   "update <context-path>",
-	Short: "Update a global context",
-	Long: `Update a global feature context.
+	Use:         "update <context-path>",
+	Short:       "Update a global context",
+	Annotations: map[string]string{"route": "PUT /api/admin/tenants/:tenant/contexts/:path"},
+	Long:        `Update a global feature context.
 
 NOTE: Only global contexts can be updated. Project-specific contexts do not
 support the update operation.
@@ -264,9 +268,10 @@ Examples:
 
 // contextsDeleteCmd deletes a context
 var contextsDeleteCmd = &cobra.Command{
-	Use:   "delete <context-path>",
-	Short: "Delete a context",
-	Long: `Delete a feature context.
+	Use:         "delete <context-path>",
+	Short:       "Delete a context",
+	Annotations: map[string]string{"route": "DELETE /api/admin/tenants/:tenant/contexts/:path"},
+	Long:        `Delete a feature context.
 
 WARNING: This will also delete all child contexts and context-specific
 feature overrides. This operation cannot be undone.

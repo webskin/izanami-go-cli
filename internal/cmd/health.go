@@ -12,9 +12,10 @@ import (
 
 // healthCmd represents the health command
 var healthCmd = &cobra.Command{
-	Use:   "health",
-	Short: "Check Izanami server health",
-	Long: `Check the health status of the Izanami server.
+	Use:         "health",
+	Short:       "Check Izanami server health",
+	Annotations: map[string]string{"route": "GET /api/_health"},
+	Long:        `Check the health status of the Izanami server.
 
 This command verifies that the Izanami instance is reachable and operational.
 It returns the server status and version information.

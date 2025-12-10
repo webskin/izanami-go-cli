@@ -51,8 +51,9 @@ Examples:
 
 // webhooksListCmd lists webhooks
 var webhooksListCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List all webhooks in a tenant",
+	Use:         "list",
+	Short:       "List all webhooks in a tenant",
+	Annotations: map[string]string{"route": "GET /api/admin/tenants/:tenant/webhooks"},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if cfg.Tenant == "" {
 			return fmt.Errorf(errors.MsgTenantRequired)
@@ -92,9 +93,10 @@ var webhooksListCmd = &cobra.Command{
 // webhooksGetCmd gets a specific webhook by filtering from the list
 // Note: Izanami API doesn't have a GET endpoint for single webhooks, so we fetch all and filter
 var webhooksGetCmd = &cobra.Command{
-	Use:   "get <webhook-id-or-name>",
-	Short: "Get details of a specific webhook by ID or name",
-	Long: `Get details of a specific webhook by ID or name.
+	Use:         "get <webhook-id-or-name>",
+	Short:       "Get details of a specific webhook by ID or name",
+	Annotations: map[string]string{"route": "GET /api/admin/tenants/:tenant/webhooks"},
+	Long:        `Get details of a specific webhook by ID or name.
 
 The webhook can be identified by its UUID or by name. When using a name,
 the command fetches all webhooks and filters by name.
@@ -157,9 +159,10 @@ Examples:
 
 // webhooksCreateCmd creates a new webhook
 var webhooksCreateCmd = &cobra.Command{
-	Use:   "create <name>",
-	Short: "Create a new webhook",
-	Long: `Create a new webhook for event notifications.
+	Use:         "create <name>",
+	Short:       "Create a new webhook",
+	Annotations: map[string]string{"route": "POST /api/admin/tenants/:tenant/webhooks"},
+	Long:        `Create a new webhook for event notifications.
 
 A webhook will be triggered when feature flags matching its configuration change.
 
@@ -264,9 +267,10 @@ Examples:
 
 // webhooksUpdateCmd updates a webhook
 var webhooksUpdateCmd = &cobra.Command{
-	Use:   "update <webhook-id-or-name>",
-	Short: "Update an existing webhook by ID or name",
-	Long: `Update an existing webhook configuration.
+	Use:         "update <webhook-id-or-name>",
+	Short:       "Update an existing webhook by ID or name",
+	Annotations: map[string]string{"route": "PUT /api/admin/tenants/:tenant/webhooks/:id"},
+	Long:        `Update an existing webhook configuration.
 
 The webhook can be identified by its UUID or by name. The API requires a full
 update, so the current webhook is fetched first and your changes are merged
@@ -418,9 +422,10 @@ Examples:
 
 // webhooksDeleteCmd deletes a webhook
 var webhooksDeleteCmd = &cobra.Command{
-	Use:   "delete <webhook-id-or-name>",
-	Short: "Delete a webhook by ID or name",
-	Long: `Delete a webhook by ID or name.
+	Use:         "delete <webhook-id-or-name>",
+	Short:       "Delete a webhook by ID or name",
+	Annotations: map[string]string{"route": "DELETE /api/admin/tenants/:tenant/webhooks/:id"},
+	Long:        `Delete a webhook by ID or name.
 
 The webhook can be identified by its UUID or by name.
 
@@ -483,9 +488,10 @@ Examples:
 
 // webhooksUsersCmd lists users with rights on a webhook
 var webhooksUsersCmd = &cobra.Command{
-	Use:   "users <webhook-id-or-name>",
-	Short: "List users with rights on a webhook by ID or name",
-	Long: `List all users who have been granted rights to access a specific webhook.
+	Use:         "users <webhook-id-or-name>",
+	Short:       "List users with rights on a webhook by ID or name",
+	Annotations: map[string]string{"route": "GET /api/admin/tenants/:tenant/webhooks/:id/users"},
+	Long:        `List all users who have been granted rights to access a specific webhook.
 
 The webhook can be identified by its UUID or by name.
 Shows each user's right level (Read, Write, Admin) and whether they are a tenant admin.

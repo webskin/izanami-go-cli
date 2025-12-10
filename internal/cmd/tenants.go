@@ -36,8 +36,9 @@ var adminTenantsCmd = &cobra.Command{
 }
 
 var adminTenantsListCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List all tenants",
+	Use:         "list",
+	Short:       "List all tenants",
+	Annotations: map[string]string{"route": "GET /api/admin/tenants"},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client, err := izanami.NewClient(cfg)
 		if err != nil {
@@ -75,9 +76,10 @@ var adminTenantsListCmd = &cobra.Command{
 }
 
 var adminTenantsGetCmd = &cobra.Command{
-	Use:   "get <tenant-name>",
-	Short: "Get a specific tenant",
-	Args:  cobra.ExactArgs(1),
+	Use:         "get <tenant-name>",
+	Short:       "Get a specific tenant",
+	Annotations: map[string]string{"route": "GET /api/admin/tenants/:name"},
+	Args:        cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client, err := izanami.NewClient(cfg)
 		if err != nil {
@@ -106,9 +108,10 @@ var adminTenantsGetCmd = &cobra.Command{
 }
 
 var adminTenantsCreateCmd = &cobra.Command{
-	Use:   "create <tenant-name>",
-	Short: "Create a new tenant",
-	Args:  cobra.ExactArgs(1),
+	Use:         "create <tenant-name>",
+	Short:       "Create a new tenant",
+	Annotations: map[string]string{"route": "POST /api/admin/tenants"},
+	Args:        cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client, err := izanami.NewClient(cfg)
 		if err != nil {
@@ -140,8 +143,9 @@ var adminTenantsCreateCmd = &cobra.Command{
 }
 
 var adminTenantsUpdateCmd = &cobra.Command{
-	Use:   "update <tenant-name>",
-	Short: "Update a tenant",
+	Use:         "update <tenant-name>",
+	Short:       "Update a tenant",
+	Annotations: map[string]string{"route": "PUT /api/admin/tenants/:name"},
 	Long: `Update a tenant's properties.
 
 You can provide the updated data via:
@@ -209,10 +213,11 @@ Examples:
 }
 
 var adminTenantsDeleteCmd = &cobra.Command{
-	Use:   "delete <tenant-name>",
-	Short: "Delete a tenant",
-	Long:  `Delete a tenant. WARNING: This will delete all projects, features, and data in the tenant.`,
-	Args:  cobra.ExactArgs(1),
+	Use:         "delete <tenant-name>",
+	Short:       "Delete a tenant",
+	Annotations: map[string]string{"route": "DELETE /api/admin/tenants/:name"},
+	Long:        `Delete a tenant. WARNING: This will delete all projects, features, and data in the tenant.`,
+	Args:        cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		tenantName := args[0]
 
@@ -239,8 +244,9 @@ var adminTenantsDeleteCmd = &cobra.Command{
 }
 
 var adminTenantsLogsCmd = &cobra.Command{
-	Use:   "logs <tenant-name>",
-	Short: "View tenant event logs",
+	Use:         "logs <tenant-name>",
+	Short:       "View tenant event logs",
+	Annotations: map[string]string{"route": "GET /api/admin/tenants/:tenant/logs"},
 	Long: `View event logs for a tenant. Shows audit events like feature changes, user actions, etc.
 
 Examples:

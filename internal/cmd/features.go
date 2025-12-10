@@ -50,8 +50,9 @@ For client operations (checking if a feature is active), use:
 
 // featuresListCmd lists features
 var featuresListCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List all features",
+	Use:         "list",
+	Short:       "List all features",
+	Annotations: map[string]string{"route": "GET /api/admin/tenants/:tenant/features"},
 	Long: `List all features in a tenant.
 
 The list endpoint supports filtering by:
@@ -106,10 +107,11 @@ The list endpoint supports filtering by:
 
 // featuresGetCmd gets a specific feature
 var featuresGetCmd = &cobra.Command{
-	Use:   "get <feature-id>",
-	Short: "Get a specific feature",
-	Long:  `Get detailed information about a specific feature, including all context overloads.`,
-	Args:  cobra.ExactArgs(1),
+	Use:         "get <feature-id>",
+	Short:       "Get a specific feature",
+	Annotations: map[string]string{"route": "GET /api/admin/tenants/:tenant/features/:id"},
+	Long:        `Get detailed information about a specific feature, including all context overloads.`,
+	Args:        cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := cfg.Validate(); err != nil {
 			return err
@@ -146,8 +148,9 @@ var featuresGetCmd = &cobra.Command{
 
 // featuresCreateCmd creates a new feature
 var featuresCreateCmd = &cobra.Command{
-	Use:   "create <feature-name>",
-	Short: "Create a new feature",
+	Use:         "create <feature-name>",
+	Short:       "Create a new feature",
+	Annotations: map[string]string{"route": "POST /api/admin/tenants/:tenant/projects/:project/features"},
 	Long: `Create a new feature flag.
 
 You can provide the feature definition via:
@@ -243,8 +246,9 @@ Examples:
 
 // featuresUpdateCmd updates an existing feature
 var featuresUpdateCmd = &cobra.Command{
-	Use:   "update <feature-id>",
-	Short: "Update an existing feature",
+	Use:         "update <feature-id>",
+	Short:       "Update an existing feature",
+	Annotations: map[string]string{"route": "PUT /api/admin/tenants/:tenant/features/:id"},
 	Long: `Update an existing feature flag.
 
 Provide the updated feature definition via:
@@ -348,10 +352,11 @@ Examples:
 
 // featuresDeleteCmd deletes a feature
 var featuresDeleteCmd = &cobra.Command{
-	Use:   "delete <feature-id>",
-	Short: "Delete a feature",
-	Long:  `Delete a feature flag. This operation cannot be undone.`,
-	Args:  cobra.ExactArgs(1),
+	Use:         "delete <feature-id>",
+	Short:       "Delete a feature",
+	Annotations: map[string]string{"route": "DELETE /api/admin/tenants/:tenant/features/:id"},
+	Long:        `Delete a feature flag. This operation cannot be undone.`,
+	Args:        cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := cfg.Validate(); err != nil {
 			return err
@@ -386,8 +391,9 @@ var featuresDeleteCmd = &cobra.Command{
 
 // featuresPatchCmd applies batch patches to multiple features
 var featuresPatchCmd = &cobra.Command{
-	Use:   "patch",
-	Short: "Batch update multiple features",
+	Use:         "patch",
+	Short:       "Batch update multiple features",
+	Annotations: map[string]string{"route": "PATCH /api/admin/tenants/:tenant/features"},
 	Long: `Apply batch patches to multiple features in a single request.
 
 Patch operations allow you to update specific fields across multiple features
@@ -448,8 +454,9 @@ Examples:
 
 // featuresTestCmd tests an existing feature's evaluation
 var featuresTestCmd = &cobra.Command{
-	Use:   "test <feature-id>",
-	Short: "Test an existing feature's evaluation",
+	Use:         "test <feature-id>",
+	Short:       "Test an existing feature's evaluation",
+	Annotations: map[string]string{"route": "POST /api/admin/tenants/:tenant/features/:id/test"},
 	Long: `Test how a feature evaluates for a given user and context without making changes.
 
 This is useful for debugging feature behavior, testing activation conditions,
@@ -532,8 +539,9 @@ Examples:
 
 // featuresTestDefinitionCmd tests a feature definition without saving
 var featuresTestDefinitionCmd = &cobra.Command{
-	Use:   "test-definition",
-	Short: "Test a feature definition without saving",
+	Use:         "test-definition",
+	Short:       "Test a feature definition without saving",
+	Annotations: map[string]string{"route": "POST /api/admin/tenants/:tenant/test"},
 	Long: `Test how a feature definition would evaluate without saving it.
 
 This is useful for validating feature configurations before creating or updating
@@ -605,8 +613,9 @@ Examples:
 
 // featuresTestBulkCmd tests multiple features at once
 var featuresTestBulkCmd = &cobra.Command{
-	Use:   "test-bulk",
-	Short: "Test multiple features at once",
+	Use:         "test-bulk",
+	Short:       "Test multiple features at once",
+	Annotations: map[string]string{"route": "GET /api/admin/tenants/:tenant/features/_test"},
 	Long: `Test evaluation of multiple features for a given context.
 
 This is useful for understanding how a set of features will behave for a specific

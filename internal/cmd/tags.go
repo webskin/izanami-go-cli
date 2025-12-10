@@ -24,8 +24,9 @@ var adminTagsCmd = &cobra.Command{
 }
 
 var adminTagsListCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List all tags",
+	Use:         "list",
+	Short:       "List all tags",
+	Annotations: map[string]string{"route": "GET /api/admin/tenants/:tenant/tags"},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := cfg.ValidateTenant(); err != nil {
 			return err
@@ -58,9 +59,10 @@ var adminTagsListCmd = &cobra.Command{
 }
 
 var adminTagsGetCmd = &cobra.Command{
-	Use:   "get <tag-name>",
-	Short: "Get a specific tag",
-	Args:  cobra.ExactArgs(1),
+	Use:         "get <tag-name>",
+	Short:       "Get a specific tag",
+	Annotations: map[string]string{"route": "GET /api/admin/tenants/:tenant/tags/:name"},
+	Args:        cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := cfg.ValidateTenant(); err != nil {
 			return err
@@ -93,9 +95,10 @@ var adminTagsGetCmd = &cobra.Command{
 }
 
 var adminTagsCreateCmd = &cobra.Command{
-	Use:   "create <tag-name>",
-	Short: "Create a new tag",
-	Args:  cobra.ExactArgs(1),
+	Use:         "create <tag-name>",
+	Short:       "Create a new tag",
+	Annotations: map[string]string{"route": "POST /api/admin/tenants/:tenant/tags"},
+	Args:        cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := cfg.ValidateTenant(); err != nil {
 			return err
@@ -131,9 +134,10 @@ var adminTagsCreateCmd = &cobra.Command{
 }
 
 var adminTagsDeleteCmd = &cobra.Command{
-	Use:   "delete <tag-name>",
-	Short: "Delete a tag",
-	Args:  cobra.ExactArgs(1),
+	Use:         "delete <tag-name>",
+	Short:       "Delete a tag",
+	Annotations: map[string]string{"route": "DELETE /api/admin/tenants/:tenant/tags/:name"},
+	Args:        cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := cfg.ValidateTenant(); err != nil {
 			return err

@@ -61,8 +61,9 @@ Examples:
 
 // usersListCmd lists all users (global)
 var usersListCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List all visible users (global)",
+	Use:         "list",
+	Short:       "List all visible users (global)",
+	Annotations: map[string]string{"route": "GET /api/admin/users"},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client, err := izanami.NewClient(cfg)
 		if err != nil {
@@ -97,9 +98,10 @@ var usersListCmd = &cobra.Command{
 
 // usersGetCmd gets a specific user
 var usersGetCmd = &cobra.Command{
-	Use:   "get <username>",
-	Short: "Get details of a specific user with complete rights",
-	Args:  cobra.ExactArgs(1),
+	Use:         "get <username>",
+	Short:       "Get details of a specific user with complete rights",
+	Annotations: map[string]string{"route": "GET /api/admin/users/:user"},
+	Args:        cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		username := args[0]
 
@@ -132,10 +134,11 @@ var usersGetCmd = &cobra.Command{
 
 // usersCreateCmd creates a new user
 var usersCreateCmd = &cobra.Command{
-	Use:   "create <username>",
-	Short: "Create a new user",
-	Args:  cobra.ExactArgs(1),
-	Long: `Create a new user with specified properties.
+	Use:         "create <username>",
+	Short:       "Create a new user",
+	Annotations: map[string]string{"route": "POST /api/admin/users"},
+	Args:        cobra.ExactArgs(1),
+	Long:        `Create a new user with specified properties.
 
 You can provide user rights either via:
   1. Individual flags (--admin, --tenant-right, --project-right)
@@ -269,10 +272,11 @@ Examples:
 
 // usersUpdateCmd updates user information
 var usersUpdateCmd = &cobra.Command{
-	Use:   "update <username>",
-	Short: "Update user information (email, default tenant)",
-	Args:  cobra.ExactArgs(1),
-	Long: `Update user information such as email and default tenant.
+	Use:         "update <username>",
+	Short:       "Update user information (email, default tenant)",
+	Annotations: map[string]string{"route": "PUT /api/admin/users/:user"},
+	Args:        cobra.ExactArgs(1),
+	Long:        `Update user information such as email and default tenant.
 
 Note: This command updates basic user information only.
 To update user rights, use 'update-rights' command.
@@ -317,9 +321,10 @@ Examples:
 
 // usersDeleteCmd deletes a user
 var usersDeleteCmd = &cobra.Command{
-	Use:   "delete <username>",
-	Short: "Delete a user",
-	Args:  cobra.ExactArgs(1),
+	Use:         "delete <username>",
+	Short:       "Delete a user",
+	Annotations: map[string]string{"route": "DELETE /api/admin/users/:user"},
+	Args:        cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		username := args[0]
 
@@ -347,10 +352,11 @@ var usersDeleteCmd = &cobra.Command{
 
 // usersUpdateRightsCmd updates user's global rights
 var usersUpdateRightsCmd = &cobra.Command{
-	Use:   "update-rights <username>",
-	Short: "Update user's global rights (admin status and tenant rights)",
-	Args:  cobra.ExactArgs(1),
-	Long: `Update user's global rights including admin status and tenant rights.
+	Use:         "update-rights <username>",
+	Short:       "Update user's global rights (admin status and tenant rights)",
+	Annotations: map[string]string{"route": "PUT /api/admin/users/:user/rights"},
+	Args:        cobra.ExactArgs(1),
+	Long:        `Update user's global rights including admin status and tenant rights.
 
 Rights can be provided via:
   1. A JSON file with --rights-file
@@ -420,9 +426,10 @@ Examples:
 
 // usersSearchCmd searches for users
 var usersSearchCmd = &cobra.Command{
-	Use:   "search <query>",
-	Short: "Search for users by username",
-	Args:  cobra.ExactArgs(1),
+	Use:         "search <query>",
+	Short:       "Search for users by username",
+	Annotations: map[string]string{"route": "GET /api/admin/users/search"},
+	Args:        cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		query := args[0]
 
@@ -452,8 +459,9 @@ var usersSearchCmd = &cobra.Command{
 
 // usersListForTenantCmd lists users for a specific tenant
 var usersListForTenantCmd = &cobra.Command{
-	Use:   "list-for-tenant",
-	Short: "List all users with rights for a specific tenant",
+	Use:         "list-for-tenant",
+	Short:       "List all users with rights for a specific tenant",
+	Annotations: map[string]string{"route": "GET /api/admin/tenants/:tenant/users"},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if cfg.Tenant == "" {
 			return fmt.Errorf(errors.MsgTenantRequired)
@@ -481,9 +489,10 @@ var usersListForTenantCmd = &cobra.Command{
 
 // usersGetForTenantCmd gets a user's rights for a specific tenant
 var usersGetForTenantCmd = &cobra.Command{
-	Use:   "get-for-tenant <username>",
-	Short: "Get user's rights for a specific tenant",
-	Args:  cobra.ExactArgs(1),
+	Use:         "get-for-tenant <username>",
+	Short:       "Get user's rights for a specific tenant",
+	Annotations: map[string]string{"route": "GET /api/admin/tenants/:tenant/users/:user"},
+	Args:        cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		username := args[0]
 
@@ -508,10 +517,11 @@ var usersGetForTenantCmd = &cobra.Command{
 
 // usersUpdateTenantRightsCmd updates user's rights for a specific tenant
 var usersUpdateTenantRightsCmd = &cobra.Command{
-	Use:   "update-tenant-rights <username>",
-	Short: "Update user's rights for a specific tenant",
-	Args:  cobra.ExactArgs(1),
-	Long: `Update user's rights for a specific tenant.
+	Use:         "update-tenant-rights <username>",
+	Short:       "Update user's rights for a specific tenant",
+	Annotations: map[string]string{"route": "PUT /api/admin/tenants/:tenant/users/:user/rights"},
+	Args:        cobra.ExactArgs(1),
+	Long:        `Update user's rights for a specific tenant.
 
 You can provide rights via:
   1. A JSON file with --rights-file
@@ -565,9 +575,10 @@ Examples:
 
 // usersInviteToTenantCmd invites multiple users to a tenant
 var usersInviteToTenantCmd = &cobra.Command{
-	Use:   "invite-to-tenant",
-	Short: "Invite multiple users to a tenant with specified rights",
-	Long: `Invite multiple users to a tenant (bulk operation).
+	Use:         "invite-to-tenant",
+	Short:       "Invite multiple users to a tenant with specified rights",
+	Annotations: map[string]string{"route": "POST /api/admin/tenants/:tenant/users/_invitation"},
+	Long:        `Invite multiple users to a tenant (bulk operation).
 
 Provide invitations via JSON file with --invite-file.
 The file should contain an array of objects with "username" and "level" fields.
@@ -620,9 +631,10 @@ Example:
 
 // usersListForProjectCmd lists users for a specific project
 var usersListForProjectCmd = &cobra.Command{
-	Use:   "list-for-project <project>",
-	Short: "List all users with rights for a specific project",
-	Args:  cobra.ExactArgs(1),
+	Use:         "list-for-project <project>",
+	Short:       "List all users with rights for a specific project",
+	Annotations: map[string]string{"route": "GET /api/admin/tenants/:tenant/projects/:project/users"},
+	Args:        cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		project := args[0]
 
@@ -652,10 +664,11 @@ var usersListForProjectCmd = &cobra.Command{
 
 // usersUpdateProjectRightsCmd updates user's rights for a specific project
 var usersUpdateProjectRightsCmd = &cobra.Command{
-	Use:   "update-project-rights <username> <project>",
-	Short: "Update user's rights for a specific project",
-	Args:  cobra.ExactArgs(2),
-	Long: `Update user's rights for a specific project.
+	Use:         "update-project-rights <username> <project>",
+	Short:       "Update user's rights for a specific project",
+	Annotations: map[string]string{"route": "PUT /api/admin/tenants/:tenant/projects/:project/users/:user/rights"},
+	Args:        cobra.ExactArgs(2),
+	Long:        `Update user's rights for a specific project.
 
 You can provide rights via:
   1. A JSON file with --rights-file
@@ -710,10 +723,11 @@ Examples:
 
 // usersInviteToProjectCmd invites multiple users to a project
 var usersInviteToProjectCmd = &cobra.Command{
-	Use:   "invite-to-project <project>",
-	Short: "Invite multiple users to a project with specified rights",
-	Args:  cobra.ExactArgs(1),
-	Long: `Invite multiple users to a project (bulk operation).
+	Use:         "invite-to-project <project>",
+	Short:       "Invite multiple users to a project with specified rights",
+	Annotations: map[string]string{"route": "POST /api/admin/tenants/:tenant/projects/:project/users/_invitation"},
+	Args:        cobra.ExactArgs(1),
+	Long:        `Invite multiple users to a project (bulk operation).
 
 Provide invitations via JSON file with --invite-file.
 The file should contain an array of objects with "username" and "level" fields.
