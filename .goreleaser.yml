@@ -102,15 +102,15 @@ release:
 
     ```bash
     # Linux AMD64
-    curl -L https://github.com/webskin/izanami-go-cli/releases/download/{{ .Tag }}/izanami-go-cli_{{ .Tag }}_linux_x86_64.tar.gz | tar xz
+    curl -L https://github.com/webskin/izanami-go-cli/releases/download/{{ .Tag }}/izanami-go-cli_{{ .Version }}_linux_x86_64.tar.gz | tar xz
     sudo mv iz /usr/local/bin/
 
     # macOS AMD64 (Intel)
-    curl -L https://github.com/webskin/izanami-go-cli/releases/download/{{ .Tag }}/izanami-go-cli_{{ .Tag }}_darwin_x86_64.tar.gz | tar xz
+    curl -L https://github.com/webskin/izanami-go-cli/releases/download/{{ .Tag }}/izanami-go-cli_{{ .Version }}_darwin_x86_64.tar.gz | tar xz
     sudo mv iz /usr/local/bin/
 
     # macOS ARM64 (Apple Silicon)
-    curl -L https://github.com/webskin/izanami-go-cli/releases/download/{{ .Tag }}/izanami-go-cli_{{ .Tag }}_darwin_arm64.tar.gz | tar xz
+    curl -L https://github.com/webskin/izanami-go-cli/releases/download/{{ .Tag }}/izanami-go-cli_{{ .Version }}_darwin_arm64.tar.gz | tar xz
     sudo mv iz /usr/local/bin/
     ```
 
