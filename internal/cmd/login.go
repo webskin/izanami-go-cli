@@ -21,12 +21,12 @@ import (
 )
 
 var (
-	loginSessionName string
-	loginPassword    string
-	loginOIDC        bool
-	loginToken       string
-	loginNoBrowser   bool
-	loginTimeout     time.Duration
+	loginSessionName  string
+	loginPassword     string
+	loginOIDC         bool
+	loginToken        string
+	loginNoBrowser    bool
+	loginTimeout      time.Duration
 	loginPollInterval time.Duration
 )
 
@@ -35,7 +35,7 @@ var loginCmd = &cobra.Command{
 	Use:         "login [url] [username]",
 	Short:       "Login to Izanami and save session",
 	Annotations: map[string]string{"route": "POST /api/admin/login"},
-	Long:        `Login to an Izanami instance and save the authentication session.
+	Long: `Login to an Izanami instance and save the authentication session.
 
 The command will prompt for your password securely, authenticate with
 Izanami, and save the JWT token for future use. The session is automatically

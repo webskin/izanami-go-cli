@@ -6,9 +6,9 @@ import (
 
 var (
 	// Admin authentication flags
-	adminPATUsername          string
-	adminJwtToken             string
-	adminPersonalAccessToken  string
+	adminPATUsername         string
+	adminJwtToken            string
+	adminPersonalAccessToken string
 )
 
 // adminCmd represents the admin command

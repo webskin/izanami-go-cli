@@ -43,12 +43,12 @@ const (
 	MsgFailedToDeleteContext = "failed to delete context"
 
 	// Tenant error messages
-	MsgFailedToListTenants     = "failed to list tenants"
-	MsgFailedToGetTenant       = "failed to get tenant"
-	MsgFailedToCreateTenant    = "failed to create tenant"
-	MsgFailedToUpdateTenant    = "failed to update tenant"
-	MsgFailedToDeleteTenant    = "failed to delete tenant"
-	MsgFailedToListTenantLogs  = "failed to list tenant logs"
+	MsgFailedToListTenants    = "failed to list tenants"
+	MsgFailedToGetTenant      = "failed to get tenant"
+	MsgFailedToCreateTenant   = "failed to create tenant"
+	MsgFailedToUpdateTenant   = "failed to update tenant"
+	MsgFailedToDeleteTenant   = "failed to delete tenant"
+	MsgFailedToListTenantLogs = "failed to list tenant logs"
 
 	// Project error messages
 	MsgFailedToListProjects    = "failed to list projects"
@@ -59,12 +59,12 @@ const (
 	MsgFailedToListProjectLogs = "failed to list project logs"
 
 	// API Key error messages
-	MsgFailedToListAPIKeys      = "failed to list API keys"
-	MsgFailedToGetAPIKey        = "failed to get API key"
-	MsgFailedToCreateAPIKey     = "failed to create API key"
-	MsgFailedToUpdateAPIKey     = "failed to update API key"
-	MsgFailedToDeleteAPIKey     = "failed to delete API key"
-	MsgFailedToListAPIKeyUsers  = "failed to list API key users"
+	MsgFailedToListAPIKeys     = "failed to list API keys"
+	MsgFailedToGetAPIKey       = "failed to get API key"
+	MsgFailedToCreateAPIKey    = "failed to create API key"
+	MsgFailedToUpdateAPIKey    = "failed to update API key"
+	MsgFailedToDeleteAPIKey    = "failed to delete API key"
+	MsgFailedToListAPIKeyUsers = "failed to list API key users"
 
 	// Tag error messages
 	MsgFailedToListTags  = "failed to list tags"

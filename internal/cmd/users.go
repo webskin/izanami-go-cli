@@ -138,7 +138,7 @@ var usersCreateCmd = &cobra.Command{
 	Short:       "Create a new user",
 	Annotations: map[string]string{"route": "POST /api/admin/users"},
 	Args:        cobra.ExactArgs(1),
-	Long:        `Create a new user with specified properties.
+	Long: `Create a new user with specified properties.
 
 You can provide user rights either via:
   1. Individual flags (--admin, --tenant-right, --project-right)
@@ -276,7 +276,7 @@ var usersUpdateCmd = &cobra.Command{
 	Short:       "Update user information (email, default tenant)",
 	Annotations: map[string]string{"route": "PUT /api/admin/users/:user"},
 	Args:        cobra.ExactArgs(1),
-	Long:        `Update user information such as email and default tenant.
+	Long: `Update user information such as email and default tenant.
 
 Note: This command updates basic user information only.
 To update user rights, use 'update-rights' command.
@@ -356,7 +356,7 @@ var usersUpdateRightsCmd = &cobra.Command{
 	Short:       "Update user's global rights (admin status and tenant rights)",
 	Annotations: map[string]string{"route": "PUT /api/admin/users/:user/rights"},
 	Args:        cobra.ExactArgs(1),
-	Long:        `Update user's global rights including admin status and tenant rights.
+	Long: `Update user's global rights including admin status and tenant rights.
 
 Rights can be provided via:
   1. A JSON file with --rights-file
@@ -521,7 +521,7 @@ var usersUpdateTenantRightsCmd = &cobra.Command{
 	Short:       "Update user's rights for a specific tenant",
 	Annotations: map[string]string{"route": "PUT /api/admin/tenants/:tenant/users/:user/rights"},
 	Args:        cobra.ExactArgs(1),
-	Long:        `Update user's rights for a specific tenant.
+	Long: `Update user's rights for a specific tenant.
 
 You can provide rights via:
   1. A JSON file with --rights-file
@@ -578,7 +578,7 @@ var usersInviteToTenantCmd = &cobra.Command{
 	Use:         "invite-to-tenant",
 	Short:       "Invite multiple users to a tenant with specified rights",
 	Annotations: map[string]string{"route": "POST /api/admin/tenants/:tenant/users/_invitation"},
-	Long:        `Invite multiple users to a tenant (bulk operation).
+	Long: `Invite multiple users to a tenant (bulk operation).
 
 Provide invitations via JSON file with --invite-file.
 The file should contain an array of objects with "username" and "level" fields.
@@ -668,7 +668,7 @@ var usersUpdateProjectRightsCmd = &cobra.Command{
 	Short:       "Update user's rights for a specific project",
 	Annotations: map[string]string{"route": "PUT /api/admin/tenants/:tenant/projects/:project/users/:user/rights"},
 	Args:        cobra.ExactArgs(2),
-	Long:        `Update user's rights for a specific project.
+	Long: `Update user's rights for a specific project.
 
 You can provide rights via:
   1. A JSON file with --rights-file
@@ -727,7 +727,7 @@ var usersInviteToProjectCmd = &cobra.Command{
 	Short:       "Invite multiple users to a project with specified rights",
 	Annotations: map[string]string{"route": "POST /api/admin/tenants/:tenant/projects/:project/users/_invitation"},
 	Args:        cobra.ExactArgs(1),
-	Long:        `Invite multiple users to a project (bulk operation).
+	Long: `Invite multiple users to a project (bulk operation).
 
 Provide invitations via JSON file with --invite-file.
 The file should contain an array of objects with "username" and "level" fields.

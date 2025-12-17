@@ -22,10 +22,10 @@ func TestBuildCompletions(t *testing.T) {
 		want       []string
 	}{
 		{
-			name: "empty items",
-			items: []item{},
+			name:       "empty items",
+			items:      []item{},
 			toComplete: "",
-			want: nil,
+			want:       nil,
 		},
 		{
 			name: "all items when toComplete is empty",
@@ -34,7 +34,7 @@ func TestBuildCompletions(t *testing.T) {
 				{Name: "beta", Desc: "Second item"},
 			},
 			toComplete: "",
-			want: []string{"alpha\tFirst item", "beta\tSecond item"},
+			want:       []string{"alpha\tFirst item", "beta\tSecond item"},
 		},
 		{
 			name: "filter by prefix",
@@ -44,7 +44,7 @@ func TestBuildCompletions(t *testing.T) {
 				{Name: "alphabet", Desc: "Third"},
 			},
 			toComplete: "alp",
-			want: []string{"alpha\tFirst", "alphabet\tThird"},
+			want:       []string{"alpha\tFirst", "alphabet\tThird"},
 		},
 		{
 			name: "case insensitive filter",
@@ -54,7 +54,7 @@ func TestBuildCompletions(t *testing.T) {
 				{Name: "beta", Desc: "Third"},
 			},
 			toComplete: "ALP",
-			want: []string{"Alpha\tFirst", "ALPHABET\tSecond"},
+			want:       []string{"Alpha\tFirst", "ALPHABET\tSecond"},
 		},
 		{
 			name: "items without description",
@@ -63,7 +63,7 @@ func TestBuildCompletions(t *testing.T) {
 				{Name: "beta", Desc: "Has description"},
 			},
 			toComplete: "",
-			want: []string{"alpha", "beta\tHas description"},
+			want:       []string{"alpha", "beta\tHas description"},
 		},
 		{
 			name: "no matches",
@@ -72,7 +72,7 @@ func TestBuildCompletions(t *testing.T) {
 				{Name: "beta", Desc: "Second"},
 			},
 			toComplete: "gamma",
-			want: nil,
+			want:       nil,
 		},
 	}
 
@@ -99,17 +99,17 @@ func TestBuildCompletions(t *testing.T) {
 
 func TestCompleter_CompleteTenantNames(t *testing.T) {
 	tests := []struct {
-		name         string
-		args         []string
-		toComplete   string
-		loadConfig   func() *izanami.Config
-		listTenants  func(cfg *izanami.Config, ctx context.Context) ([]izanami.Tenant, error)
-		wantResults  []string
+		name          string
+		args          []string
+		toComplete    string
+		loadConfig    func() *izanami.Config
+		listTenants   func(cfg *izanami.Config, ctx context.Context) ([]izanami.Tenant, error)
+		wantResults   []string
 		wantDirective cobra.ShellCompDirective
 	}{
 		{
-			name: "returns tenants on success",
-			args: []string{},
+			name:       "returns tenants on success",
+			args:       []string{},
 			toComplete: "",
 			loadConfig: func() *izanami.Config {
 				return &izanami.Config{
@@ -124,12 +124,12 @@ func TestCompleter_CompleteTenantNames(t *testing.T) {
 					{Name: "tenant-2", Description: ""},
 				}, nil
 			},
-			wantResults: []string{"tenant-1\tFirst tenant", "tenant-2"},
+			wantResults:   []string{"tenant-1\tFirst tenant", "tenant-2"},
 			wantDirective: cobra.ShellCompDirectiveNoFileComp,
 		},
 		{
-			name: "filters by prefix",
-			args: []string{},
+			name:       "filters by prefix",
+			args:       []string{},
 			toComplete: "tenant-1",
 			loadConfig: func() *izanami.Config {
 				return &izanami.Config{
@@ -144,12 +144,12 @@ func TestCompleter_CompleteTenantNames(t *testing.T) {
 					{Name: "tenant-2", Description: "Second"},
 				}, nil
 			},
-			wantResults: []string{"tenant-1\tFirst"},
+			wantResults:   []string{"tenant-1\tFirst"},
 			wantDirective: cobra.ShellCompDirectiveNoFileComp,
 		},
 		{
-			name: "returns nil when args not empty",
-			args: []string{"existing-arg"},
+			name:       "returns nil when args not empty",
+			args:       []string{"existing-arg"},
 			toComplete: "",
 			loadConfig: func() *izanami.Config {
 				return &izanami.Config{PersonalAccessToken: "token"}
@@ -158,12 +158,12 @@ func TestCompleter_CompleteTenantNames(t *testing.T) {
 				t.Error("listTenants should not be called when args not empty")
 				return nil, nil
 			},
-			wantResults: nil,
+			wantResults:   nil,
 			wantDirective: cobra.ShellCompDirectiveNoFileComp,
 		},
 		{
-			name: "returns nil when config is nil",
-			args: []string{},
+			name:       "returns nil when config is nil",
+			args:       []string{},
 			toComplete: "",
 			loadConfig: func() *izanami.Config {
 				return nil
@@ -172,12 +172,12 @@ func TestCompleter_CompleteTenantNames(t *testing.T) {
 				t.Error("listTenants should not be called when config is nil")
 				return nil, nil
 			},
-			wantResults: nil,
+			wantResults:   nil,
 			wantDirective: cobra.ShellCompDirectiveNoFileComp,
 		},
 		{
-			name: "returns nil when no admin auth",
-			args: []string{},
+			name:       "returns nil when no admin auth",
+			args:       []string{},
 			toComplete: "",
 			loadConfig: func() *izanami.Config {
 				return &izanami.Config{
@@ -189,12 +189,12 @@ func TestCompleter_CompleteTenantNames(t *testing.T) {
 				t.Error("listTenants should not be called when no admin auth")
 				return nil, nil
 			},
-			wantResults: nil,
+			wantResults:   nil,
 			wantDirective: cobra.ShellCompDirectiveNoFileComp,
 		},
 		{
-			name: "returns nil on API error",
-			args: []string{},
+			name:       "returns nil on API error",
+			args:       []string{},
 			toComplete: "",
 			loadConfig: func() *izanami.Config {
 				return &izanami.Config{
@@ -206,7 +206,7 @@ func TestCompleter_CompleteTenantNames(t *testing.T) {
 			listTenants: func(cfg *izanami.Config, ctx context.Context) ([]izanami.Tenant, error) {
 				return nil, errors.New("API error")
 			},
-			wantResults: nil,
+			wantResults:   nil,
 			wantDirective: cobra.ShellCompDirectiveNoFileComp,
 		},
 	}
@@ -250,8 +250,8 @@ func TestCompleter_CompleteProjectNames(t *testing.T) {
 		wantDirective cobra.ShellCompDirective
 	}{
 		{
-			name: "returns projects on success",
-			args: []string{},
+			name:       "returns projects on success",
+			args:       []string{},
 			toComplete: "",
 			loadConfig: func() *izanami.Config {
 				return &izanami.Config{
@@ -270,12 +270,12 @@ func TestCompleter_CompleteProjectNames(t *testing.T) {
 					{Name: "project-2", Description: ""},
 				}, nil
 			},
-			wantResults: []string{"project-1\tFirst project", "project-2"},
+			wantResults:   []string{"project-1\tFirst project", "project-2"},
 			wantDirective: cobra.ShellCompDirectiveNoFileComp,
 		},
 		{
-			name: "returns nil when tenant not set",
-			args: []string{},
+			name:       "returns nil when tenant not set",
+			args:       []string{},
 			toComplete: "",
 			loadConfig: func() *izanami.Config {
 				return &izanami.Config{
@@ -289,12 +289,12 @@ func TestCompleter_CompleteProjectNames(t *testing.T) {
 				t.Error("listProjects should not be called when tenant is empty")
 				return nil, nil
 			},
-			wantResults: nil,
+			wantResults:   nil,
 			wantDirective: cobra.ShellCompDirectiveNoFileComp,
 		},
 		{
-			name: "returns nil when args not empty",
-			args: []string{"existing-arg"},
+			name:       "returns nil when args not empty",
+			args:       []string{"existing-arg"},
 			toComplete: "",
 			loadConfig: func() *izanami.Config {
 				return &izanami.Config{
@@ -306,12 +306,12 @@ func TestCompleter_CompleteProjectNames(t *testing.T) {
 				t.Error("listProjects should not be called when args not empty")
 				return nil, nil
 			},
-			wantResults: nil,
+			wantResults:   nil,
 			wantDirective: cobra.ShellCompDirectiveNoFileComp,
 		},
 		{
-			name: "returns nil when config is nil",
-			args: []string{},
+			name:       "returns nil when config is nil",
+			args:       []string{},
 			toComplete: "",
 			loadConfig: func() *izanami.Config {
 				return nil
@@ -320,12 +320,12 @@ func TestCompleter_CompleteProjectNames(t *testing.T) {
 				t.Error("listProjects should not be called when config is nil")
 				return nil, nil
 			},
-			wantResults: nil,
+			wantResults:   nil,
 			wantDirective: cobra.ShellCompDirectiveNoFileComp,
 		},
 		{
-			name: "returns nil when no admin auth",
-			args: []string{},
+			name:       "returns nil when no admin auth",
+			args:       []string{},
 			toComplete: "",
 			loadConfig: func() *izanami.Config {
 				return &izanami.Config{
@@ -338,12 +338,12 @@ func TestCompleter_CompleteProjectNames(t *testing.T) {
 				t.Error("listProjects should not be called when no admin auth")
 				return nil, nil
 			},
-			wantResults: nil,
+			wantResults:   nil,
 			wantDirective: cobra.ShellCompDirectiveNoFileComp,
 		},
 		{
-			name: "returns nil on API error",
-			args: []string{},
+			name:       "returns nil on API error",
+			args:       []string{},
 			toComplete: "",
 			loadConfig: func() *izanami.Config {
 				return &izanami.Config{
@@ -356,12 +356,12 @@ func TestCompleter_CompleteProjectNames(t *testing.T) {
 			listProjects: func(cfg *izanami.Config, ctx context.Context, tenant string) ([]izanami.Project, error) {
 				return nil, errors.New("API error")
 			},
-			wantResults: nil,
+			wantResults:   nil,
 			wantDirective: cobra.ShellCompDirectiveNoFileComp,
 		},
 		{
-			name: "filters by prefix",
-			args: []string{},
+			name:       "filters by prefix",
+			args:       []string{},
 			toComplete: "project-1",
 			loadConfig: func() *izanami.Config {
 				return &izanami.Config{
@@ -377,7 +377,7 @@ func TestCompleter_CompleteProjectNames(t *testing.T) {
 					{Name: "project-2", Description: "Second"},
 				}, nil
 			},
-			wantResults: []string{"project-1\tFirst"},
+			wantResults:   []string{"project-1\tFirst"},
 			wantDirective: cobra.ShellCompDirectiveNoFileComp,
 		},
 	}

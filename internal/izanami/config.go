@@ -103,7 +103,7 @@ type FlagValues struct {
 	Timeout                     int
 	Verbose                     bool
 	OutputFormat                string
-	Color        string
+	Color                       string
 }
 
 // LoadConfig loads configuration from multiple sources:

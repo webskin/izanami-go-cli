@@ -206,7 +206,7 @@ type TestFeaturesAdminRequest struct {
 // FeatureTestResult represents the result of a feature test operation
 type FeatureTestResult struct {
 	Name    string      `json:"name"`
-	Active  interface{} `json:"active"`          // Can be bool, string, or number
+	Active  interface{} `json:"active"` // Can be bool, string, or number
 	Project string      `json:"project"`
 	Error   string      `json:"error,omitempty"` // Only present if evaluation failed
 }
@@ -695,10 +695,10 @@ type UserInvitation struct {
 
 // SearchResult represents a search result
 type SearchResult struct {
-	Type   string             `json:"type"` // PROJECT, FEATURE, KEY, TAG, etc.
-	Name   string             `json:"name"`
-	Path   []SearchPathEntry  `json:"path,omitempty"`
-	Tenant string             `json:"tenant,omitempty"`
+	Type   string            `json:"type"` // PROJECT, FEATURE, KEY, TAG, etc.
+	Name   string            `json:"name"`
+	Path   []SearchPathEntry `json:"path,omitempty"`
+	Tenant string            `json:"tenant,omitempty"`
 }
 
 // SearchPathEntry represents an entry in the search result path

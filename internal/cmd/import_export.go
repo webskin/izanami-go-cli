@@ -21,7 +21,7 @@ var adminExportCmd = &cobra.Command{
 	Use:         "export",
 	Short:       "Export tenant data",
 	Annotations: map[string]string{"route": "POST /api/admin/tenants/:tenant/_export"},
-	Long:        `Export all data from a tenant in newline-delimited JSON format.
+	Long: `Export all data from a tenant in newline-delimited JSON format.
 
 The export includes:
   - Projects
@@ -70,7 +70,7 @@ var adminImportCmd = &cobra.Command{
 	Use:         "import <file>",
 	Short:       "Import tenant data",
 	Annotations: map[string]string{"route": "POST /api/admin/tenants/:tenant/_import"},
-	Long:        `Import data into a tenant from a newline-delimited JSON file.
+	Long: `Import data into a tenant from a newline-delimited JSON file.
 
 Version (required):
   - 1: Import Izanami v1 data into v2 server (async migration)
@@ -205,7 +205,7 @@ var adminImportStatusCmd = &cobra.Command{
 	Use:         "import-status <import-id>",
 	Short:       "Check status of async V1 import",
 	Annotations: map[string]string{"route": "GET /api/admin/tenants/:tenant/_import/v1/:id"},
-	Long:        `Check the status of an asynchronous V1 import operation.
+	Long: `Check the status of an asynchronous V1 import operation.
 
 V1 imports run in the background. Use this command to check if the import
 has completed, and to see any errors or warnings.

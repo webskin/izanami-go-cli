@@ -16,7 +16,7 @@ var adminSearchCmd = &cobra.Command{
 	Use:         "search <query>",
 	Short:       "Global search across resources",
 	Annotations: map[string]string{"route": "GET /api/admin/tenants/:tenant/search"},
-	Long:        `Search across all resources in Izanami (or within a specific tenant).
+	Long: `Search across all resources in Izanami (or within a specific tenant).
 
 Available filters: PROJECT, FEATURE, KEY, TAG, SCRIPT, GLOBAL_CONTEXT, LOCAL_CONTEXT, WEBHOOK
 

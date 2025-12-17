@@ -88,7 +88,7 @@ var eventsWatchCmd = &cobra.Command{
 	Use:         "watch",
 	Short:       "Watch for events in real-time",
 	Annotations: map[string]string{"route": "GET /api/v2/events"},
-	Long:        `Opens a persistent Server-Sent Events (SSE) connection to Izanami
+	Long: `Opens a persistent Server-Sent Events (SSE) connection to Izanami
 and displays events as they occur.
 
 The connection will automatically reconnect if interrupted.
