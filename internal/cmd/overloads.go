@@ -10,11 +10,11 @@ import (
 )
 
 var (
-	overloadContext          string
-	overloadEnabled          bool
-	overloadData             string
-	overloadPreserveProtect  bool
-	overloadDeleteForce      bool
+	overloadContext         string
+	overloadEnabled         bool
+	overloadData            string
+	overloadPreserveProtect bool
+	overloadDeleteForce     bool
 )
 
 // overloadsCmd represents the admin overloads command
