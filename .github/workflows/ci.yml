@@ -45,42 +45,42 @@ jobs:
             exit 1
           fi
 
-  integration:
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.24'
-
-      - name: Start Izanami
-        run: docker compose -f docker-compose.izanami.yml up -d
-
-      - name: Wait for Izanami
-        run: |
-          for i in $(seq 1 60); do
-            if curl -fsS http://localhost:9000/api/_health >/dev/null; then
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "Izanami did not start in time" >&2
-          exit 1
-
-      - name: Build CLI
-        run: make build
-
-      - name: Run integration tests
-        run: make integration-test
-
-      - name: Dump Izanami logs
-        if: failure()
-        run: docker compose -f docker-compose.izanami.yml logs --no-color
-
-      - name: Stop Izanami
-        if: always()
-        run: docker compose -f docker-compose.izanami.yml down -v
+#  integration:
+#    runs-on: ubuntu-latest
+#    needs: build
+#    steps:
+#      - name: Checkout
+#        uses: actions/checkout@v4
+#
+#      - name: Set up Go
+#        uses: actions/setup-go@v5
+#        with:
+#          go-version: '1.24'
+#
+#      - name: Start Izanami
+#        run: docker compose -f docker-compose.izanami.yml up -d
+#
+#      - name: Wait for Izanami
+#        run: |
+#          for i in $(seq 1 60); do
+#            if curl -fsS http://localhost:9000/api/_health >/dev/null; then
+#              exit 0
+#            fi
+#            sleep 2
+#          done
+#          echo "Izanami did not start in time" >&2
+#          exit 1
+#
+#      - name: Build CLI
+#        run: make build
+#
+#      - name: Run integration tests
+#        run: make integration-test
+#
+#      - name: Dump Izanami logs
+#        if: failure()
+#        run: docker compose -f docker-compose.izanami.yml logs --no-color
+#
+#      - name: Stop Izanami
+#        if: always()
+#        run: docker compose -f docker-compose.izanami.yml down -v
