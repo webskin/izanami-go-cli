@@ -42,6 +42,11 @@ const (
 	MsgFailedToUpdateContext = "failed to update context"
 	MsgFailedToDeleteContext = "failed to delete context"
 
+	// Overload error messages
+	MsgFailedToSetOverload    = "failed to set overload"
+	MsgFailedToGetOverload    = "failed to get overload"
+	MsgFailedToDeleteOverload = "failed to delete overload"
+
 	// Tenant error messages
 	MsgFailedToListTenants    = "failed to list tenants"
 	MsgFailedToGetTenant      = "failed to get tenant"

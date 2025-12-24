@@ -71,4 +71,7 @@ func init() {
 
 	// Contexts (admin operations)
 	adminCmd.AddCommand(contextsCmd)
+
+	// Overloads (admin operations)
+	adminCmd.AddCommand(overloadsCmd)
 }
