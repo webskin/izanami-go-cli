@@ -12,16 +12,17 @@ import (
 
 var (
 	// Global flags
-	cfgFile      string
-	profileName  string
-	baseURL      string
-	tenant       string
-	project      string
-	contextPath  string
-	timeout      int
-	verbose      bool
-	outputFormat string
-	compactJSON  bool
+	cfgFile            string
+	profileName        string
+	baseURL            string
+	tenant             string
+	project            string
+	contextPath        string
+	timeout            int
+	verbose            bool
+	outputFormat       string
+	compactJSON        bool
+	insecureSkipVerify bool
 
 	// Global config
 	cfg *izanami.Config
@@ -92,12 +93,13 @@ For more information, visit: https://github.com/MAIF/izanami`,
 
 		// Command-line flags override everything (highest priority)
 		cfg.MergeWithFlags(izanami.FlagValues{
-			BaseURL: baseURL,
-			Tenant:  tenant,
-			Project: project,
-			Context: contextPath,
-			Timeout: timeout,
-			Verbose: verbose,
+			BaseURL:            baseURL,
+			Tenant:             tenant,
+			Project:            project,
+			Context:            contextPath,
+			Timeout:            timeout,
+			Verbose:            verbose,
+			InsecureSkipVerify: insecureSkipVerify,
 		})
 
 		// Configure color output based on config setting
@@ -139,6 +141,7 @@ func init() {
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Verbose output")
 	rootCmd.PersistentFlags().StringVarP(&outputFormat, "output", "o", "table", "Output format: json or table")
 	rootCmd.PersistentFlags().BoolVar(&compactJSON, "compact", false, "Output compact JSON (no pretty-printing)")
+	rootCmd.PersistentFlags().BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate verification (insecure)")
 
 	// Register dynamic flag completions (must be after flags are defined)
 	RegisterFlagCompletions()

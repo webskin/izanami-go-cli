@@ -50,6 +50,7 @@ type Config struct {
 	Project                     string                            `yaml:"-" mapstructure:"-"` // Comes from active profile
 	Context                     string                            `yaml:"-" mapstructure:"-"` // Comes from active profile
 	ClientKeys                  map[string]TenantClientKeysConfig `yaml:"-" mapstructure:"-"` // Comes from active profile
+	InsecureSkipVerify          bool                              `yaml:"-" mapstructure:"-"` // Skip TLS certificate verification
 
 	// Global settings (stored in top-level YAML)
 	Timeout      int    `yaml:"timeout" mapstructure:"timeout"`
@@ -87,6 +88,7 @@ type Profile struct {
 	ClientID                    string                            `yaml:"client-id,omitempty" mapstructure:"client-id"`                                           // Client ID for this profile
 	ClientSecret                string                            `yaml:"client-secret,omitempty" mapstructure:"client-secret"`                                   // Client secret for this profile
 	ClientKeys                  map[string]TenantClientKeysConfig `yaml:"client-keys,omitempty" mapstructure:"client-keys"`                                       // Profile-specific hierarchical client keys
+	InsecureSkipVerify          bool                              `yaml:"insecure-skip-verify,omitempty" mapstructure:"insecure-skip-verify"`                     // Skip TLS certificate verification
 }
 
 // FlagValues holds command-line flag values for merging with config
@@ -104,6 +106,7 @@ type FlagValues struct {
 	Verbose                     bool
 	OutputFormat                string
 	Color                       string
+	InsecureSkipVerify          bool
 }
 
 // LoadConfig loads configuration from multiple sources:
@@ -189,6 +192,9 @@ func (c *Config) MergeWithFlags(flags FlagValues) {
 	}
 	if flags.Color != "" {
 		c.Color = flags.Color
+	}
+	if flags.InsecureSkipVerify {
+		c.InsecureSkipVerify = flags.InsecureSkipVerify
 	}
 }
 
@@ -878,6 +884,10 @@ func (c *Config) MergeWithProfile(profile *Profile) {
 	if profile.ClientSecret != "" && c.ClientSecret == "" {
 		c.ClientSecret = profile.ClientSecret
 	}
+	// InsecureSkipVerify: profile value takes precedence if not already set via flag
+	if profile.InsecureSkipVerify && !c.InsecureSkipVerify {
+		c.InsecureSkipVerify = profile.InsecureSkipVerify
+	}
 
 	// Merge ClientKeys if profile has them and config doesn't
 	if profile.ClientKeys != nil && len(profile.ClientKeys) > 0 {
@@ -1063,6 +1073,9 @@ func AddProfile(name string, profile *Profile) error {
 	}
 	if profile.ClientKeys != nil && len(profile.ClientKeys) > 0 {
 		profileMap["client-keys"] = profile.ClientKeys
+	}
+	if profile.InsecureSkipVerify {
+		profileMap["insecure-skip-verify"] = profile.InsecureSkipVerify
 	}
 
 	profilesMap[name] = profileMap

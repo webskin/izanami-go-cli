@@ -2,6 +2,7 @@ package izanami
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -73,6 +74,7 @@ func newClientInternal(config *Config) (*Client, error) {
 		Context:                     config.Context,
 		Timeout:                     config.Timeout,
 		Verbose:                     config.Verbose,
+		InsecureSkipVerify:          config.InsecureSkipVerify,
 	}
 
 	client := resty.New().
@@ -94,6 +96,13 @@ func newClientInternal(config *Config) (*Client, error) {
 			isIdempotent := method == http.MethodGet || method == http.MethodHead
 			return isIdempotent && (err != nil || r.StatusCode() >= 500)
 		})
+
+	// Configure TLS to skip certificate verification if requested
+	if configCopy.InsecureSkipVerify {
+		client.SetTLSClientConfig(&tls.Config{
+			InsecureSkipVerify: true,
+		})
+	}
 
 	izClient := &Client{
 		http:             client,

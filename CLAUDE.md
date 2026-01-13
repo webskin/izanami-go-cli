@@ -106,3 +106,12 @@ func(cmd *cobra.Command, args []string) error {
 - Status messages (success, warnings) go to **stderr** so they don't pollute JSON output
 - Data goes to **stdout** via `output.PrintTo()`
 - See `internal/cmd/keys.go` or `internal/cmd/import_export.go` for examples
+
+## Documentation Lookups
+
+When you need to look up documentation for any library or framework (e.g., Cobra, Go standard library, testing libraries), use the **Context7 MCP server**:
+
+1. First, call `resolve-library-id` to find the correct library ID
+2. Then, call `query-docs` with the library ID and your specific question
+
+This ensures you get up-to-date documentation and code examples rather than relying on potentially outdated knowledge.
