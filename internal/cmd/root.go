@@ -92,11 +92,12 @@ For more information, visit: https://github.com/MAIF/izanami`,
 		}
 
 		// Command-line flags override everything (highest priority)
+		// Environment variables override profile settings but are overridden by flags
 		cfg.MergeWithFlags(izanami.FlagValues{
-			BaseURL:            baseURL,
-			Tenant:             tenant,
-			Project:            project,
-			Context:            contextPath,
+			BaseURL:            getValueWithEnvFallback(baseURL, "IZ_BASE_URL"),
+			Tenant:             getValueWithEnvFallback(tenant, "IZ_TENANT"),
+			Project:            getValueWithEnvFallback(project, "IZ_PROJECT"),
+			Context:            getValueWithEnvFallback(contextPath, "IZ_CONTEXT"),
 			Timeout:            timeout,
 			Verbose:            verbose,
 			InsecureSkipVerify: insecureSkipVerify,
@@ -181,6 +182,14 @@ func logAuthenticationMode(cmd *cobra.Command, cfg *izanami.Config) {
 	}
 
 	fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Authentication - Admin operations: %s, Feature checks: %s\n", adminAuth, clientAuth)
+}
+
+// getValueWithEnvFallback returns the flag value if non-empty, otherwise falls back to the environment variable
+func getValueWithEnvFallback(flagValue, envVar string) string {
+	if flagValue != "" {
+		return flagValue
+	}
+	return os.Getenv(envVar)
 }
 
 // configureColorOutput configures color output based on the color setting
