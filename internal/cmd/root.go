@@ -95,6 +95,8 @@ For more information, visit: https://github.com/MAIF/izanami`,
 		// Environment variables override profile settings but are overridden by flags
 		cfg.MergeWithFlags(izanami.FlagValues{
 			BaseURL:            getValueWithEnvFallback(baseURL, "IZ_BASE_URL"),
+			ClientID:           getValueWithEnvFallback("", "IZ_CLIENT_ID"),
+			ClientSecret:       getValueWithEnvFallback("", "IZ_CLIENT_SECRET"),
 			Tenant:             getValueWithEnvFallback(tenant, "IZ_TENANT"),
 			Project:            getValueWithEnvFallback(project, "IZ_PROJECT"),
 			Context:            getValueWithEnvFallback(contextPath, "IZ_CONTEXT"),
