@@ -109,18 +109,30 @@ Press Ctrl+C to stop watching.`,
 				projects = append(projects, cfg.Project)
 			}
 
-			clientID, clientSecret := cfg.ResolveClientCredentials(tenant, projects)
+			clientID, clientSecret, clientBaseURL := cfg.ResolveClientCredentials(tenant, projects)
 			if clientID != "" && clientSecret != "" {
 				cfg.ClientID = clientID
 				cfg.ClientSecret = clientSecret
+				// Also set ClientBaseURL from client-keys if not already set
+				if cfg.ClientBaseURL == "" && clientBaseURL != "" {
+					cfg.ClientBaseURL = clientBaseURL
+				}
 				if cfg.Verbose {
 					if len(projects) > 0 {
 						fmt.Fprintf(cmd.OutOrStderr(), "Using client credentials from config (tenant: %s, projects: %v)\n", tenant, projects)
 					} else {
 						fmt.Fprintf(cmd.OutOrStderr(), "Using client credentials from config (tenant: %s)\n", tenant)
 					}
+					if cfg.ClientBaseURL != "" {
+						fmt.Fprintf(cmd.OutOrStderr(), "Using client base URL: %s\n", cfg.ClientBaseURL)
+					}
 				}
 			}
+		}
+
+		// Apply ClientBaseURL to BaseURL for client operations if set
+		if cfg.ClientBaseURL != "" {
+			cfg.BaseURL = cfg.ClientBaseURL
 		}
 
 		client, err := izanami.NewClient(cfg)

@@ -18,6 +18,7 @@ import (
 // Maps key name to description
 var profileSettableKeys = map[string]string{
 	"base-url":                       "Izanami server URL",
+	"client-base-url":                "Base URL for client operations (features/events)",
 	"tenant":                         "Default tenant name",
 	"project":                        "Default project name",
 	"context":                        "Default context path",
@@ -580,6 +581,8 @@ var profileSetCmd = &cobra.Command{
 		case "base-url":
 			profile.BaseURL = value
 			profile.Session = "" // Clear session when setting URL
+		case "client-base-url":
+			profile.ClientBaseURL = value
 		case "tenant":
 			profile.Tenant = value
 		case "project":
@@ -680,6 +683,8 @@ Examples:
 			profile.Session = ""
 		case "base-url":
 			profile.BaseURL = ""
+		case "client-base-url":
+			profile.ClientBaseURL = ""
 		case "tenant":
 			profile.Tenant = ""
 		case "project":
@@ -776,6 +781,11 @@ Credentials can be stored:
   - At the tenant level (for all projects in that tenant)
   - At the project level (for specific projects only)
 
+You can also specify a separate base URL for client operations (features/events)
+using --client-base-url. This is useful in leader/worker architectures where:
+  - Leader (admin commands) uses the session URL (IZ_BASE_URL)
+  - Worker (features/events) uses the client-base-url
+
 The 'iz features check' command will automatically use these credentials with
 the following precedence:
   1. --client-id/--client-secret flags (highest priority)
@@ -792,6 +802,9 @@ Examples:
   # Add project-specific credentials to the active profile
   iz profiles client-keys add --tenant my-tenant --projects proj1,proj2
 
+  # Add credentials with a separate client base URL (for leader/worker setup)
+  iz profiles client-keys add --tenant my-tenant --client-base-url https://worker.example.com
+
 Security:
   Credentials are stored in plaintext in ~/.config/iz/config.yaml
   File permissions are automatically set to 0600 (owner read/write only)
@@ -799,6 +812,7 @@ Security:
 	RunE: func(cmd *cobra.Command, args []string) error {
 		tenant, _ := cmd.Flags().GetString("tenant")
 		projects, _ := cmd.Flags().GetStringSlice("projects")
+		clientBaseURL, _ := cmd.Flags().GetString("client-base-url")
 
 		// Validate tenant is provided
 		if tenant == "" {
@@ -877,13 +891,17 @@ Security:
 		}
 
 		// Save credentials
-		if err := izanami.AddClientKeys(tenant, projects, clientID, clientSecret); err != nil {
+		if err := izanami.AddClientKeys(tenant, projects, clientID, clientSecret, clientBaseURL); err != nil {
 			return fmt.Errorf("failed to save credentials: %w", err)
 		}
 
 		// Success message
 		if len(projects) == 0 {
-			fmt.Fprintf(cmd.OutOrStderr(), "\n✓ Client credentials saved to profile '%s' for tenant '%s'\n", profileName, tenant)
+			if clientBaseURL != "" {
+				fmt.Fprintf(cmd.OutOrStderr(), "\n✓ Client credentials saved to profile '%s' for tenant '%s' with client URL: %s\n", profileName, tenant, clientBaseURL)
+			} else {
+				fmt.Fprintf(cmd.OutOrStderr(), "\n✓ Client credentials saved to profile '%s' for tenant '%s'\n", profileName, tenant)
+			}
 		} else {
 			fmt.Fprintf(cmd.OutOrStderr(), "\n✓ Client credentials saved to profile '%s' for tenant '%s', projects: %s\n", profileName, tenant, strings.Join(projects, ", "))
 		}
@@ -941,13 +959,14 @@ func init() {
 	// Flags for client-keys add
 	profileClientKeysAddCmd.Flags().String("tenant", "", "Tenant name (required)")
 	profileClientKeysAddCmd.Flags().StringSlice("projects", []string{}, "Project names (comma-separated)")
+	profileClientKeysAddCmd.Flags().String("client-base-url", "", "Base URL for client operations (features/events)")
 	profileClientKeysAddCmd.MarkFlagRequired("tenant")
 }
 
 // printProfile prints profile details in a formatted way
 func printProfile(w io.Writer, profile *izanami.Profile, showSecrets bool) {
 	if profile.Session != "" {
-		fmt.Fprintf(w, "  Session:       %s\n", profile.Session)
+		fmt.Fprintf(w, "  Session:        %s\n", profile.Session)
 	}
 
 	// Resolve URL: try profile.BaseURL first, then session.URL
@@ -963,25 +982,28 @@ func printProfile(w io.Writer, profile *izanami.Profile, showSecrets bool) {
 		}
 	}
 	if url != "" {
-		fmt.Fprintf(w, "  URL:           %s\n", url)
+		fmt.Fprintf(w, "  URL:            %s\n", url)
+	}
+	if profile.ClientBaseURL != "" {
+		fmt.Fprintf(w, "  Client URL:     %s\n", profile.ClientBaseURL)
 	}
 	if profile.Tenant != "" {
-		fmt.Fprintf(w, "  Tenant:        %s\n", profile.Tenant)
+		fmt.Fprintf(w, "  Tenant:         %s\n", profile.Tenant)
 	}
 	if profile.Project != "" {
-		fmt.Fprintf(w, "  Project:       %s\n", profile.Project)
+		fmt.Fprintf(w, "  Project:        %s\n", profile.Project)
 	}
 	if profile.Context != "" {
-		fmt.Fprintf(w, "  Context:       %s\n", profile.Context)
+		fmt.Fprintf(w, "  Context:        %s\n", profile.Context)
 	}
 	if profile.ClientID != "" {
-		fmt.Fprintf(w, "  Client ID:     %s\n", profile.ClientID)
+		fmt.Fprintf(w, "  Client ID:      %s\n", profile.ClientID)
 	}
 	if profile.ClientSecret != "" {
 		if showSecrets {
-			fmt.Fprintf(w, "  Client Secret: %s\n", profile.ClientSecret)
+			fmt.Fprintf(w, "  Client Secret:  %s\n", profile.ClientSecret)
 		} else {
-			fmt.Fprintf(w, "  Client Secret: <redacted>\n")
+			fmt.Fprintf(w, "  Client Secret:  <redacted>\n")
 		}
 	}
 }

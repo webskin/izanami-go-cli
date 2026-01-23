@@ -40,6 +40,7 @@ const (
 type Config struct {
 	// Runtime fields (populated from active profile, not stored in top-level YAML)
 	BaseURL                     string                            `yaml:"-" mapstructure:"-"` // Comes from active profile
+	ClientBaseURL               string                            `yaml:"-" mapstructure:"-"` // Optional: separate URL for client operations (features/events)
 	ClientID                    string                            `yaml:"-" mapstructure:"-"` // Comes from active profile
 	ClientSecret                string                            `yaml:"-" mapstructure:"-"` // Comes from active profile
 	Username                    string                            `yaml:"-" mapstructure:"-"` // Display username from session (not used for auth)
@@ -65,9 +66,10 @@ type Config struct {
 
 // TenantClientKeysConfig holds client credentials for a specific tenant
 type TenantClientKeysConfig struct {
-	ClientID     string                             `yaml:"client-id,omitempty" mapstructure:"client-id"`
-	ClientSecret string                             `yaml:"client-secret,omitempty" mapstructure:"client-secret"`
-	Projects     map[string]ProjectClientKeysConfig `yaml:"projects,omitempty" mapstructure:"projects"` // Project-specific overrides
+	ClientID      string                             `yaml:"client-id,omitempty" mapstructure:"client-id"`
+	ClientSecret  string                             `yaml:"client-secret,omitempty" mapstructure:"client-secret"`
+	ClientBaseURL string                             `yaml:"client-base-url,omitempty" mapstructure:"client-base-url"` // Optional URL for client operations
+	Projects      map[string]ProjectClientKeysConfig `yaml:"projects,omitempty" mapstructure:"projects"`               // Project-specific overrides
 }
 
 // ProjectClientKeysConfig holds client credentials for a specific project within a tenant
@@ -80,6 +82,7 @@ type ProjectClientKeysConfig struct {
 type Profile struct {
 	Session                     string                            `yaml:"session,omitempty" mapstructure:"session"`                                               // Reference to session name in ~/.izsessions
 	BaseURL                     string                            `yaml:"base-url,omitempty" mapstructure:"base-url"`                                             // Alternative to session
+	ClientBaseURL               string                            `yaml:"client-base-url,omitempty" mapstructure:"client-base-url"`                               // Optional URL for client operations (features/events)
 	PersonalAccessTokenUsername string                            `yaml:"personal-access-token-username,omitempty" mapstructure:"personal-access-token-username"` // Username for PAT authentication (required with personal-access-token)
 	PersonalAccessToken         string                            `yaml:"personal-access-token,omitempty" mapstructure:"personal-access-token"`                   // Personal Access Token (long-lived)
 	Tenant                      string                            `yaml:"tenant,omitempty" mapstructure:"tenant"`                                                 // Default tenant for this profile
@@ -94,6 +97,7 @@ type Profile struct {
 // FlagValues holds command-line flag values for merging with config
 type FlagValues struct {
 	BaseURL                     string
+	ClientBaseURL               string
 	ClientID                    string
 	ClientSecret                string
 	PersonalAccessTokenUsername string
@@ -156,6 +160,9 @@ func LoadConfig() (*Config, error) {
 func (c *Config) MergeWithFlags(flags FlagValues) {
 	if flags.BaseURL != "" {
 		c.BaseURL = flags.BaseURL
+	}
+	if flags.ClientBaseURL != "" {
+		c.ClientBaseURL = flags.ClientBaseURL
 	}
 	if flags.ClientID != "" {
 		c.ClientID = flags.ClientID
@@ -693,14 +700,15 @@ func ValidateConfigFile() []ValidationError {
 // 1. Project-specific credentials (for each project in the list)
 // 2. Tenant-wide credentials
 // Returns empty strings if no credentials are found for the given tenant/projects.
-func (c *Config) ResolveClientCredentials(tenant string, projects []string) (clientID, clientSecret string) {
+// Also returns the client base URL if configured at the tenant level.
+func (c *Config) ResolveClientCredentials(tenant string, projects []string) (clientID, clientSecret, clientBaseURL string) {
 	if c.ClientKeys == nil || tenant == "" {
-		return "", ""
+		return "", "", ""
 	}
 
 	tenantConfig, ok := c.ClientKeys[tenant]
 	if !ok {
-		return "", ""
+		return "", "", ""
 	}
 
 	// First, try project-specific credentials
@@ -709,7 +717,8 @@ func (c *Config) ResolveClientCredentials(tenant string, projects []string) (cli
 			if projectConfig, exists := tenantConfig.Projects[project]; exists {
 				// Only use project credentials if both ID and secret are present
 				if projectConfig.ClientID != "" && projectConfig.ClientSecret != "" {
-					return projectConfig.ClientID, projectConfig.ClientSecret
+					// Return project credentials with tenant-level client base URL
+					return projectConfig.ClientID, projectConfig.ClientSecret, tenantConfig.ClientBaseURL
 				}
 			}
 		}
@@ -717,16 +726,26 @@ func (c *Config) ResolveClientCredentials(tenant string, projects []string) (cli
 
 	// Fall back to tenant-wide credentials
 	if tenantConfig.ClientID != "" && tenantConfig.ClientSecret != "" {
-		return tenantConfig.ClientID, tenantConfig.ClientSecret
+		return tenantConfig.ClientID, tenantConfig.ClientSecret, tenantConfig.ClientBaseURL
 	}
 
-	return "", ""
+	return "", "", ""
+}
+
+// GetClientBaseURL returns the URL for client operations (features/events).
+// Returns ClientBaseURL if set, otherwise falls back to BaseURL.
+func (c *Config) GetClientBaseURL() string {
+	if c.ClientBaseURL != "" {
+		return c.ClientBaseURL
+	}
+	return c.BaseURL
 }
 
 // AddClientKeys adds or updates client credentials in the active profile.
 // If projects is empty, credentials are stored at the tenant level.
 // If projects are specified, credentials are stored for each project.
-func AddClientKeys(tenant string, projects []string, clientID, clientSecret string) error {
+// If clientBaseURL is provided, it is stored at the tenant level for client operations.
+func AddClientKeys(tenant string, projects []string, clientID, clientSecret, clientBaseURL string) error {
 	if tenant == "" {
 		return fmt.Errorf("tenant is required")
 	}
@@ -773,6 +792,11 @@ func AddClientKeys(tenant string, projects []string, clientID, clientSecret stri
 				ClientSecret: clientSecret,
 			}
 		}
+	}
+
+	// Store client base URL at tenant level (if provided)
+	if clientBaseURL != "" {
+		tenantConfig.ClientBaseURL = clientBaseURL
 	}
 
 	// Update the profile
@@ -846,6 +870,11 @@ func (c *Config) MergeWithProfile(profile *Profile) {
 		c.BaseURL = profile.BaseURL
 	} else if sessionData != nil && sessionData.URL != "" && c.BaseURL == "" {
 		c.BaseURL = sessionData.URL
+	}
+
+	// ClientBaseURL: prefer profile.ClientBaseURL if set
+	if profile.ClientBaseURL != "" && c.ClientBaseURL == "" {
+		c.ClientBaseURL = profile.ClientBaseURL
 	}
 
 	// Username (display): from session only (for showing who's logged in)
@@ -1049,6 +1078,9 @@ func AddProfile(name string, profile *Profile) error {
 	}
 	if profile.BaseURL != "" {
 		profileMap["base-url"] = profile.BaseURL
+	}
+	if profile.ClientBaseURL != "" {
+		profileMap["client-base-url"] = profile.ClientBaseURL
 	}
 	if profile.PersonalAccessTokenUsername != "" {
 		profileMap["personal-access-token-username"] = profile.PersonalAccessTokenUsername
