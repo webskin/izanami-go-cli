@@ -103,12 +103,13 @@ func _TestClientKeysConfigMarshaling(t *testing.T) {
 // TestResolveClientCredentials tests the credential resolution logic
 func TestResolveClientCredentials(t *testing.T) {
 	tests := []struct {
-		name             string
-		config           Config
-		tenant           string
-		projects         []string
-		expectedClientID string
-		expectedSecret   string
+		name                  string
+		config                Config
+		tenant                string
+		projects              []string
+		expectedClientID      string
+		expectedSecret        string
+		expectedClientBaseURL string
 	}{
 		{
 			name: "tenant-level credentials",
@@ -120,10 +121,28 @@ func TestResolveClientCredentials(t *testing.T) {
 					},
 				},
 			},
-			tenant:           "tenant1",
-			projects:         nil,
-			expectedClientID: "tenant1-id",
-			expectedSecret:   "tenant1-secret",
+			tenant:                "tenant1",
+			projects:              nil,
+			expectedClientID:      "tenant1-id",
+			expectedSecret:        "tenant1-secret",
+			expectedClientBaseURL: "",
+		},
+		{
+			name: "tenant-level credentials with ClientBaseURL",
+			config: Config{
+				ClientKeys: map[string]TenantClientKeysConfig{
+					"tenant1": {
+						ClientID:      "tenant1-id",
+						ClientSecret:  "tenant1-secret",
+						ClientBaseURL: "http://client.example.com",
+					},
+				},
+			},
+			tenant:                "tenant1",
+			projects:              nil,
+			expectedClientID:      "tenant1-id",
+			expectedSecret:        "tenant1-secret",
+			expectedClientBaseURL: "http://client.example.com",
 		},
 		{
 			name: "project-level credentials override tenant",
@@ -141,10 +160,34 @@ func TestResolveClientCredentials(t *testing.T) {
 					},
 				},
 			},
-			tenant:           "tenant1",
-			projects:         []string{"project1"},
-			expectedClientID: "proj1-id",
-			expectedSecret:   "proj1-secret",
+			tenant:                "tenant1",
+			projects:              []string{"project1"},
+			expectedClientID:      "proj1-id",
+			expectedSecret:        "proj1-secret",
+			expectedClientBaseURL: "",
+		},
+		{
+			name: "project-level credentials return tenant-level ClientBaseURL",
+			config: Config{
+				ClientKeys: map[string]TenantClientKeysConfig{
+					"tenant1": {
+						ClientID:      "tenant1-id",
+						ClientSecret:  "tenant1-secret",
+						ClientBaseURL: "http://client.example.com",
+						Projects: map[string]ProjectClientKeysConfig{
+							"project1": {
+								ClientID:     "proj1-id",
+								ClientSecret: "proj1-secret",
+							},
+						},
+					},
+				},
+			},
+			tenant:                "tenant1",
+			projects:              []string{"project1"},
+			expectedClientID:      "proj1-id",
+			expectedSecret:        "proj1-secret",
+			expectedClientBaseURL: "http://client.example.com",
 		},
 		{
 			name: "project not found falls back to tenant",
@@ -162,10 +205,11 @@ func TestResolveClientCredentials(t *testing.T) {
 					},
 				},
 			},
-			tenant:           "tenant1",
-			projects:         []string{"nonexistent-project"},
-			expectedClientID: "tenant1-id",
-			expectedSecret:   "tenant1-secret",
+			tenant:                "tenant1",
+			projects:              []string{"nonexistent-project"},
+			expectedClientID:      "tenant1-id",
+			expectedSecret:        "tenant1-secret",
+			expectedClientBaseURL: "",
 		},
 		{
 			name: "multiple projects - first match wins",
@@ -187,10 +231,11 @@ func TestResolveClientCredentials(t *testing.T) {
 					},
 				},
 			},
-			tenant:           "tenant1",
-			projects:         []string{"project2", "project1"},
-			expectedClientID: "proj2-id",
-			expectedSecret:   "proj2-secret",
+			tenant:                "tenant1",
+			projects:              []string{"project2", "project1"},
+			expectedClientID:      "proj2-id",
+			expectedSecret:        "proj2-secret",
+			expectedClientBaseURL: "",
 		},
 		{
 			name: "tenant not found",
@@ -202,18 +247,20 @@ func TestResolveClientCredentials(t *testing.T) {
 					},
 				},
 			},
-			tenant:           "nonexistent",
-			projects:         nil,
-			expectedClientID: "",
-			expectedSecret:   "",
+			tenant:                "nonexistent",
+			projects:              nil,
+			expectedClientID:      "",
+			expectedSecret:        "",
+			expectedClientBaseURL: "",
 		},
 		{
-			name:             "no client keys configured",
-			config:           Config{},
-			tenant:           "tenant1",
-			projects:         nil,
-			expectedClientID: "",
-			expectedSecret:   "",
+			name:                  "no client keys configured",
+			config:                Config{},
+			tenant:                "tenant1",
+			projects:              nil,
+			expectedClientID:      "",
+			expectedSecret:        "",
+			expectedClientBaseURL: "",
 		},
 		{
 			name: "empty tenant",
@@ -225,10 +272,11 @@ func TestResolveClientCredentials(t *testing.T) {
 					},
 				},
 			},
-			tenant:           "",
-			projects:         nil,
-			expectedClientID: "",
-			expectedSecret:   "",
+			tenant:                "",
+			projects:              nil,
+			expectedClientID:      "",
+			expectedSecret:        "",
+			expectedClientBaseURL: "",
 		},
 		{
 			name: "incomplete project credentials falls back to tenant",
@@ -246,10 +294,11 @@ func TestResolveClientCredentials(t *testing.T) {
 					},
 				},
 			},
-			tenant:           "tenant1",
-			projects:         []string{"project1"},
-			expectedClientID: "tenant1-id",
-			expectedSecret:   "tenant1-secret",
+			tenant:                "tenant1",
+			projects:              []string{"project1"},
+			expectedClientID:      "tenant1-id",
+			expectedSecret:        "tenant1-secret",
+			expectedClientBaseURL: "",
 		},
 		{
 			name: "incomplete tenant credentials returns empty",
@@ -261,18 +310,180 @@ func TestResolveClientCredentials(t *testing.T) {
 					},
 				},
 			},
-			tenant:           "tenant1",
-			projects:         nil,
-			expectedClientID: "",
-			expectedSecret:   "",
+			tenant:                "tenant1",
+			projects:              nil,
+			expectedClientID:      "",
+			expectedSecret:        "",
+			expectedClientBaseURL: "",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			clientID, clientSecret := tt.config.ResolveClientCredentials(tt.tenant, tt.projects)
+			clientID, clientSecret, clientBaseURL := tt.config.ResolveClientCredentials(tt.tenant, tt.projects)
 			assert.Equal(t, tt.expectedClientID, clientID, "Client ID mismatch")
 			assert.Equal(t, tt.expectedSecret, clientSecret, "Client secret mismatch")
+			assert.Equal(t, tt.expectedClientBaseURL, clientBaseURL, "Client base URL mismatch")
+		})
+	}
+}
+
+// TestGetClientBaseURL tests the GetClientBaseURL method
+func TestGetClientBaseURL(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   Config
+		expected string
+	}{
+		{
+			name: "returns ClientBaseURL when set",
+			config: Config{
+				BaseURL:       "http://admin.example.com",
+				ClientBaseURL: "http://client.example.com",
+			},
+			expected: "http://client.example.com",
+		},
+		{
+			name: "falls back to BaseURL when ClientBaseURL is empty",
+			config: Config{
+				BaseURL:       "http://admin.example.com",
+				ClientBaseURL: "",
+			},
+			expected: "http://admin.example.com",
+		},
+		{
+			name:     "returns empty string for zero-value Config",
+			config:   Config{},
+			expected: "",
+		},
+		{
+			name: "returns BaseURL when only BaseURL is set",
+			config: Config{
+				BaseURL: "http://example.com",
+			},
+			expected: "http://example.com",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.config.GetClientBaseURL()
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestMergeWithFlags_ClientBaseURL tests that ClientBaseURL is properly merged from flags
+func TestMergeWithFlags_ClientBaseURL(t *testing.T) {
+	tests := []struct {
+		name           string
+		initialConfig  Config
+		flags          FlagValues
+		expectedResult string
+	}{
+		{
+			name: "merges ClientBaseURL from flags when set",
+			initialConfig: Config{
+				BaseURL:       "http://admin.example.com",
+				ClientBaseURL: "",
+			},
+			flags: FlagValues{
+				ClientBaseURL: "http://client.example.com",
+			},
+			expectedResult: "http://client.example.com",
+		},
+		{
+			name: "flag overrides existing ClientBaseURL",
+			initialConfig: Config{
+				BaseURL:       "http://admin.example.com",
+				ClientBaseURL: "http://old-client.example.com",
+			},
+			flags: FlagValues{
+				ClientBaseURL: "http://new-client.example.com",
+			},
+			expectedResult: "http://new-client.example.com",
+		},
+		{
+			name: "preserves existing ClientBaseURL if flag is empty",
+			initialConfig: Config{
+				BaseURL:       "http://admin.example.com",
+				ClientBaseURL: "http://client.example.com",
+			},
+			flags: FlagValues{
+				ClientBaseURL: "",
+			},
+			expectedResult: "http://client.example.com",
+		},
+		{
+			name: "ClientBaseURL remains empty when not set in either",
+			initialConfig: Config{
+				BaseURL: "http://admin.example.com",
+			},
+			flags:          FlagValues{},
+			expectedResult: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := tt.initialConfig
+			config.MergeWithFlags(tt.flags)
+			assert.Equal(t, tt.expectedResult, config.ClientBaseURL)
+		})
+	}
+}
+
+// TestMergeWithProfile_ClientBaseURL tests that ClientBaseURL is properly merged from profiles
+func TestMergeWithProfile_ClientBaseURL(t *testing.T) {
+	tests := []struct {
+		name           string
+		initialConfig  Config
+		profile        *Profile
+		expectedResult string
+	}{
+		{
+			name: "merges ClientBaseURL from profile when set",
+			initialConfig: Config{
+				BaseURL:       "http://admin.example.com",
+				ClientBaseURL: "",
+			},
+			profile: &Profile{
+				ClientBaseURL: "http://client.example.com",
+			},
+			expectedResult: "http://client.example.com",
+		},
+		{
+			name: "does not override existing ClientBaseURL from config",
+			initialConfig: Config{
+				BaseURL:       "http://admin.example.com",
+				ClientBaseURL: "http://existing-client.example.com",
+			},
+			profile: &Profile{
+				ClientBaseURL: "http://profile-client.example.com",
+			},
+			expectedResult: "http://existing-client.example.com",
+		},
+		{
+			name: "preserves empty ClientBaseURL when profile has none",
+			initialConfig: Config{
+				BaseURL: "http://admin.example.com",
+			},
+			profile:        &Profile{},
+			expectedResult: "",
+		},
+		{
+			name:           "handles nil profile",
+			initialConfig:  Config{ClientBaseURL: "http://client.example.com"},
+			profile:        nil,
+			expectedResult: "http://client.example.com",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := tt.initialConfig
+			config.MergeWithProfile(tt.profile)
+			assert.Equal(t, tt.expectedResult, config.ClientBaseURL)
 		})
 	}
 }
@@ -347,7 +558,7 @@ func _TestAddClientKeys(t *testing.T) {
 			configPath := filepath.Join(tempDir, "config.yaml")
 			os.Remove(configPath)
 
-			err := AddClientKeys(tt.tenant, tt.projects, tt.clientID, tt.clientSecret)
+			err := AddClientKeys(tt.tenant, tt.projects, tt.clientID, tt.clientSecret, "")
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -405,7 +616,7 @@ func _TestAddClientKeysOverwrite(t *testing.T) {
 	}
 
 	// Add initial credentials
-	err := AddClientKeys("tenant1", nil, "old-id", "old-secret")
+	err := AddClientKeys("tenant1", nil, "old-id", "old-secret", "")
 	require.NoError(t, err)
 
 	// Verify initial credentials
@@ -414,7 +625,7 @@ func _TestAddClientKeysOverwrite(t *testing.T) {
 	assert.Equal(t, "old-id", config.ClientKeys["tenant1"].ClientID)
 
 	// Overwrite with new credentials
-	err = AddClientKeys("tenant1", nil, "new-id", "new-secret")
+	err = AddClientKeys("tenant1", nil, "new-id", "new-secret", "")
 	require.NoError(t, err)
 
 	// Verify credentials were updated
@@ -466,11 +677,11 @@ func _TestAddClientKeysMultipleTenants(t *testing.T) {
 	}
 
 	// Add credentials for tenant1
-	err := AddClientKeys("tenant1", nil, "tenant1-id", "tenant1-secret")
+	err := AddClientKeys("tenant1", nil, "tenant1-id", "tenant1-secret", "")
 	require.NoError(t, err)
 
 	// Add credentials for tenant2
-	err = AddClientKeys("tenant2", nil, "tenant2-id", "tenant2-secret")
+	err = AddClientKeys("tenant2", nil, "tenant2-id", "tenant2-secret", "")
 	require.NoError(t, err)
 
 	// Verify both tenants have credentials
