@@ -143,10 +143,85 @@ func resolveProjectsToUUIDs(ctx context.Context, client *izanami.Client, tenant 
 	return resolved, nil
 }
 
+// findFeatureByName finds a feature by name in a pre-fetched feature list.
+// Returns (uuid, error). If project is non-empty, filters by project.
+// Returns error if 0 matches or >1 matches without project filter.
+func findFeatureByName(features []izanami.Feature, name, project, tenant string) (string, error) {
+	var matches []izanami.Feature
+	for _, f := range features {
+		if f.Name == name {
+			matches = append(matches, f)
+		}
+	}
+
+	// Filter by project if specified
+	if project != "" {
+		var projectMatches []izanami.Feature
+		for _, f := range matches {
+			if f.Project == project {
+				projectMatches = append(projectMatches, f)
+			}
+		}
+		matches = projectMatches
+	}
+
+	if len(matches) == 0 {
+		if project != "" {
+			return "", fmt.Errorf("no feature named '%s' found in tenant '%s' and project '%s'", name, tenant, project)
+		}
+		return "", fmt.Errorf("no feature named '%s' found in tenant '%s'", name, tenant)
+	}
+	if len(matches) > 1 {
+		return "", fmt.Errorf("multiple features named '%s' found (use --project to disambiguate or provide UUID instead)", name)
+	}
+
+	return matches[0].ID, nil
+}
+
+// resolveFeatureToUUID resolves a feature identifier (UUID or name) to a UUID.
+// Returns (uuid, resolvedName, error) - resolvedName is set when name resolution occurred.
+// If the input is already a UUID, returns (uuid, "", nil).
+// If the input is a name, requires tenant to be set. Project is optional for disambiguation.
+func resolveFeatureToUUID(ctx context.Context, client *izanami.Client, cfg *izanami.Config, featureIDOrName string, cmd *cobra.Command) (string, string, error) {
+	// If it's already a UUID, return it directly
+	if IsUUID(featureIDOrName) {
+		if cfg.Verbose {
+			fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Using feature UUID: %s\n", featureIDOrName)
+		}
+		return featureIDOrName, "", nil
+	}
+
+	// Name resolution requires tenant
+	if err := cfg.ValidateTenant(); err != nil {
+		return "", "", fmt.Errorf("feature name requires --tenant flag: %w", err)
+	}
+
+	if cfg.Verbose {
+		fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Resolving feature name '%s' in tenant '%s'...\n", featureIDOrName, cfg.Tenant)
+	}
+
+	// List all features for the tenant
+	features, err := izanami.ListFeatures(client, ctx, cfg.Tenant, "", izanami.ParseFeatures)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to list features: %w", err)
+	}
+
+	// Use shared helper for matching
+	id, err := findFeatureByName(features, featureIDOrName, cfg.Project, cfg.Tenant)
+	if err != nil {
+		return "", "", err
+	}
+
+	if cfg.Verbose {
+		fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Resolved feature '%s' to UUID %s\n", featureIDOrName, id)
+	}
+	return id, featureIDOrName, nil
+}
+
 // resolveFeaturesToUUIDs converts feature names to UUIDs.
 // If a feature value is already a valid UUID, it's used as-is.
 // Otherwise, it's treated as a feature name and looked up by listing features.
-// Requires tenant and project to be defined for name resolution.
+// Requires tenant to be defined for name resolution. Project is optional for disambiguation.
 func resolveFeaturesToUUIDs(ctx context.Context, client *izanami.Client, tenant, project string, features []string, verbose bool, cmd *cobra.Command) ([]string, error) {
 	if len(features) == 0 {
 		return features, nil
@@ -170,22 +245,11 @@ func resolveFeaturesToUUIDs(ctx context.Context, client *izanami.Client, tenant,
 	if tenant == "" {
 		return nil, fmt.Errorf("--tenant is required to resolve feature names")
 	}
-	if project == "" {
-		return nil, fmt.Errorf("--project is required to resolve feature names to UUIDs")
-	}
 
-	// List all features and build a name->ID map for the specified project
+	// List all features once
 	allFeatures, err := izanami.ListFeatures(client, ctx, tenant, "", izanami.ParseFeatures)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list features: %w", err)
-	}
-
-	// Build map of name -> ID for features in the specified project
-	featureMap := make(map[string]string)
-	for _, feat := range allFeatures {
-		if feat.Project == project {
-			featureMap[feat.Name] = feat.ID
-		}
 	}
 
 	resolved := make([]string, 0, len(features))
@@ -196,10 +260,10 @@ func resolveFeaturesToUUIDs(ctx context.Context, client *izanami.Client, tenant,
 			continue
 		}
 
-		// Look up by name in the map
-		id, ok := featureMap[f]
-		if !ok {
-			return nil, fmt.Errorf("feature %q not found in project %q", f, project)
+		// Use shared helper for matching
+		id, err := findFeatureByName(allFeatures, f, project, tenant)
+		if err != nil {
+			return nil, err
 		}
 
 		if verbose {

@@ -107,16 +107,34 @@ The list endpoint supports filtering by:
 
 // featuresGetCmd gets a specific feature
 var featuresGetCmd = &cobra.Command{
-	Use:         "get <feature-id>",
+	Use:         "get <feature-id-or-name>",
 	Short:       "Get a specific feature",
 	Annotations: map[string]string{"route": "GET /api/admin/tenants/:tenant/features/:id"},
-	Long:        `Get detailed information about a specific feature, including all context overloads.`,
-	Args:        cobra.ExactArgs(1),
+	Long: `Get detailed information about a specific feature, including all context overloads.
+
+This command accepts either a feature UUID or feature name:
+
+  UUID mode:
+    - Provide a UUID (e.g., e878a149-df86-4f28-b1db-059580304e1e)
+
+  Name mode:
+    - Provide a feature name (e.g., my-feature)
+    - --tenant flag is REQUIRED
+    - --project flag is optional (helps disambiguate if multiple features have same name)
+    - If multiple features match, an error is returned
+
+Examples:
+  # Get feature by UUID
+  iz admin features get e878a149-df86-4f28-b1db-059580304e1e --tenant my-tenant
+
+  # Get feature by name
+  iz admin features get my-feature --tenant my-tenant
+
+  # Get feature by name with project disambiguation
+  iz admin features get my-feature --tenant my-tenant --project my-project`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := cfg.Validate(); err != nil {
-			return err
-		}
-		if err := cfg.ValidateTenant(); err != nil {
 			return err
 		}
 
@@ -127,9 +145,15 @@ var featuresGetCmd = &cobra.Command{
 
 		ctx := context.Background()
 
+		// Resolve feature ID or name to UUID
+		featureID, _, err := resolveFeatureToUUID(ctx, client, cfg, args[0], cmd)
+		if err != nil {
+			return err
+		}
+
 		// For JSON output, use Identity mapper to get raw JSON
 		if outputFormat == "json" {
-			raw, err := izanami.GetFeature(client, ctx, cfg.Tenant, args[0], izanami.Identity)
+			raw, err := izanami.GetFeature(client, ctx, cfg.Tenant, featureID, izanami.Identity)
 			if err != nil {
 				return err
 			}
@@ -137,7 +161,7 @@ var featuresGetCmd = &cobra.Command{
 		}
 
 		// For table output, use ParseFeature mapper
-		feature, err := izanami.GetFeature(client, ctx, cfg.Tenant, args[0], izanami.ParseFeature)
+		feature, err := izanami.GetFeature(client, ctx, cfg.Tenant, featureID, izanami.ParseFeature)
 		if err != nil {
 			return err
 		}
@@ -352,26 +376,38 @@ Examples:
 
 // featuresDeleteCmd deletes a feature
 var featuresDeleteCmd = &cobra.Command{
-	Use:         "delete <feature-id>",
+	Use:         "delete <feature-id-or-name>",
 	Short:       "Delete a feature",
 	Annotations: map[string]string{"route": "DELETE /api/admin/tenants/:tenant/features/:id"},
-	Long:        `Delete a feature flag. This operation cannot be undone.`,
-	Args:        cobra.ExactArgs(1),
+	Long: `Delete a feature flag. This operation cannot be undone.
+
+This command accepts either a feature UUID or feature name:
+
+  UUID mode:
+    - Provide a UUID (e.g., e878a149-df86-4f28-b1db-059580304e1e)
+
+  Name mode:
+    - Provide a feature name (e.g., my-feature)
+    - --tenant flag is REQUIRED
+    - --project flag is optional (helps disambiguate if multiple features have same name)
+    - If multiple features match, an error is returned
+
+Examples:
+  # Delete feature by UUID
+  iz admin features delete e878a149-df86-4f28-b1db-059580304e1e --tenant my-tenant
+
+  # Delete feature by name
+  iz admin features delete my-feature --tenant my-tenant
+
+  # Delete feature by name with project disambiguation
+  iz admin features delete my-feature --tenant my-tenant --project my-project
+
+  # Delete without confirmation
+  iz admin features delete my-feature --tenant my-tenant --force`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := cfg.Validate(); err != nil {
 			return err
-		}
-		if err := cfg.ValidateTenant(); err != nil {
-			return err
-		}
-
-		featureID := args[0]
-
-		// Confirm deletion unless --force is used
-		if !featuresDeleteForce {
-			if !confirmDeletion(cmd, "feature", featureID) {
-				return nil
-			}
 		}
 
 		client, err := izanami.NewClient(cfg)
@@ -380,11 +416,36 @@ var featuresDeleteCmd = &cobra.Command{
 		}
 
 		ctx := context.Background()
+
+		// Resolve feature ID or name to UUID
+		featureID, featureName, err := resolveFeatureToUUID(ctx, client, cfg, args[0], cmd)
+		if err != nil {
+			return err
+		}
+
+		// Use resolved name for confirmation display, fall back to ID
+		displayName := featureName
+		if displayName == "" {
+			displayName = featureID
+		}
+
+		// Confirm deletion unless --force is used
+		if !featuresDeleteForce {
+			if !confirmDeletion(cmd, "feature", displayName) {
+				return nil
+			}
+		}
+
 		if err := client.DeleteFeature(ctx, cfg.Tenant, featureID); err != nil {
 			return err
 		}
 
-		fmt.Fprintf(cmd.OutOrStderr(), "Feature deleted successfully: %s\n", featureID)
+		// Show both name and ID when name was resolved
+		if featureName != "" {
+			fmt.Fprintf(cmd.OutOrStderr(), "Feature deleted successfully: %s (ID: %s)\n", featureName, featureID)
+		} else {
+			fmt.Fprintf(cmd.OutOrStderr(), "Feature deleted successfully: %s\n", featureID)
+		}
 		return nil
 	},
 }
