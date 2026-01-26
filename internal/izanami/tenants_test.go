@@ -38,7 +38,7 @@ func TestClient_ListTenants(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -75,7 +75,7 @@ func TestClient_ListTenants_WithRightFilter(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -109,7 +109,7 @@ func TestClient_GetTenant(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -156,7 +156,7 @@ func TestClient_CreateTenant(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -193,7 +193,7 @@ func TestClient_UpdateTenant(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -218,7 +218,7 @@ func TestClient_DeleteTenant(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -243,7 +243,7 @@ func TestClient_DeleteTenant_NoContent(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -273,7 +273,7 @@ func TestClient_UpdateTenant_NoContent(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -318,7 +318,7 @@ func TestClient_ListTenantLogs(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -359,7 +359,7 @@ func TestClient_ListTenantLogs_WithFilters(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -398,7 +398,7 @@ func TestClient_ListTenants_Identity(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -425,7 +425,7 @@ func TestClient_GetTenant_Identity(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -450,7 +450,7 @@ func TestClient_ListTenants_Error(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -475,7 +475,7 @@ func TestClient_GetTenant_NotFound(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -501,7 +501,7 @@ func TestClient_CreateTenant_Error(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -526,7 +526,7 @@ func TestClient_UpdateTenant_NotFound(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -551,7 +551,7 @@ func TestClient_DeleteTenant_NotFound(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -588,7 +588,7 @@ func TestClient_CreateTenant_WithTenantStruct(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()

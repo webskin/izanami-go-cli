@@ -65,7 +65,7 @@ var usersListCmd = &cobra.Command{
 	Short:       "List all visible users (global)",
 	Annotations: map[string]string{"route": "GET /api/admin/users"},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -105,7 +105,7 @@ var usersGetCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		username := args[0]
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -164,7 +164,7 @@ Examples:
 			return fmt.Errorf("password is required (use --password flag)")
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -291,7 +291,7 @@ Examples:
 			return fmt.Errorf("password is required for authentication (use --password flag)")
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -335,7 +335,7 @@ var usersDeleteCmd = &cobra.Command{
 			}
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -371,7 +371,7 @@ Examples:
 	RunE: func(cmd *cobra.Command, args []string) error {
 		username := args[0]
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -433,7 +433,7 @@ var usersSearchCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		query := args[0]
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -467,7 +467,7 @@ var usersListForTenantCmd = &cobra.Command{
 			return fmt.Errorf(errors.MsgTenantRequired)
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -500,7 +500,7 @@ var usersGetForTenantCmd = &cobra.Command{
 			return fmt.Errorf(errors.MsgTenantRequired)
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -539,7 +539,7 @@ Examples:
 			return fmt.Errorf(errors.MsgTenantRequired)
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -610,7 +610,7 @@ Example:
 			return fmt.Errorf("failed to parse invite file: %w", err)
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -642,7 +642,7 @@ var usersListForProjectCmd = &cobra.Command{
 			return fmt.Errorf(errors.MsgTenantRequired)
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -687,7 +687,7 @@ Examples:
 			return fmt.Errorf(errors.MsgTenantRequired)
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -761,7 +761,7 @@ Example:
 			return fmt.Errorf("failed to parse invite file: %w", err)
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}

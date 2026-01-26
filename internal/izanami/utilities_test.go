@@ -30,7 +30,7 @@ func TestClient_Health(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()

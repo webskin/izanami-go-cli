@@ -44,7 +44,7 @@ func TestListWebhooks(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -74,7 +74,7 @@ func TestListWebhooks_WithIdentityMapper(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -99,7 +99,7 @@ func TestListWebhooks_ServerError(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -123,7 +123,7 @@ func TestListWebhooks_Empty(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -174,7 +174,7 @@ func TestClient_CreateWebhook(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -207,7 +207,7 @@ func TestClient_CreateWebhook_WithStatusOK(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -234,7 +234,7 @@ func TestClient_CreateWebhook_BadRequest(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -278,7 +278,7 @@ func TestClient_UpdateWebhook(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -300,7 +300,7 @@ func TestClient_UpdateWebhook_WithStatusOK(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -324,7 +324,7 @@ func TestClient_UpdateWebhook_NotFound(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -351,7 +351,7 @@ func TestClient_UpdateWebhook_BadRequest(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -379,7 +379,7 @@ func TestClient_DeleteWebhook(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -401,7 +401,7 @@ func TestClient_DeleteWebhook_WithStatusOK(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -425,7 +425,7 @@ func TestClient_DeleteWebhook_NotFound(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -471,7 +471,7 @@ func TestListWebhookUsers(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -502,7 +502,7 @@ func TestListWebhookUsers_WithIdentityMapper(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -526,7 +526,7 @@ func TestListWebhookUsers_Empty(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -551,7 +551,7 @@ func TestListWebhookUsers_NotFound(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -576,7 +576,7 @@ func TestListWebhookUsers_Unauthorized(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -616,7 +616,7 @@ func TestClient_CreateWebhook_WithFeatures(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -656,7 +656,7 @@ func TestClient_CreateWebhook_WithProjects(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -700,7 +700,7 @@ func TestClient_CreateWebhook_WithHeaders(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()

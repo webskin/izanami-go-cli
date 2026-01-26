@@ -322,7 +322,7 @@ func (env *IntegrationTestEnv) GetJwtToken(t *testing.T) string {
 }
 
 // NewAuthenticatedClient creates an Izanami client with JWT authentication
-func (env *IntegrationTestEnv) NewAuthenticatedClient(t *testing.T) *izanami.Client {
+func (env *IntegrationTestEnv) NewAuthenticatedClient(t *testing.T) *izanami.AdminClient {
 	t.Helper()
 
 	token := env.GetJwtToken(t)
@@ -334,7 +334,7 @@ func (env *IntegrationTestEnv) NewAuthenticatedClient(t *testing.T) *izanami.Cli
 		Timeout:  30,
 	}
 
-	client, err := izanami.NewClient(config)
+	client, err := izanami.NewAdminClient(config)
 	require.NoError(t, err, "Should create authenticated client")
 
 	return client
@@ -348,13 +348,13 @@ func (env *IntegrationTestEnv) NewAuthenticatedClient(t *testing.T) *izanami.Cli
 type TempTenant struct {
 	Name        string
 	Description string
-	client      *izanami.Client
+	client      *izanami.AdminClient
 	ctx         context.Context
 	created     bool
 }
 
 // NewTempTenant creates a new temporary tenant helper with auto-generated unique name
-func NewTempTenant(t *testing.T, client *izanami.Client, description string) *TempTenant {
+func NewTempTenant(t *testing.T, client *izanami.AdminClient, description string) *TempTenant {
 	t.Helper()
 	return &TempTenant{
 		Name:        fmt.Sprintf("test-tenant-%d", time.Now().UnixNano()),
@@ -452,13 +452,13 @@ type TempProject struct {
 	Name        string
 	Description string
 	Tenant      string
-	client      *izanami.Client
+	client      *izanami.AdminClient
 	ctx         context.Context
 	created     bool
 }
 
 // NewTempProject creates a new temporary project helper with auto-generated unique name
-func NewTempProject(t *testing.T, client *izanami.Client, tenant, description string) *TempProject {
+func NewTempProject(t *testing.T, client *izanami.AdminClient, tenant, description string) *TempProject {
 	t.Helper()
 	return &TempProject{
 		Name:        fmt.Sprintf("test-project-%d", time.Now().UnixNano()),

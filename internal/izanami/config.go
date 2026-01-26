@@ -257,6 +257,21 @@ func (c *Config) ValidateTenant() error {
 	return nil
 }
 
+// ValidateClientAuth checks if client authentication (client-id/secret) is configured.
+// This is required for client operations (feature checks, events).
+func (c *Config) ValidateClientAuth() error {
+	baseURL := c.GetClientBaseURL()
+	if baseURL == "" {
+		return fmt.Errorf("base URL is required (set IZ_BASE_URL or IZ_CLIENT_BASE_URL)")
+	}
+
+	if c.ClientID == "" || c.ClientSecret == "" {
+		return fmt.Errorf("client credentials required: set IZ_CLIENT_ID and IZ_CLIENT_SECRET, or configure client-keys in your profile")
+	}
+
+	return nil
+}
+
 // getConfigDir is a variable that returns the platform-specific config directory
 // It's a variable (not a function) to allow tests to override it
 var getConfigDir = func() string {

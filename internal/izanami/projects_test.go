@@ -40,7 +40,7 @@ func TestClient_ListProjects(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -75,7 +75,7 @@ func TestClient_GetProject(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -124,7 +124,7 @@ func TestClient_CreateProject(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -149,7 +149,7 @@ func TestClient_DeleteProject(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()

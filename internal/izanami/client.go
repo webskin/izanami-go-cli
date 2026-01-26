@@ -20,8 +20,10 @@ const (
 	apiAdminTenants = "/api/admin/tenants/"
 )
 
-// Client represents an Izanami HTTP client
-type Client struct {
+// AdminClient represents an Izanami HTTP client for admin API operations (/api/admin/*)
+// Use this for administrative operations like managing features, projects, tenants, etc.
+// For client operations (feature checks, events), use FeatureCheckClient instead.
+type AdminClient struct {
 	http             *resty.Client
 	config           *Config
 	beforeRequest    []func(*resty.Request) error
@@ -41,29 +43,32 @@ func (e *APIError) Error() string {
 	return fmt.Sprintf("API error (%d): %s", e.StatusCode, e.Message)
 }
 
-// NewClient creates a new Izanami client with the given configuration
-func NewClient(config *Config) (*Client, error) {
-	if err := config.Validate(); err != nil {
+// NewAdminClient creates a new Izanami admin client with the given configuration.
+// This validates that admin authentication (PAT or JWT) is configured.
+// For client operations (feature checks, events), use NewFeatureCheckClient instead.
+func NewAdminClient(config *Config) (*AdminClient, error) {
+	if err := config.ValidateAdminAuth(); err != nil {
 		return nil, err
 	}
 
-	return newClientInternal(config)
+	return newAdminClientInternal(config)
 }
 
-// NewClientNoAuth creates a client without authentication validation (for health checks)
-func NewClientNoAuth(config *Config) (*Client, error) {
+// NewAdminClientNoAuth creates an admin client without authentication validation.
+// Use this for operations that don't require authentication (e.g., health checks).
+func NewAdminClientNoAuth(config *Config) (*AdminClient, error) {
 	if config.BaseURL == "" {
 		return nil, fmt.Errorf(errmsg.MsgBaseURLRequired)
 	}
 
-	return newClientInternal(config)
+	return newAdminClientInternal(config)
 }
 
-// newClientInternal creates the actual client (shared logic)
-func newClientInternal(config *Config) (*Client, error) {
-	// Make a defensive copy of the config to prevent external mutations
-	configCopy := &Config{
+// copyConfig makes a defensive copy of the config to prevent external mutations
+func copyConfig(config *Config) *Config {
+	return &Config{
 		BaseURL:                     config.BaseURL,
+		ClientBaseURL:               config.ClientBaseURL,
 		ClientID:                    config.ClientID,
 		ClientSecret:                config.ClientSecret,
 		PersonalAccessTokenUsername: config.PersonalAccessTokenUsername,
@@ -76,10 +81,14 @@ func newClientInternal(config *Config) (*Client, error) {
 		Verbose:                     config.Verbose,
 		InsecureSkipVerify:          config.InsecureSkipVerify,
 	}
+}
 
+// newHTTPClient creates a configured resty HTTP client.
+// This is shared between AdminClient and FeatureCheckClient.
+func newHTTPClient(baseURL string, timeout int, insecureSkipVerify bool) *resty.Client {
 	client := resty.New().
-		SetBaseURL(configCopy.BaseURL).
-		SetTimeout(time.Duration(configCopy.Timeout) * time.Second).
+		SetBaseURL(baseURL).
+		SetTimeout(time.Duration(timeout) * time.Second).
 		SetRetryCount(3).
 		SetRetryWaitTime(1 * time.Second).
 		SetRetryMaxWaitTime(5 * time.Second).
@@ -98,14 +107,23 @@ func newClientInternal(config *Config) (*Client, error) {
 		})
 
 	// Configure TLS to skip certificate verification if requested
-	if configCopy.InsecureSkipVerify {
+	if insecureSkipVerify {
 		client.SetTLSClientConfig(&tls.Config{
 			InsecureSkipVerify: true,
 		})
 	}
 
-	izClient := &Client{
-		http:             client,
+	return client
+}
+
+// newAdminClientInternal creates the actual admin client (shared logic)
+func newAdminClientInternal(config *Config) (*AdminClient, error) {
+	configCopy := copyConfig(config)
+
+	httpClient := newHTTPClient(configCopy.BaseURL, configCopy.Timeout, configCopy.InsecureSkipVerify)
+
+	izClient := &AdminClient{
+		http:             httpClient,
 		config:           configCopy,
 		beforeRequest:    []func(*resty.Request) error{},
 		afterResponse:    []func(*resty.Response) error{},
@@ -113,13 +131,8 @@ func newClientInternal(config *Config) (*Client, error) {
 	}
 
 	if configCopy.Verbose {
-		enableSecureDebugMode(client, izClient)
+		enableAdminSecureDebugMode(httpClient, izClient)
 	}
-
-	// Note: Authentication is NOT set at client level
-	// Each API method will set appropriate authentication at the request level:
-	// - Admin APIs: Use setAdminAuth() to set PAT or JWT
-	// - Client APIs: Use setClientAuth() to set client-id/secret headers
 
 	return izClient, nil
 }
@@ -127,23 +140,23 @@ func newClientInternal(config *Config) (*Client, error) {
 const maxBodyLogLength = 2048 // Maximum length for logged request/response bodies
 
 // AddBeforeRequestHook adds a middleware function that runs before each request
-func (c *Client) AddBeforeRequestHook(hook func(*resty.Request) error) {
+func (c *AdminClient) AddBeforeRequestHook(hook func(*resty.Request) error) {
 	c.beforeRequest = append(c.beforeRequest, hook)
 }
 
 // AddAfterResponseHook adds a middleware function that runs after each response
-func (c *Client) AddAfterResponseHook(hook func(*resty.Response) error) {
+func (c *AdminClient) AddAfterResponseHook(hook func(*resty.Response) error) {
 	c.afterResponse = append(c.afterResponse, hook)
 }
 
 // SetStructuredLogger sets a structured logging function
 // The logger receives: level ("info", "warn", "error"), message, and optional fields
-func (c *Client) SetStructuredLogger(logger func(level, message string, fields map[string]interface{})) {
+func (c *AdminClient) SetStructuredLogger(logger func(level, message string, fields map[string]interface{})) {
 	c.structuredLogger = logger
 }
 
 // executeBeforeRequestHooks runs all before-request middleware hooks
-func (c *Client) executeBeforeRequestHooks(req *resty.Request) error {
+func (c *AdminClient) executeBeforeRequestHooks(req *resty.Request) error {
 	for _, hook := range c.beforeRequest {
 		if err := hook(req); err != nil {
 			return err
@@ -153,7 +166,7 @@ func (c *Client) executeBeforeRequestHooks(req *resty.Request) error {
 }
 
 // executeAfterResponseHooks runs all after-response middleware hooks
-func (c *Client) executeAfterResponseHooks(resp *resty.Response) error {
+func (c *AdminClient) executeAfterResponseHooks(resp *resty.Response) error {
 	for _, hook := range c.afterResponse {
 		if err := hook(resp); err != nil {
 			return err
@@ -163,7 +176,7 @@ func (c *Client) executeAfterResponseHooks(resp *resty.Response) error {
 }
 
 // log writes a log message using structured logger if available, otherwise falls back to stderr
-func (c *Client) log(level, message string, fields map[string]interface{}) {
+func (c *AdminClient) log(level, message string, fields map[string]interface{}) {
 	if c.structuredLogger != nil {
 		c.structuredLogger(level, message, fields)
 	} else if c.config.Verbose {
@@ -193,7 +206,7 @@ func truncateString(s string, maxLength int) string {
 }
 
 // setAdminAuth sets authentication for admin API requests (PAT or JWT)
-func (c *Client) setAdminAuth(req *resty.Request) {
+func (c *AdminClient) setAdminAuth(req *resty.Request) {
 	// Priority: PAT token > JWT cookie
 	if c.config.PersonalAccessToken != "" {
 		// Personal Access Token authentication - Uses Basic Auth with username:token
@@ -206,43 +219,22 @@ func (c *Client) setAdminAuth(req *resty.Request) {
 	}
 }
 
-// setClientAuth sets authentication for client API requests (client-id/secret)
-// Returns error if client credentials are not configured
-func (c *Client) setClientAuth(req *resty.Request) error {
-	if c.config.ClientID == "" || c.config.ClientSecret == "" {
-		return fmt.Errorf("client credentials required (client-id and client-secret)")
-	}
-	req.SetHeader("Izanami-Client-Id", c.config.ClientID)
-	req.SetHeader("Izanami-Client-Secret", c.config.ClientSecret)
-	return nil
-}
-
-// enableSecureDebugMode enables verbose logging with sensitive data redaction
-func enableSecureDebugMode(httpClient *resty.Client, izClient *Client) {
-	// Sensitive headers that should be redacted in both requests and responses
-	sensitiveHeaders := map[string]bool{
-		"cookie":                true,
-		"set-cookie":            true,
-		"authorization":         true,
-		"izanami-client-secret": true,
-		"izanami-client-id":     true,
-		"x-api-key":             true,
-		"authentication":        true,
-		"www-authenticate":      true,
-	}
+// enableAdminSecureDebugMode enables verbose logging with sensitive data redaction for AdminClient
+func enableAdminSecureDebugMode(httpClient *resty.Client, izClient *AdminClient) {
+	sensitiveHeaders := sensitiveHeadersMap()
 
 	// Log response details (after receiving)
 	// We log both request and response here because the request details
 	// are only fully available after the request is sent
 	httpClient.OnAfterResponse(func(c *resty.Client, resp *resty.Response) error {
-		logRequest(resp, sensitiveHeaders, izClient)
-		logResponse(resp, sensitiveHeaders, izClient)
+		logAdminRequest(resp, sensitiveHeaders, izClient)
+		logAdminResponse(resp, sensitiveHeaders, izClient)
 		return nil
 	})
 }
 
-// logRequest logs HTTP request details with sensitive data redaction
-func logRequest(resp *resty.Response, sensitiveHeaders map[string]bool, izClient *Client) {
+// logAdminRequest logs HTTP request details with sensitive data redaction for AdminClient
+func logAdminRequest(resp *resty.Response, sensitiveHeaders map[string]bool, izClient *AdminClient) {
 	req := resp.Request.RawRequest
 
 	// Use structured logging if available
@@ -283,8 +275,8 @@ func logRequest(resp *resty.Response, sensitiveHeaders map[string]bool, izClient
 	}
 }
 
-// logResponse logs HTTP response details with sensitive data redaction
-func logResponse(resp *resty.Response, sensitiveHeaders map[string]bool, izClient *Client) {
+// logAdminResponse logs HTTP response details with sensitive data redaction for AdminClient
+func logAdminResponse(resp *resty.Response, sensitiveHeaders map[string]bool, izClient *AdminClient) {
 	// Use structured logging if available
 	if izClient != nil && izClient.structuredLogger != nil {
 		fields := map[string]interface{}{
@@ -337,56 +329,6 @@ func sensitiveHeadersMap() map[string]bool {
 	}
 }
 
-// LogSSERequest logs SSE request details when verbose mode is enabled.
-// This is needed because SetDoNotParseResponse(true) bypasses OnAfterResponse hooks.
-func (c *Client) LogSSERequest(method, path string, queryParams map[string]string, headers map[string]string, body interface{}) {
-	if !c.config.Verbose {
-		return
-	}
-
-	sensitiveHeaders := sensitiveHeadersMap()
-
-	fmt.Fprintf(os.Stderr, "==============================================================================\n")
-	fmt.Fprintf(os.Stderr, "~~~ REQUEST (SSE) ~~~\n")
-
-	// Build URL with query params
-	url := path
-	if len(queryParams) > 0 {
-		params := make([]string, 0, len(queryParams))
-		for k, v := range queryParams {
-			params = append(params, k+"="+v)
-		}
-		url += "?" + strings.Join(params, "&")
-	}
-
-	fmt.Fprintf(os.Stderr, "%s  %s\n", method, url)
-	fmt.Fprintf(os.Stderr, "HOST   : %s\n", c.config.BaseURL)
-	fmt.Fprintf(os.Stderr, "HEADERS:\n")
-	for key, value := range headers {
-		keyLower := strings.ToLower(key)
-		if sensitiveHeaders[keyLower] {
-			fmt.Fprintf(os.Stderr, "\t%s: [REDACTED]\n", key)
-		} else {
-			fmt.Fprintf(os.Stderr, "\t%s: %s\n", key, value)
-		}
-	}
-	fmt.Fprintf(os.Stderr, "BODY   :\n")
-	logBody(os.Stderr, body)
-	fmt.Fprintf(os.Stderr, "------------------------------------------------------------------------------\n")
-}
-
-// LogSSEResponse logs SSE response status when verbose mode is enabled.
-func (c *Client) LogSSEResponse(statusCode int, status string) {
-	if !c.config.Verbose {
-		return
-	}
-
-	fmt.Fprintf(os.Stderr, "~~~ RESPONSE (SSE) ~~~\n")
-	fmt.Fprintf(os.Stderr, "STATUS       : %d %s\n", statusCode, status)
-	fmt.Fprintf(os.Stderr, "BODY         : [streaming...]\n")
-	fmt.Fprintf(os.Stderr, "==============================================================================\n")
-}
-
 // logBody safely logs a request body with truncation and type handling
 func logBody(w io.Writer, body interface{}) {
 	if body == nil {
@@ -413,7 +355,13 @@ func logBody(w io.Writer, body interface{}) {
 }
 
 // handleError parses error responses from the API and returns a structured APIError
-func (c *Client) handleError(resp *resty.Response) error {
+func (c *AdminClient) handleError(resp *resty.Response) error {
+	return parseAPIError(resp)
+}
+
+// parseAPIError parses error responses and returns a structured APIError.
+// This is shared between AdminClient and FeatureCheckClient.
+func parseAPIError(resp *resty.Response) error {
 	rawBody := string(resp.Body())
 
 	var errResp ErrorResponse
@@ -448,7 +396,7 @@ func buildPath(segments ...string) string {
 // ============================================================================
 
 // Login performs login with username and password, returning the JWT token
-func (c *Client) Login(ctx context.Context, username, password string) (string, error) {
+func (c *AdminClient) Login(ctx context.Context, username, password string) (string, error) {
 	resp, err := c.http.R().
 		SetContext(ctx).
 		SetBasicAuth(username, password).

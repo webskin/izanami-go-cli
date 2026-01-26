@@ -16,7 +16,7 @@ import (
 
 // Export exports tenant data
 // By default, exports all projects, keys, webhooks, and user rights
-func (c *Client) Export(ctx context.Context, tenant string) (string, error) {
+func (c *AdminClient) Export(ctx context.Context, tenant string) (string, error) {
 	path := apiAdminTenants + buildPath(tenant, "_export")
 
 	// Default export request: export everything
@@ -48,7 +48,7 @@ func (c *Client) Export(ctx context.Context, tenant string) (string, error) {
 
 // ImportV2 imports tenant data from a V2 export file (synchronous)
 // Returns messages on success, or messages+conflicts on conflict (HTTP 409)
-func (c *Client) ImportV2(ctx context.Context, tenant, filePath string, req ImportRequest) (*ImportV2Response, error) {
+func (c *AdminClient) ImportV2(ctx context.Context, tenant, filePath string, req ImportRequest) (*ImportV2Response, error) {
 	path := apiAdminTenants + buildPath(tenant, "_import")
 
 	httpReq := c.http.R().
@@ -89,7 +89,7 @@ func (c *Client) ImportV2(ctx context.Context, tenant, filePath string, req Impo
 
 // ImportV1 imports Izanami v1 data into v2 server (async migration)
 // Returns an import job ID that can be polled with GetImportStatus
-func (c *Client) ImportV1(ctx context.Context, tenant, filePath string, req ImportRequest) (*ImportV1Response, error) {
+func (c *AdminClient) ImportV1(ctx context.Context, tenant, filePath string, req ImportRequest) (*ImportV1Response, error) {
 	path := apiAdminTenants + buildPath(tenant, "_import")
 
 	httpReq := c.http.R().
@@ -138,7 +138,7 @@ func (c *Client) ImportV1(ctx context.Context, tenant, filePath string, req Impo
 }
 
 // GetImportStatus retrieves the status of an async V1 import operation
-func (c *Client) GetImportStatus(ctx context.Context, tenant, importID string) (*ImportV1Status, error) {
+func (c *AdminClient) GetImportStatus(ctx context.Context, tenant, importID string) (*ImportV1Status, error) {
 	path := apiAdminTenants + buildPath(tenant, "_import", importID)
 
 	var status ImportV1Status

@@ -25,13 +25,13 @@ type TempContext struct {
 	Project    string // Empty for global contexts
 	ParentPath string // Parent context path (e.g., "parent/child")
 	Protected  bool
-	client     *izanami.Client
+	client     *izanami.AdminClient
 	ctx        context.Context
 	created    bool
 }
 
 // NewTempContext creates a new temporary context helper with auto-generated unique name
-func NewTempContext(t *testing.T, client *izanami.Client, tenant string) *TempContext {
+func NewTempContext(t *testing.T, client *izanami.AdminClient, tenant string) *TempContext {
 	t.Helper()
 	name := fmt.Sprintf("testctx%d", time.Now().UnixNano())
 	return &TempContext{

@@ -130,18 +130,58 @@ Press Ctrl+C to stop watching.`,
 			}
 		}
 
-		// Apply ClientBaseURL to BaseURL for client operations if set
-		if cfg.ClientBaseURL != "" {
-			cfg.BaseURL = cfg.ClientBaseURL
-		}
-
-		client, err := izanami.NewClient(cfg)
-		if err != nil {
-			return err
-		}
-
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
+
+		// Check if we need admin client for name resolution
+		needsAdminClient := false
+		for _, f := range eventsFeatures {
+			if !IsUUID(f) {
+				needsAdminClient = true
+				break
+			}
+		}
+		if !needsAdminClient {
+			for _, p := range eventsProjects {
+				if !IsUUID(p) {
+					needsAdminClient = true
+					break
+				}
+			}
+		}
+		if !needsAdminClient {
+			for _, t := range eventsOneTagIn {
+				if !IsUUID(t) {
+					needsAdminClient = true
+					break
+				}
+			}
+		}
+		if !needsAdminClient {
+			for _, t := range eventsAllTagsIn {
+				if !IsUUID(t) {
+					needsAdminClient = true
+					break
+				}
+			}
+		}
+		if !needsAdminClient {
+			for _, t := range eventsNoTagIn {
+				if !IsUUID(t) {
+					needsAdminClient = true
+					break
+				}
+			}
+		}
+
+		var adminClient *izanami.AdminClient
+		if needsAdminClient {
+			var err error
+			adminClient, err = izanami.NewAdminClient(cfg)
+			if err != nil {
+				return fmt.Errorf("failed to create admin client for name resolution: %w", err)
+			}
+		}
 
 		// Handle Ctrl+C gracefully
 		sigCh := make(chan os.Signal, 1)
@@ -173,27 +213,33 @@ Press Ctrl+C to stop watching.`,
 		}
 
 		// Resolve project names to UUIDs if needed
-		resolvedProjects, err := resolveProjectsToUUIDs(ctx, client, cfg.Tenant, eventsProjects, cfg.Verbose, cmd)
+		resolvedProjects, err := resolveProjectsToUUIDs(ctx, adminClient, cfg.Tenant, eventsProjects, cfg.Verbose, cmd)
 		if err != nil {
 			return err
 		}
 
 		// Resolve feature names to UUIDs if needed (requires project from config)
-		resolvedFeatures, err := resolveFeaturesToUUIDs(ctx, client, cfg.Tenant, cfg.Project, eventsFeatures, cfg.Verbose, cmd)
+		resolvedFeatures, err := resolveFeaturesToUUIDs(ctx, adminClient, cfg.Tenant, cfg.Project, eventsFeatures, cfg.Verbose, cmd)
 		if err != nil {
 			return err
 		}
 
 		// Resolve tag names to UUIDs if needed
-		resolvedOneTagIn, err := resolveTagsToUUIDs(ctx, client, cfg.Tenant, eventsOneTagIn, cfg.Verbose, cmd)
+		resolvedOneTagIn, err := resolveTagsToUUIDs(ctx, adminClient, cfg.Tenant, eventsOneTagIn, cfg.Verbose, cmd)
 		if err != nil {
 			return err
 		}
-		resolvedAllTagsIn, err := resolveTagsToUUIDs(ctx, client, cfg.Tenant, eventsAllTagsIn, cfg.Verbose, cmd)
+		resolvedAllTagsIn, err := resolveTagsToUUIDs(ctx, adminClient, cfg.Tenant, eventsAllTagsIn, cfg.Verbose, cmd)
 		if err != nil {
 			return err
 		}
-		resolvedNoTagIn, err := resolveTagsToUUIDs(ctx, client, cfg.Tenant, eventsNoTagIn, cfg.Verbose, cmd)
+		resolvedNoTagIn, err := resolveTagsToUUIDs(ctx, adminClient, cfg.Tenant, eventsNoTagIn, cfg.Verbose, cmd)
+		if err != nil {
+			return err
+		}
+
+		// Create feature check client for event streaming (uses ClientBaseURL if set)
+		checkClient, err := izanami.NewFeatureCheckClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -214,13 +260,13 @@ Press Ctrl+C to stop watching.`,
 			Payload:           payload,
 		}
 
-		fmt.Fprintf(cmd.OutOrStderr(), "🔄 Connecting to Izanami event stream...\n")
+		fmt.Fprintf(cmd.OutOrStderr(), "Connecting to Izanami event stream...\n")
 		fmt.Fprintf(cmd.OutOrStderr(), "   Press Ctrl+C to stop\n\n")
 
 		startTime := time.Now()
 		eventCount := 0
 
-		err = client.WatchEvents(ctx, request, func(event izanami.Event) error {
+		err = checkClient.WatchEvents(ctx, request, func(event izanami.Event) error {
 			eventCount++
 
 			if eventsRaw {
@@ -265,7 +311,7 @@ Press Ctrl+C to stop watching.`,
 
 		// Show statistics when stopping
 		duration := time.Since(startTime)
-		fmt.Fprintf(cmd.OutOrStderr(), "\n📊 Statistics:\n")
+		fmt.Fprintf(cmd.OutOrStderr(), "\nStatistics:\n")
 		fmt.Fprintf(cmd.OutOrStderr(), "   Events received: %d\n", eventCount)
 		fmt.Fprintf(cmd.OutOrStderr(), "   Duration: %s\n", duration.Round(time.Second))
 

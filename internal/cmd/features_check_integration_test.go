@@ -652,15 +652,15 @@ func TestIntegration_APICheckFeature(t *testing.T) {
 	clientID := tempAPIKey.ClientID
 	clientSecret := tempAPIKey.ClientSecret
 
-	// Create a client with client credentials
+	// Create a feature check client with client credentials
 	clientConfig := &izanami.Config{
 		BaseURL:      env.BaseURL,
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
 		Timeout:      30,
 	}
-	checkClient, err := izanami.NewClient(clientConfig)
-	require.NoError(t, err, "Should create client with credentials")
+	checkClient, err := izanami.NewFeatureCheckClient(clientConfig)
+	require.NoError(t, err, "Should create feature check client with credentials")
 
 	// Check the feature
 	result, err := izanami.CheckFeature(checkClient, context.Background(), tempFeature.ID, "test-user", "", "", izanami.ParseFeatureCheckResult)
@@ -694,15 +694,15 @@ func TestIntegration_APICheckFeatures(t *testing.T) {
 	clientID := tempAPIKey.ClientID
 	clientSecret := tempAPIKey.ClientSecret
 
-	// Create a client with client credentials
+	// Create a feature check client with client credentials
 	clientConfig := &izanami.Config{
 		BaseURL:      env.BaseURL,
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
 		Timeout:      30,
 	}
-	checkClient, err := izanami.NewClient(clientConfig)
-	require.NoError(t, err, "Should create client with credentials")
+	checkClient, err := izanami.NewFeatureCheckClient(clientConfig)
+	require.NoError(t, err, "Should create feature check client with credentials")
 
 	// Check the features
 	request := izanami.CheckFeaturesRequest{
@@ -759,15 +759,15 @@ func TestIntegration_APICheckFeaturesByProject(t *testing.T) {
 	clientID := tempAPIKey.ClientID
 	clientSecret := tempAPIKey.ClientSecret
 
-	// Create a client with client credentials
+	// Create a feature check client with client credentials
 	clientConfig := &izanami.Config{
 		BaseURL:      env.BaseURL,
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
 		Timeout:      30,
 	}
-	checkClient, err := izanami.NewClient(clientConfig)
-	require.NoError(t, err, "Should create client with credentials")
+	checkClient, err := izanami.NewFeatureCheckClient(clientConfig)
+	require.NoError(t, err, "Should create feature check client with credentials")
 
 	// Get project ID by fetching the project
 	project, err := izanami.GetProject(client, context.Background(), tempTenant.Name, tempProject.Name, izanami.ParseProject)

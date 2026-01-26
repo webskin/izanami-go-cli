@@ -76,7 +76,7 @@ func marshalJSON(data interface{}) ([]byte, error) {
 // resolveTagsToUUIDs converts tag names to UUIDs.
 // If a tag value is already a valid UUID, it's used as-is.
 // Otherwise, it's treated as a tag name and looked up via the admin API.
-func resolveTagsToUUIDs(ctx context.Context, client *izanami.Client, tenant string, tags []string, verbose bool, cmd *cobra.Command) ([]string, error) {
+func resolveTagsToUUIDs(ctx context.Context, client *izanami.AdminClient, tenant string, tags []string, verbose bool, cmd *cobra.Command) ([]string, error) {
 	if len(tags) == 0 {
 		return tags, nil
 	}
@@ -111,7 +111,7 @@ func resolveTagsToUUIDs(ctx context.Context, client *izanami.Client, tenant stri
 // resolveProjectsToUUIDs converts project names to UUIDs.
 // If a project value is already a valid UUID, it's used as-is.
 // Otherwise, it's treated as a project name and looked up via the admin API.
-func resolveProjectsToUUIDs(ctx context.Context, client *izanami.Client, tenant string, projects []string, verbose bool, cmd *cobra.Command) ([]string, error) {
+func resolveProjectsToUUIDs(ctx context.Context, client *izanami.AdminClient, tenant string, projects []string, verbose bool, cmd *cobra.Command) ([]string, error) {
 	if len(projects) == 0 {
 		return projects, nil
 	}
@@ -182,7 +182,7 @@ func findFeatureByName(features []izanami.Feature, name, project, tenant string)
 // Returns (uuid, resolvedName, error) - resolvedName is set when name resolution occurred.
 // If the input is already a UUID, returns (uuid, "", nil).
 // If the input is a name, requires tenant to be set. Project is optional for disambiguation.
-func resolveFeatureToUUID(ctx context.Context, client *izanami.Client, cfg *izanami.Config, featureIDOrName string, cmd *cobra.Command) (string, string, error) {
+func resolveFeatureToUUID(ctx context.Context, client *izanami.AdminClient, cfg *izanami.Config, featureIDOrName string, cmd *cobra.Command) (string, string, error) {
 	// If it's already a UUID, return it directly
 	if IsUUID(featureIDOrName) {
 		if cfg.Verbose {
@@ -222,7 +222,7 @@ func resolveFeatureToUUID(ctx context.Context, client *izanami.Client, cfg *izan
 // If a feature value is already a valid UUID, it's used as-is.
 // Otherwise, it's treated as a feature name and looked up by listing features.
 // Requires tenant to be defined for name resolution. Project is optional for disambiguation.
-func resolveFeaturesToUUIDs(ctx context.Context, client *izanami.Client, tenant, project string, features []string, verbose bool, cmd *cobra.Command) ([]string, error) {
+func resolveFeaturesToUUIDs(ctx context.Context, client *izanami.AdminClient, tenant, project string, features []string, verbose bool, cmd *cobra.Command) ([]string, error) {
 	if len(features) == 0 {
 		return features, nil
 	}

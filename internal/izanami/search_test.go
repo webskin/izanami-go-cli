@@ -53,7 +53,7 @@ func TestClient_Search(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -97,7 +97,7 @@ func TestClient_Search_Global(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()

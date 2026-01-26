@@ -96,7 +96,7 @@ var keysListCmd = &cobra.Command{
 			return fmt.Errorf(errors.MsgTenantRequired)
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -152,7 +152,7 @@ var keysGetCmd = &cobra.Command{
 			return fmt.Errorf(errors.MsgTenantRequired)
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -187,7 +187,7 @@ var keysCreateCmd = &cobra.Command{
 			return fmt.Errorf(errors.MsgTenantRequired)
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -256,7 +256,7 @@ var keysUpdateCmd = &cobra.Command{
 			return fmt.Errorf("no fields to update (use --name, --description, --projects, --enabled, or --admin)")
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -324,7 +324,7 @@ var keysDeleteCmd = &cobra.Command{
 			}
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -362,7 +362,7 @@ Examples:
 			return fmt.Errorf(errors.MsgTenantRequired)
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}

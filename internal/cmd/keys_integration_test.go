@@ -29,13 +29,13 @@ type TempAPIKey struct {
 	Projects     []string
 	Enabled      bool
 	Admin        bool
-	client       *izanami.Client
+	client       *izanami.AdminClient
 	ctx          context.Context
 	created      bool
 }
 
 // NewTempAPIKey creates a new temporary API key helper with auto-generated unique name
-func NewTempAPIKey(t *testing.T, client *izanami.Client, tenant string) *TempAPIKey {
+func NewTempAPIKey(t *testing.T, client *izanami.AdminClient, tenant string) *TempAPIKey {
 	t.Helper()
 	name := fmt.Sprintf("testkey%d", time.Now().UnixNano())
 	return &TempAPIKey{

@@ -29,13 +29,13 @@ type TempWebhook struct {
 	Global      bool
 	Features    []string
 	Projects    []string
-	client      *izanami.Client
+	client      *izanami.AdminClient
 	ctx         context.Context
 	created     bool
 }
 
 // NewTempWebhook creates a new temporary webhook helper with auto-generated unique name
-func NewTempWebhook(t *testing.T, client *izanami.Client, tenant string) *TempWebhook {
+func NewTempWebhook(t *testing.T, client *izanami.AdminClient, tenant string) *TempWebhook {
 	t.Helper()
 	name := fmt.Sprintf("testwebhook%d", time.Now().UnixNano())
 	return &TempWebhook{

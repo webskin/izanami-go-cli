@@ -23,13 +23,13 @@ type TempTag struct {
 	Name        string
 	Description string
 	Tenant      string
-	client      *izanami.Client
+	client      *izanami.AdminClient
 	ctx         context.Context
 	created     bool
 }
 
 // NewTempTag creates a new temporary tag helper with auto-generated unique name
-func NewTempTag(t *testing.T, client *izanami.Client, tenant string) *TempTag {
+func NewTempTag(t *testing.T, client *izanami.AdminClient, tenant string) *TempTag {
 	t.Helper()
 	name := fmt.Sprintf("testtag%d", time.Now().UnixNano())
 	return &TempTag{

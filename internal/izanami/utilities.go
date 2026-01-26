@@ -14,7 +14,7 @@ import (
 
 // Health checks the health status of Izanami and applies the given mapper.
 // Use Identity mapper for raw JSON output, or ParseHealthStatus for typed struct.
-func Health[T any](c *Client, ctx context.Context, mapper Mapper[T]) (T, error) {
+func Health[T any](c *AdminClient, ctx context.Context, mapper Mapper[T]) (T, error) {
 	var zero T
 	raw, err := c.healthRaw(ctx)
 	if err != nil {
@@ -24,7 +24,7 @@ func Health[T any](c *Client, ctx context.Context, mapper Mapper[T]) (T, error) 
 }
 
 // healthRaw fetches health status and returns raw JSON bytes
-func (c *Client) healthRaw(ctx context.Context) ([]byte, error) {
+func (c *AdminClient) healthRaw(ctx context.Context) ([]byte, error) {
 	resp, err := c.http.R().
 		SetContext(ctx).
 		Get("/api/_health")

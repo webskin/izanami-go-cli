@@ -66,7 +66,7 @@ The list endpoint supports filtering by:
 			return err
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -138,7 +138,7 @@ Examples:
 			return err
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -205,7 +205,7 @@ Examples:
 			return fmt.Errorf("project is required (use --project flag or IZ_PROJECT)")
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -298,7 +298,7 @@ Examples:
 			return fmt.Errorf("feature data is required (use --data flag)")
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -410,7 +410,7 @@ Examples:
 			return err
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -498,7 +498,7 @@ Examples:
 			return fmt.Errorf("invalid JSON patch data: %w", err)
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -558,7 +558,7 @@ Examples:
 			date = nowISO8601()
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -646,7 +646,7 @@ Examples:
 			return fmt.Errorf("invalid JSON feature definition: %w", err)
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -727,7 +727,7 @@ Examples:
 			date = nowISO8601()
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}

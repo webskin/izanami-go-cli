@@ -59,7 +59,7 @@ var webhooksListCmd = &cobra.Command{
 			return fmt.Errorf(errors.MsgTenantRequired)
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -118,7 +118,7 @@ Examples:
 			return fmt.Errorf(errors.MsgTenantRequired)
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -186,7 +186,7 @@ Examples:
 			return fmt.Errorf(errors.MsgTenantRequired)
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -293,7 +293,7 @@ Examples:
 			return fmt.Errorf(errors.MsgTenantRequired)
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -443,7 +443,7 @@ Examples:
 			return fmt.Errorf(errors.MsgTenantRequired)
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -513,7 +513,7 @@ Examples:
 			return fmt.Errorf(errors.MsgTenantRequired)
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}

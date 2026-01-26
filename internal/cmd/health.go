@@ -35,7 +35,7 @@ Exit codes:
 			Verbose: cfg.Verbose,
 		}
 
-		client, err := izanami.NewClientNoAuth(tempCfg)
+		client, err := izanami.NewAdminClientNoAuth(tempCfg)
 		if err != nil {
 			return err
 		}

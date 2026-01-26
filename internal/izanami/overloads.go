@@ -16,7 +16,7 @@ import (
 
 // SetOverload creates or updates a feature overload in a context
 // PUT /api/admin/tenants/{tenant}/projects/{project}/contexts/{context}/features/{feature}
-func (c *Client) SetOverload(ctx context.Context, tenant, project, contextPath, featureName string, strategy interface{}, preserveProtected bool) error {
+func (c *AdminClient) SetOverload(ctx context.Context, tenant, project, contextPath, featureName string, strategy interface{}, preserveProtected bool) error {
 	// Build path: contexts path can contain slashes, feature name needs escaping
 	path := apiAdminTenants + buildPath(tenant, "projects", project, "contexts") + "/" + contextPath + "/features/" + url.PathEscape(featureName)
 
@@ -45,7 +45,7 @@ func (c *Client) SetOverload(ctx context.Context, tenant, project, contextPath, 
 
 // DeleteOverload removes a feature overload from a context
 // DELETE /api/admin/tenants/{tenant}/projects/{project}/contexts/{context}/features/{feature}
-func (c *Client) DeleteOverload(ctx context.Context, tenant, project, contextPath, featureName string, preserveProtected bool) error {
+func (c *AdminClient) DeleteOverload(ctx context.Context, tenant, project, contextPath, featureName string, preserveProtected bool) error {
 	// Build path: contexts path can contain slashes, feature name needs escaping
 	path := apiAdminTenants + buildPath(tenant, "projects", project, "contexts") + "/" + contextPath + "/features/" + url.PathEscape(featureName)
 
@@ -77,7 +77,7 @@ func (c *Client) DeleteOverload(ctx context.Context, tenant, project, contextPat
 //   - project: the project name (required to fetch project contexts)
 //   - featureName: the feature name to look for in overloads
 //   - contextPath: the context path (e.g., "PROD", "PROD/mobile")
-func GetOverload[T any](c *Client, ctx context.Context, tenant, project, featureName, contextPath string, mapper Mapper[T]) (T, error) {
+func GetOverload[T any](c *AdminClient, ctx context.Context, tenant, project, featureName, contextPath string, mapper Mapper[T]) (T, error) {
 	var zero T
 	raw, err := c.getOverloadRaw(ctx, tenant, project, featureName, contextPath)
 	if err != nil {
@@ -87,7 +87,7 @@ func GetOverload[T any](c *Client, ctx context.Context, tenant, project, feature
 }
 
 // getOverloadRaw fetches the context tree and extracts the overload for a specific context as raw JSON bytes
-func (c *Client) getOverloadRaw(ctx context.Context, tenant, project, featureName, contextPath string) ([]byte, error) {
+func (c *AdminClient) getOverloadRaw(ctx context.Context, tenant, project, featureName, contextPath string) ([]byte, error) {
 	// Fetch the context tree for the project
 	contextsRaw, err := c.listContextsRaw(ctx, tenant, project, true) // all=true to get nested contexts
 	if err != nil {

@@ -32,7 +32,7 @@ var adminTagsListCmd = &cobra.Command{
 			return err
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -68,7 +68,7 @@ var adminTagsGetCmd = &cobra.Command{
 			return err
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -104,7 +104,7 @@ var adminTagsCreateCmd = &cobra.Command{
 			return err
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -152,7 +152,7 @@ var adminTagsDeleteCmd = &cobra.Command{
 			}
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}

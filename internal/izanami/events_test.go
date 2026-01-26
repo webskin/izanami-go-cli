@@ -49,7 +49,7 @@ data: {"name":"feature-2","active":false}
 		Timeout:      30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewFeatureCheckClient(config)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -109,7 +109,7 @@ data: {"result":true}
 		Timeout:      30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewFeatureCheckClient(config)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)

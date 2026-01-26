@@ -42,7 +42,7 @@ Examples:
 			return err
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -96,7 +96,7 @@ Examples:
 			return err
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -113,7 +113,7 @@ Examples:
 	},
 }
 
-func runImportV2(cmd *cobra.Command, client *izanami.Client, ctx context.Context, filePath string) error {
+func runImportV2(cmd *cobra.Command, client *izanami.AdminClient, ctx context.Context, filePath string) error {
 	req := izanami.ImportRequest{
 		Conflict: importConflict,
 	}
@@ -174,7 +174,7 @@ func runImportV2(cmd *cobra.Command, client *izanami.Client, ctx context.Context
 	return nil
 }
 
-func runImportV1(cmd *cobra.Command, client *izanami.Client, ctx context.Context, filePath string) error {
+func runImportV1(cmd *cobra.Command, client *izanami.AdminClient, ctx context.Context, filePath string) error {
 	if importTimezone == "" {
 		return fmt.Errorf("--timezone is required for v1 imports")
 	}
@@ -223,7 +223,7 @@ Examples:
 			return err
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}

@@ -14,7 +14,7 @@ import (
 
 // ListAPIKeys lists all API keys for a tenant and applies the given mapper.
 // Use Identity mapper for raw JSON output, or ParseAPIKeys for typed structs.
-func ListAPIKeys[T any](c *Client, ctx context.Context, tenant string, mapper Mapper[T]) (T, error) {
+func ListAPIKeys[T any](c *AdminClient, ctx context.Context, tenant string, mapper Mapper[T]) (T, error) {
 	var zero T
 	raw, err := c.listAPIKeysRaw(ctx, tenant)
 	if err != nil {
@@ -24,7 +24,7 @@ func ListAPIKeys[T any](c *Client, ctx context.Context, tenant string, mapper Ma
 }
 
 // listAPIKeysRaw fetches API keys and returns raw JSON bytes
-func (c *Client) listAPIKeysRaw(ctx context.Context, tenant string) ([]byte, error) {
+func (c *AdminClient) listAPIKeysRaw(ctx context.Context, tenant string) ([]byte, error) {
 	path := apiAdminTenants + buildPath(tenant, "keys")
 
 	req := c.http.R().SetContext(ctx)
@@ -46,7 +46,7 @@ func (c *Client) listAPIKeysRaw(ctx context.Context, tenant string) ([]byte, err
 // Note: The Izanami API doesn't have a dedicated endpoint for getting a single key,
 // so this method lists all keys and filters by name.
 // Because of client-side filtering, this method returns a parsed key rather than raw JSON.
-func (c *Client) GetAPIKeyByName(ctx context.Context, tenant, name string) (*APIKey, error) {
+func (c *AdminClient) GetAPIKeyByName(ctx context.Context, tenant, name string) (*APIKey, error) {
 	keys, err := ListAPIKeys(c, ctx, tenant, ParseAPIKeys)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", errmsg.MsgFailedToGetAPIKey, err)
@@ -68,7 +68,7 @@ func (c *Client) GetAPIKeyByName(ctx context.Context, tenant, name string) (*API
 
 // CreateAPIKey creates a new API key
 // The key parameter accepts either an *APIKey or any compatible struct
-func (c *Client) CreateAPIKey(ctx context.Context, tenant string, key interface{}) (*APIKey, error) {
+func (c *AdminClient) CreateAPIKey(ctx context.Context, tenant string, key interface{}) (*APIKey, error) {
 	path := apiAdminTenants + buildPath(tenant, "keys")
 
 	var result APIKey
@@ -93,7 +93,7 @@ func (c *Client) CreateAPIKey(ctx context.Context, tenant string, key interface{
 
 // UpdateAPIKey updates an existing API key by name
 // The key parameter accepts either an *APIKey or any compatible struct
-func (c *Client) UpdateAPIKey(ctx context.Context, tenant, name string, key interface{}) error {
+func (c *AdminClient) UpdateAPIKey(ctx context.Context, tenant, name string, key interface{}) error {
 	path := apiAdminTenants + buildPath(tenant, "keys", name)
 
 	req := c.http.R().
@@ -115,7 +115,7 @@ func (c *Client) UpdateAPIKey(ctx context.Context, tenant, name string, key inte
 }
 
 // DeleteAPIKey deletes an API key by name
-func (c *Client) DeleteAPIKey(ctx context.Context, tenant, name string) error {
+func (c *AdminClient) DeleteAPIKey(ctx context.Context, tenant, name string) error {
 	path := apiAdminTenants + buildPath(tenant, "keys", name)
 
 	req := c.http.R().SetContext(ctx)
@@ -135,7 +135,7 @@ func (c *Client) DeleteAPIKey(ctx context.Context, tenant, name string) error {
 
 // ListAPIKeyUsers lists users with rights on an API key and applies the given mapper.
 // Use Identity mapper for raw JSON output, or ParseKeyScopedUsers for typed structs.
-func ListAPIKeyUsers[T any](c *Client, ctx context.Context, tenant, clientID string, mapper Mapper[T]) (T, error) {
+func ListAPIKeyUsers[T any](c *AdminClient, ctx context.Context, tenant, clientID string, mapper Mapper[T]) (T, error) {
 	var zero T
 	raw, err := c.listAPIKeyUsersRaw(ctx, tenant, clientID)
 	if err != nil {
@@ -145,7 +145,7 @@ func ListAPIKeyUsers[T any](c *Client, ctx context.Context, tenant, clientID str
 }
 
 // listAPIKeyUsersRaw fetches users with rights on an API key and returns raw JSON bytes
-func (c *Client) listAPIKeyUsersRaw(ctx context.Context, tenant, clientID string) ([]byte, error) {
+func (c *AdminClient) listAPIKeyUsersRaw(ctx context.Context, tenant, clientID string) ([]byte, error) {
 	path := apiAdminTenants + buildPath(tenant, "keys", clientID, "users")
 
 	req := c.http.R().SetContext(ctx)

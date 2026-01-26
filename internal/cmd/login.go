@@ -208,7 +208,7 @@ func performLogin(baseURL, username, password string) (string, error) {
 		Timeout: 30,
 	}
 
-	client, err := izanami.NewClientNoAuth(config)
+	client, err := izanami.NewAdminClientNoAuth(config)
 	if err != nil {
 		return "", err
 	}

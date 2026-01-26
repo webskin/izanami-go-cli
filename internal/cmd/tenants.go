@@ -40,7 +40,7 @@ var adminTenantsListCmd = &cobra.Command{
 	Short:       "List all tenants",
 	Annotations: map[string]string{"route": "GET /api/admin/tenants"},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -81,7 +81,7 @@ var adminTenantsGetCmd = &cobra.Command{
 	Annotations: map[string]string{"route": "GET /api/admin/tenants/:name"},
 	Args:        cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -113,7 +113,7 @@ var adminTenantsCreateCmd = &cobra.Command{
 	Annotations: map[string]string{"route": "POST /api/admin/tenants"},
 	Args:        cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -164,7 +164,7 @@ Examples:
   iz admin tenants update my-tenant --data @tenant.json --description "Override desc"`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -228,7 +228,7 @@ var adminTenantsDeleteCmd = &cobra.Command{
 			}
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -270,7 +270,7 @@ Examples:
 	RunE: func(cmd *cobra.Command, args []string) error {
 		tenantName := args[0]
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}

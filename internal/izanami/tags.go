@@ -14,7 +14,7 @@ import (
 
 // ListTags lists all tags in a tenant and applies the given mapper.
 // Use Identity mapper for raw JSON output, or ParseTags for typed structs.
-func ListTags[T any](c *Client, ctx context.Context, tenant string, mapper Mapper[T]) (T, error) {
+func ListTags[T any](c *AdminClient, ctx context.Context, tenant string, mapper Mapper[T]) (T, error) {
 	var zero T
 	raw, err := c.listTagsRaw(ctx, tenant)
 	if err != nil {
@@ -24,7 +24,7 @@ func ListTags[T any](c *Client, ctx context.Context, tenant string, mapper Mappe
 }
 
 // listTagsRaw fetches tags and returns raw JSON bytes
-func (c *Client) listTagsRaw(ctx context.Context, tenant string) ([]byte, error) {
+func (c *AdminClient) listTagsRaw(ctx context.Context, tenant string) ([]byte, error) {
 	path := apiAdminTenants + buildPath(tenant, "tags")
 
 	req := c.http.R().SetContext(ctx)
@@ -44,7 +44,7 @@ func (c *Client) listTagsRaw(ctx context.Context, tenant string) ([]byte, error)
 
 // GetTag retrieves a specific tag by name and applies the given mapper.
 // Use Identity mapper for raw JSON output, or ParseTag for typed struct.
-func GetTag[T any](c *Client, ctx context.Context, tenant, tagName string, mapper Mapper[T]) (T, error) {
+func GetTag[T any](c *AdminClient, ctx context.Context, tenant, tagName string, mapper Mapper[T]) (T, error) {
 	var zero T
 	raw, err := c.getTagRaw(ctx, tenant, tagName)
 	if err != nil {
@@ -54,7 +54,7 @@ func GetTag[T any](c *Client, ctx context.Context, tenant, tagName string, mappe
 }
 
 // getTagRaw fetches a tag and returns raw JSON bytes
-func (c *Client) getTagRaw(ctx context.Context, tenant, tagName string) ([]byte, error) {
+func (c *AdminClient) getTagRaw(ctx context.Context, tenant, tagName string) ([]byte, error) {
 	path := apiAdminTenants + buildPath(tenant, "tags", tagName)
 
 	req := c.http.R().SetContext(ctx)
@@ -74,7 +74,7 @@ func (c *Client) getTagRaw(ctx context.Context, tenant, tagName string) ([]byte,
 
 // CreateTag creates a new tag
 // The tag parameter accepts either a *Tag or any compatible struct
-func (c *Client) CreateTag(ctx context.Context, tenant string, tag interface{}) error {
+func (c *AdminClient) CreateTag(ctx context.Context, tenant string, tag interface{}) error {
 	path := apiAdminTenants + buildPath(tenant, "tags")
 
 	req := c.http.R().
@@ -96,7 +96,7 @@ func (c *Client) CreateTag(ctx context.Context, tenant string, tag interface{}) 
 }
 
 // DeleteTag deletes a tag
-func (c *Client) DeleteTag(ctx context.Context, tenant, tagName string) error {
+func (c *AdminClient) DeleteTag(ctx context.Context, tenant, tagName string) error {
 	path := apiAdminTenants + buildPath(tenant, "tags", tagName)
 
 	req := c.http.R().SetContext(ctx)

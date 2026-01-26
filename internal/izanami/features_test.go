@@ -48,7 +48,7 @@ func TestClient_ListFeatures(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -85,7 +85,7 @@ func TestClient_GetFeature(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -137,7 +137,7 @@ func TestClient_CreateFeature(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -177,7 +177,7 @@ func TestClient_UpdateFeature(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -202,7 +202,7 @@ func TestClient_DeleteFeature(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -240,7 +240,7 @@ func TestClient_CheckFeature(t *testing.T) {
 		Timeout:      30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewFeatureCheckClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -282,7 +282,7 @@ func TestClient_CheckFeatures(t *testing.T) {
 		Timeout:      30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewFeatureCheckClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -330,7 +330,7 @@ func TestClient_PatchFeatures(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -368,7 +368,7 @@ func TestClient_TestFeature(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -404,7 +404,7 @@ func TestClient_TestFeatureWithContext(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -464,7 +464,7 @@ func TestClient_TestFeatureDefinition(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -512,7 +512,7 @@ func TestClient_TestFeaturesBulk(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()

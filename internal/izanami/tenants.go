@@ -14,7 +14,7 @@ import (
 
 // ListTenants lists all tenants and applies the given mapper to the response.
 // Use Identity mapper for raw JSON output, or ParseTenants for typed structs.
-func ListTenants[T any](c *Client, ctx context.Context, right *RightLevel, mapper Mapper[T]) (T, error) {
+func ListTenants[T any](c *AdminClient, ctx context.Context, right *RightLevel, mapper Mapper[T]) (T, error) {
 	var zero T
 	raw, err := c.listTenantsRaw(ctx, right)
 	if err != nil {
@@ -24,7 +24,7 @@ func ListTenants[T any](c *Client, ctx context.Context, right *RightLevel, mappe
 }
 
 // listTenantsRaw fetches tenants and returns raw JSON bytes
-func (c *Client) listTenantsRaw(ctx context.Context, right *RightLevel) ([]byte, error) {
+func (c *AdminClient) listTenantsRaw(ctx context.Context, right *RightLevel) ([]byte, error) {
 	req := c.http.R().SetContext(ctx)
 	c.setAdminAuth(req)
 
@@ -48,7 +48,7 @@ func (c *Client) listTenantsRaw(ctx context.Context, right *RightLevel) ([]byte,
 
 // GetTenant retrieves a specific tenant and applies the given mapper to the response.
 // Use Identity mapper for raw JSON output, or ParseTenant for typed struct.
-func GetTenant[T any](c *Client, ctx context.Context, name string, mapper Mapper[T]) (T, error) {
+func GetTenant[T any](c *AdminClient, ctx context.Context, name string, mapper Mapper[T]) (T, error) {
 	var zero T
 	raw, err := c.getTenantRaw(ctx, name)
 	if err != nil {
@@ -58,7 +58,7 @@ func GetTenant[T any](c *Client, ctx context.Context, name string, mapper Mapper
 }
 
 // getTenantRaw fetches a tenant and returns raw JSON bytes
-func (c *Client) getTenantRaw(ctx context.Context, name string) ([]byte, error) {
+func (c *AdminClient) getTenantRaw(ctx context.Context, name string) ([]byte, error) {
 	path := apiAdminTenants + buildPath(name)
 
 	req := c.http.R().SetContext(ctx)
@@ -78,7 +78,7 @@ func (c *Client) getTenantRaw(ctx context.Context, name string) ([]byte, error) 
 
 // CreateTenant creates a new tenant
 // The tenant parameter accepts either a *Tenant or any compatible struct
-func (c *Client) CreateTenant(ctx context.Context, tenant interface{}) error {
+func (c *AdminClient) CreateTenant(ctx context.Context, tenant interface{}) error {
 	req := c.http.R().
 		SetContext(ctx).
 		SetHeader("Content-Type", "application/json").
@@ -99,7 +99,7 @@ func (c *Client) CreateTenant(ctx context.Context, tenant interface{}) error {
 
 // UpdateTenant updates an existing tenant
 // The tenant parameter accepts either a *Tenant or any compatible struct
-func (c *Client) UpdateTenant(ctx context.Context, name string, tenant interface{}) error {
+func (c *AdminClient) UpdateTenant(ctx context.Context, name string, tenant interface{}) error {
 	path := apiAdminTenants + buildPath(name)
 
 	req := c.http.R().
@@ -121,7 +121,7 @@ func (c *Client) UpdateTenant(ctx context.Context, name string, tenant interface
 }
 
 // DeleteTenant deletes a tenant
-func (c *Client) DeleteTenant(ctx context.Context, name string) error {
+func (c *AdminClient) DeleteTenant(ctx context.Context, name string) error {
 	path := apiAdminTenants + buildPath(name)
 
 	req := c.http.R().SetContext(ctx)
@@ -141,7 +141,7 @@ func (c *Client) DeleteTenant(ctx context.Context, name string) error {
 
 // ListTenantLogs retrieves event logs for a tenant and applies the given mapper.
 // Use Identity mapper for raw JSON output, or ParseAuditEvents for typed structs.
-func ListTenantLogs[T any](c *Client, ctx context.Context, tenant string, opts *LogsRequest, mapper Mapper[T]) (T, error) {
+func ListTenantLogs[T any](c *AdminClient, ctx context.Context, tenant string, opts *LogsRequest, mapper Mapper[T]) (T, error) {
 	var zero T
 	raw, err := c.listTenantLogsRaw(ctx, tenant, opts)
 	if err != nil {
@@ -151,7 +151,7 @@ func ListTenantLogs[T any](c *Client, ctx context.Context, tenant string, opts *
 }
 
 // listTenantLogsRaw fetches tenant logs and returns raw JSON bytes
-func (c *Client) listTenantLogsRaw(ctx context.Context, tenant string, opts *LogsRequest) ([]byte, error) {
+func (c *AdminClient) listTenantLogsRaw(ctx context.Context, tenant string, opts *LogsRequest) ([]byte, error) {
 	path := apiAdminTenants + buildPath(tenant, "logs")
 
 	req := c.http.R().SetContext(ctx)

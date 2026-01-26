@@ -17,7 +17,7 @@ func mockServer(t *testing.T, handler http.HandlerFunc) *httptest.Server {
 	return httptest.NewServer(handler)
 }
 
-func TestNewClient(t *testing.T) {
+func TestNewAdminClient(t *testing.T) {
 	tests := []struct {
 		name    string
 		config  *Config
@@ -62,7 +62,7 @@ func TestNewClient(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			client, err := NewClient(tt.config)
+			client, err := NewAdminClient(tt.config)
 			if tt.wantErr {
 				assert.Error(t, err)
 				assert.Nil(t, client)
@@ -91,7 +91,7 @@ func TestClient_ErrorHandling(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -129,7 +129,7 @@ func TestClient_Login(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -227,7 +227,7 @@ func TestClient_Hooks(t *testing.T) {
 		Timeout:  30,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	// Test before request hook registration
@@ -266,7 +266,7 @@ func TestClient_StructuredLogger(t *testing.T) {
 		Verbose:  true,
 	}
 
-	client, err := NewClient(config)
+	client, err := NewAdminClient(config)
 	require.NoError(t, err)
 
 	logCalled := false

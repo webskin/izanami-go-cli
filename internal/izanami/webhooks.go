@@ -14,7 +14,7 @@ import (
 
 // ListWebhooks lists all webhooks in a tenant and applies the given mapper.
 // Use Identity mapper for raw JSON output, or ParseWebhooks for typed structs.
-func ListWebhooks[T any](c *Client, ctx context.Context, tenant string, mapper Mapper[T]) (T, error) {
+func ListWebhooks[T any](c *AdminClient, ctx context.Context, tenant string, mapper Mapper[T]) (T, error) {
 	var zero T
 	raw, err := c.listWebhooksRaw(ctx, tenant)
 	if err != nil {
@@ -24,7 +24,7 @@ func ListWebhooks[T any](c *Client, ctx context.Context, tenant string, mapper M
 }
 
 // listWebhooksRaw fetches webhooks and returns raw JSON bytes
-func (c *Client) listWebhooksRaw(ctx context.Context, tenant string) ([]byte, error) {
+func (c *AdminClient) listWebhooksRaw(ctx context.Context, tenant string) ([]byte, error) {
 	path := apiAdminTenants + buildPath(tenant, "webhooks")
 
 	req := c.http.R().SetContext(ctx)
@@ -47,7 +47,7 @@ func (c *Client) listWebhooksRaw(ctx context.Context, tenant string) ([]byte, er
 
 // CreateWebhook creates a new webhook
 // The webhook parameter accepts either a *Webhook or any compatible struct
-func (c *Client) CreateWebhook(ctx context.Context, tenant string, webhook interface{}) (*WebhookFull, error) {
+func (c *AdminClient) CreateWebhook(ctx context.Context, tenant string, webhook interface{}) (*WebhookFull, error) {
 	path := apiAdminTenants + buildPath(tenant, "webhooks")
 
 	var result WebhookFull
@@ -72,7 +72,7 @@ func (c *Client) CreateWebhook(ctx context.Context, tenant string, webhook inter
 
 // UpdateWebhook updates an existing webhook
 // The webhook parameter accepts either a *Webhook or any compatible struct
-func (c *Client) UpdateWebhook(ctx context.Context, tenant, webhookID string, webhook interface{}) error {
+func (c *AdminClient) UpdateWebhook(ctx context.Context, tenant, webhookID string, webhook interface{}) error {
 	path := apiAdminTenants + buildPath(tenant, "webhooks", webhookID)
 
 	req := c.http.R().
@@ -94,7 +94,7 @@ func (c *Client) UpdateWebhook(ctx context.Context, tenant, webhookID string, we
 }
 
 // DeleteWebhook deletes a webhook
-func (c *Client) DeleteWebhook(ctx context.Context, tenant, webhookID string) error {
+func (c *AdminClient) DeleteWebhook(ctx context.Context, tenant, webhookID string) error {
 	path := apiAdminTenants + buildPath(tenant, "webhooks", webhookID)
 
 	req := c.http.R().SetContext(ctx)
@@ -114,7 +114,7 @@ func (c *Client) DeleteWebhook(ctx context.Context, tenant, webhookID string) er
 
 // ListWebhookUsers lists users with rights on a webhook and applies the given mapper.
 // Use Identity mapper for raw JSON output, or ParseWebhookUsers for typed structs.
-func ListWebhookUsers[T any](c *Client, ctx context.Context, tenant, webhookID string, mapper Mapper[T]) (T, error) {
+func ListWebhookUsers[T any](c *AdminClient, ctx context.Context, tenant, webhookID string, mapper Mapper[T]) (T, error) {
 	var zero T
 	raw, err := c.listWebhookUsersRaw(ctx, tenant, webhookID)
 	if err != nil {
@@ -124,7 +124,7 @@ func ListWebhookUsers[T any](c *Client, ctx context.Context, tenant, webhookID s
 }
 
 // listWebhookUsersRaw fetches users with rights on a webhook and returns raw JSON bytes
-func (c *Client) listWebhookUsersRaw(ctx context.Context, tenant, webhookID string) ([]byte, error) {
+func (c *AdminClient) listWebhookUsersRaw(ctx context.Context, tenant, webhookID string) ([]byte, error) {
 	path := apiAdminTenants + buildPath(tenant, "webhooks", webhookID, "users")
 
 	req := c.http.R().SetContext(ctx)

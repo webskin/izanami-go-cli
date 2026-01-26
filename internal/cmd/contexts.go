@@ -59,7 +59,7 @@ By default, only shows root-level contexts. Use --all to show all nested context
 			return err
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -117,7 +117,7 @@ The context path should be the full hierarchical path, e.g.:
 
 		contextName := args[0]
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -178,7 +178,7 @@ Examples:
 			return fmt.Errorf("either --project or --global is required")
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -246,7 +246,7 @@ Examples:
 			return fmt.Errorf("--protected must be 'true' or 'false', got '%s'", contextUpdateProtected)
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -295,7 +295,7 @@ The context path should be the full hierarchical path.`,
 			}
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}

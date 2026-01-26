@@ -14,7 +14,7 @@ import (
 
 // ListContexts lists all contexts for a tenant or project and applies the given mapper.
 // Use Identity mapper for raw JSON output, or ParseContexts for typed structs.
-func ListContexts[T any](c *Client, ctx context.Context, tenant, project string, all bool, mapper Mapper[T]) (T, error) {
+func ListContexts[T any](c *AdminClient, ctx context.Context, tenant, project string, all bool, mapper Mapper[T]) (T, error) {
 	var zero T
 	raw, err := c.listContextsRaw(ctx, tenant, project, all)
 	if err != nil {
@@ -24,7 +24,7 @@ func ListContexts[T any](c *Client, ctx context.Context, tenant, project string,
 }
 
 // listContextsRaw fetches contexts and returns raw JSON bytes
-func (c *Client) listContextsRaw(ctx context.Context, tenant, project string, all bool) ([]byte, error) {
+func (c *AdminClient) listContextsRaw(ctx context.Context, tenant, project string, all bool) ([]byte, error) {
 	var path string
 	if project != "" {
 		path = apiAdminTenants + buildPath(tenant, "projects", project, "contexts")
@@ -53,7 +53,7 @@ func (c *Client) listContextsRaw(ctx context.Context, tenant, project string, al
 
 // CreateContext creates a new context
 // The contextData parameter accepts a map or any compatible struct with context fields
-func (c *Client) CreateContext(ctx context.Context, tenant, project, name, parentPath string, contextData interface{}) error {
+func (c *AdminClient) CreateContext(ctx context.Context, tenant, project, name, parentPath string, contextData interface{}) error {
 	var path string
 	if project != "" {
 		if parentPath != "" {
@@ -91,7 +91,7 @@ func (c *Client) CreateContext(ctx context.Context, tenant, project, name, paren
 
 // UpdateContext updates a global context (only global contexts support update)
 // The contextData parameter accepts a map with "protected" boolean field
-func (c *Client) UpdateContext(ctx context.Context, tenant, contextPath string, contextData interface{}) error {
+func (c *AdminClient) UpdateContext(ctx context.Context, tenant, contextPath string, contextData interface{}) error {
 	// contextPath contains slashes (e.g., "prod/eu") - append directly without escaping
 	path := apiAdminTenants + buildPath(tenant, "contexts") + "/" + contextPath
 
@@ -114,7 +114,7 @@ func (c *Client) UpdateContext(ctx context.Context, tenant, contextPath string, 
 }
 
 // DeleteContext deletes a context
-func (c *Client) DeleteContext(ctx context.Context, tenant, project, contextPath string) error {
+func (c *AdminClient) DeleteContext(ctx context.Context, tenant, project, contextPath string) error {
 	var path string
 	if project != "" {
 		// contextPath contains slashes (e.g., "prod/eu") - append directly without escaping

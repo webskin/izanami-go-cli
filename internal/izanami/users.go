@@ -16,7 +16,7 @@ import (
 
 // ListUsers lists all visible users (global admin operation) and applies the given mapper.
 // Use Identity mapper for raw JSON output, or ParseUserListItems for typed structs.
-func ListUsers[T any](c *Client, ctx context.Context, mapper Mapper[T]) (T, error) {
+func ListUsers[T any](c *AdminClient, ctx context.Context, mapper Mapper[T]) (T, error) {
 	var zero T
 	raw, err := c.listUsersRaw(ctx)
 	if err != nil {
@@ -26,7 +26,7 @@ func ListUsers[T any](c *Client, ctx context.Context, mapper Mapper[T]) (T, erro
 }
 
 // listUsersRaw fetches users and returns raw JSON bytes
-func (c *Client) listUsersRaw(ctx context.Context) ([]byte, error) {
+func (c *AdminClient) listUsersRaw(ctx context.Context) ([]byte, error) {
 	path := "/api/admin/users"
 
 	req := c.http.R().SetContext(ctx)
@@ -46,7 +46,7 @@ func (c *Client) listUsersRaw(ctx context.Context) ([]byte, error) {
 
 // GetUser retrieves a specific user with complete rights and applies the given mapper.
 // Use Identity mapper for raw JSON output, or ParseUser for typed struct.
-func GetUser[T any](c *Client, ctx context.Context, username string, mapper Mapper[T]) (T, error) {
+func GetUser[T any](c *AdminClient, ctx context.Context, username string, mapper Mapper[T]) (T, error) {
 	var zero T
 	raw, err := c.getUserRaw(ctx, username)
 	if err != nil {
@@ -56,7 +56,7 @@ func GetUser[T any](c *Client, ctx context.Context, username string, mapper Mapp
 }
 
 // getUserRaw fetches a user and returns raw JSON bytes
-func (c *Client) getUserRaw(ctx context.Context, username string) ([]byte, error) {
+func (c *AdminClient) getUserRaw(ctx context.Context, username string) ([]byte, error) {
 	path := "/api/admin/users/" + url.PathEscape(username)
 
 	req := c.http.R().SetContext(ctx)
@@ -75,7 +75,7 @@ func (c *Client) getUserRaw(ctx context.Context, username string) ([]byte, error
 }
 
 // CreateUser creates a new user (global admin operation)
-func (c *Client) CreateUser(ctx context.Context, user interface{}) (*User, error) {
+func (c *AdminClient) CreateUser(ctx context.Context, user interface{}) (*User, error) {
 	path := "/api/admin/users"
 
 	var result User
@@ -99,7 +99,7 @@ func (c *Client) CreateUser(ctx context.Context, user interface{}) (*User, error
 }
 
 // UpdateUser updates user information (username, email, defaultTenant)
-func (c *Client) UpdateUser(ctx context.Context, username string, updateReq interface{}) error {
+func (c *AdminClient) UpdateUser(ctx context.Context, username string, updateReq interface{}) error {
 	path := "/api/admin/users/" + url.PathEscape(username)
 
 	req := c.http.R().
@@ -121,7 +121,7 @@ func (c *Client) UpdateUser(ctx context.Context, username string, updateReq inte
 }
 
 // DeleteUser deletes a user (global admin operation)
-func (c *Client) DeleteUser(ctx context.Context, username string) error {
+func (c *AdminClient) DeleteUser(ctx context.Context, username string) error {
 	path := "/api/admin/users/" + url.PathEscape(username)
 
 	req := c.http.R().SetContext(ctx)
@@ -140,7 +140,7 @@ func (c *Client) DeleteUser(ctx context.Context, username string) error {
 }
 
 // UpdateUserRights updates user's global rights (admin status and tenant rights)
-func (c *Client) UpdateUserRights(ctx context.Context, username string, rightsReq interface{}) error {
+func (c *AdminClient) UpdateUserRights(ctx context.Context, username string, rightsReq interface{}) error {
 	path := "/api/admin/users/" + url.PathEscape(username) + "/rights"
 
 	req := c.http.R().
@@ -162,7 +162,7 @@ func (c *Client) UpdateUserRights(ctx context.Context, username string, rightsRe
 }
 
 // SearchUsers searches for users by username query
-func (c *Client) SearchUsers(ctx context.Context, query string, count int) ([]string, error) {
+func (c *AdminClient) SearchUsers(ctx context.Context, query string, count int) ([]string, error) {
 	path := "/api/admin/_search/users"
 
 	var usernames []string
@@ -190,7 +190,7 @@ func (c *Client) SearchUsers(ctx context.Context, query string, count int) ([]st
 }
 
 // ListUsersForTenant lists all users with rights for a specific tenant
-func (c *Client) ListUsersForTenant(ctx context.Context, tenant string) ([]UserWithSingleLevelRight, error) {
+func (c *AdminClient) ListUsersForTenant(ctx context.Context, tenant string) ([]UserWithSingleLevelRight, error) {
 	path := apiAdminTenants + buildPath(tenant, "users")
 
 	var users []UserWithSingleLevelRight
@@ -210,7 +210,7 @@ func (c *Client) ListUsersForTenant(ctx context.Context, tenant string) ([]UserW
 }
 
 // GetUserForTenant retrieves a specific user's rights for a tenant
-func (c *Client) GetUserForTenant(ctx context.Context, tenant, username string) (*User, error) {
+func (c *AdminClient) GetUserForTenant(ctx context.Context, tenant, username string) (*User, error) {
 	path := apiAdminTenants + buildPath(tenant, "users", username)
 
 	var user User
@@ -230,7 +230,7 @@ func (c *Client) GetUserForTenant(ctx context.Context, tenant, username string) 
 }
 
 // UpdateUserTenantRights updates a user's rights for a specific tenant
-func (c *Client) UpdateUserTenantRights(ctx context.Context, tenant, username string, rightsReq interface{}) error {
+func (c *AdminClient) UpdateUserTenantRights(ctx context.Context, tenant, username string, rightsReq interface{}) error {
 	path := apiAdminTenants + buildPath(tenant, "users", username)
 
 	req := c.http.R().
@@ -252,7 +252,7 @@ func (c *Client) UpdateUserTenantRights(ctx context.Context, tenant, username st
 }
 
 // InviteUsersToTenant invites multiple users to a tenant with specified rights
-func (c *Client) InviteUsersToTenant(ctx context.Context, tenant string, invitations []UserInvitation) error {
+func (c *AdminClient) InviteUsersToTenant(ctx context.Context, tenant string, invitations []UserInvitation) error {
 	path := apiAdminTenants + buildPath(tenant, "users")
 
 	req := c.http.R().
@@ -274,7 +274,7 @@ func (c *Client) InviteUsersToTenant(ctx context.Context, tenant string, invitat
 }
 
 // ListUsersForProject lists all users with rights for a specific project
-func (c *Client) ListUsersForProject(ctx context.Context, tenant, project string) ([]ProjectScopedUser, error) {
+func (c *AdminClient) ListUsersForProject(ctx context.Context, tenant, project string) ([]ProjectScopedUser, error) {
 	path := apiAdminTenants + buildPath(tenant, "projects", project, "users")
 
 	var users []ProjectScopedUser
@@ -294,7 +294,7 @@ func (c *Client) ListUsersForProject(ctx context.Context, tenant, project string
 }
 
 // UpdateUserProjectRights updates a user's rights for a specific project
-func (c *Client) UpdateUserProjectRights(ctx context.Context, tenant, project, username string, rightsReq interface{}) error {
+func (c *AdminClient) UpdateUserProjectRights(ctx context.Context, tenant, project, username string, rightsReq interface{}) error {
 	path := apiAdminTenants + buildPath(tenant, "projects", project, "users", username)
 
 	req := c.http.R().
@@ -316,7 +316,7 @@ func (c *Client) UpdateUserProjectRights(ctx context.Context, tenant, project, u
 }
 
 // InviteUsersToProject invites multiple users to a project with specified rights
-func (c *Client) InviteUsersToProject(ctx context.Context, tenant, project string, invitations []UserInvitation) error {
+func (c *AdminClient) InviteUsersToProject(ctx context.Context, tenant, project string, invitations []UserInvitation) error {
 	path := apiAdminTenants + buildPath(tenant, "projects", project, "users")
 
 	req := c.http.R().

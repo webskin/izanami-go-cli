@@ -14,7 +14,7 @@ import (
 
 // ListFeatures lists all features in a tenant and applies the given mapper.
 // Use Identity mapper for raw JSON output, or ParseFeatures for typed structs.
-func ListFeatures[T any](c *Client, ctx context.Context, tenant string, tag string, mapper Mapper[T]) (T, error) {
+func ListFeatures[T any](c *AdminClient, ctx context.Context, tenant string, tag string, mapper Mapper[T]) (T, error) {
 	var zero T
 	raw, err := c.listFeaturesRaw(ctx, tenant, tag)
 	if err != nil {
@@ -24,7 +24,7 @@ func ListFeatures[T any](c *Client, ctx context.Context, tenant string, tag stri
 }
 
 // listFeaturesRaw fetches features and returns raw JSON bytes
-func (c *Client) listFeaturesRaw(ctx context.Context, tenant string, tag string) ([]byte, error) {
+func (c *AdminClient) listFeaturesRaw(ctx context.Context, tenant string, tag string) ([]byte, error) {
 	path := apiAdminTenants + buildPath(tenant, "features")
 
 	req := c.http.R().SetContext(ctx)
@@ -49,7 +49,7 @@ func (c *Client) listFeaturesRaw(ctx context.Context, tenant string, tag string)
 
 // GetFeature retrieves a specific feature and applies the given mapper.
 // Use Identity mapper for raw JSON output, or ParseFeature for typed struct.
-func GetFeature[T any](c *Client, ctx context.Context, tenant, featureID string, mapper Mapper[T]) (T, error) {
+func GetFeature[T any](c *AdminClient, ctx context.Context, tenant, featureID string, mapper Mapper[T]) (T, error) {
 	var zero T
 	raw, err := c.getFeatureRaw(ctx, tenant, featureID)
 	if err != nil {
@@ -59,7 +59,7 @@ func GetFeature[T any](c *Client, ctx context.Context, tenant, featureID string,
 }
 
 // getFeatureRaw fetches a feature and returns raw JSON bytes
-func (c *Client) getFeatureRaw(ctx context.Context, tenant, featureID string) ([]byte, error) {
+func (c *AdminClient) getFeatureRaw(ctx context.Context, tenant, featureID string) ([]byte, error) {
 	path := apiAdminTenants + buildPath(tenant, "features", featureID)
 
 	req := c.http.R().SetContext(ctx)
@@ -79,7 +79,7 @@ func (c *Client) getFeatureRaw(ctx context.Context, tenant, featureID string) ([
 
 // CreateFeature creates a new feature
 // The feature parameter accepts either a *Feature or any compatible struct
-func (c *Client) CreateFeature(ctx context.Context, tenant, project string, feature interface{}) (*Feature, error) {
+func (c *AdminClient) CreateFeature(ctx context.Context, tenant, project string, feature interface{}) (*Feature, error) {
 	path := apiAdminTenants + buildPath(tenant, "projects", project, "features")
 
 	var result Feature
@@ -104,7 +104,7 @@ func (c *Client) CreateFeature(ctx context.Context, tenant, project string, feat
 
 // UpdateFeature updates an existing feature
 // The feature parameter accepts either a *Feature, *FeatureWithOverloads, or any compatible struct
-func (c *Client) UpdateFeature(ctx context.Context, tenant, featureID string, feature interface{}, preserveProtectedContexts bool) error {
+func (c *AdminClient) UpdateFeature(ctx context.Context, tenant, featureID string, feature interface{}, preserveProtectedContexts bool) error {
 	path := apiAdminTenants + buildPath(tenant, "features", featureID)
 
 	req := c.http.R().
@@ -130,7 +130,7 @@ func (c *Client) UpdateFeature(ctx context.Context, tenant, featureID string, fe
 }
 
 // DeleteFeature deletes a feature
-func (c *Client) DeleteFeature(ctx context.Context, tenant, featureID string) error {
+func (c *AdminClient) DeleteFeature(ctx context.Context, tenant, featureID string) error {
 	path := apiAdminTenants + buildPath(tenant, "features", featureID)
 
 	req := c.http.R().SetContext(ctx)
@@ -150,7 +150,7 @@ func (c *Client) DeleteFeature(ctx context.Context, tenant, featureID string) er
 
 // PatchFeatures applies batch patches to multiple features
 // Supports operations: replace (enabled, project, tags), remove (delete feature)
-func (c *Client) PatchFeatures(ctx context.Context, tenant string, patches interface{}) error {
+func (c *AdminClient) PatchFeatures(ctx context.Context, tenant string, patches interface{}) error {
 	path := apiAdminTenants + buildPath(tenant, "features")
 
 	req := c.http.R().
@@ -174,7 +174,7 @@ func (c *Client) PatchFeatures(ctx context.Context, tenant string, patches inter
 // TestFeature tests an existing feature's evaluation and applies the given mapper.
 // Use Identity mapper for raw JSON output, or ParseFeatureTestResult for typed struct.
 // If contextPath is provided, tests feature with context-specific overrides.
-func TestFeature[T any](c *Client, ctx context.Context, tenant, featureID, contextPath, user, date, payload string, mapper Mapper[T]) (T, error) {
+func TestFeature[T any](c *AdminClient, ctx context.Context, tenant, featureID, contextPath, user, date, payload string, mapper Mapper[T]) (T, error) {
 	var zero T
 	raw, err := c.testFeatureRaw(ctx, tenant, featureID, contextPath, user, date, payload)
 	if err != nil {
@@ -184,7 +184,7 @@ func TestFeature[T any](c *Client, ctx context.Context, tenant, featureID, conte
 }
 
 // testFeatureRaw tests an existing feature and returns raw JSON bytes
-func (c *Client) testFeatureRaw(ctx context.Context, tenant, featureID, contextPath, user, date, payload string) ([]byte, error) {
+func (c *AdminClient) testFeatureRaw(ctx context.Context, tenant, featureID, contextPath, user, date, payload string) ([]byte, error) {
 	// Build path: /api/admin/tenants/{tenant}/features/{id}/test[/{context}]
 	var path string
 	if contextPath != "" {
@@ -229,7 +229,7 @@ func (c *Client) testFeatureRaw(ctx context.Context, tenant, featureID, contextP
 
 // TestFeatureDefinition tests a feature definition without saving and applies the given mapper.
 // Use Identity mapper for raw JSON output, or ParseFeatureTestResult for typed struct.
-func TestFeatureDefinition[T any](c *Client, ctx context.Context, tenant, user, date string, definition interface{}, mapper Mapper[T]) (T, error) {
+func TestFeatureDefinition[T any](c *AdminClient, ctx context.Context, tenant, user, date string, definition interface{}, mapper Mapper[T]) (T, error) {
 	var zero T
 	raw, err := c.testFeatureDefinitionRaw(ctx, tenant, user, date, definition)
 	if err != nil {
@@ -239,7 +239,7 @@ func TestFeatureDefinition[T any](c *Client, ctx context.Context, tenant, user, 
 }
 
 // testFeatureDefinitionRaw tests a feature definition and returns raw JSON bytes
-func (c *Client) testFeatureDefinitionRaw(ctx context.Context, tenant, user, date string, definition interface{}) ([]byte, error) {
+func (c *AdminClient) testFeatureDefinitionRaw(ctx context.Context, tenant, user, date string, definition interface{}) ([]byte, error) {
 	path := apiAdminTenants + buildPath(tenant, "test")
 
 	// Server expects the definition wrapped in a "feature" key
@@ -273,7 +273,7 @@ func (c *Client) testFeatureDefinitionRaw(ctx context.Context, tenant, user, dat
 
 // TestFeaturesBulk tests multiple features for a context and applies the given mapper.
 // Use Identity mapper for raw JSON output, or ParseFeatureTestResults for typed map.
-func TestFeaturesBulk[T any](c *Client, ctx context.Context, tenant string, request TestFeaturesAdminRequest, mapper Mapper[T]) (T, error) {
+func TestFeaturesBulk[T any](c *AdminClient, ctx context.Context, tenant string, request TestFeaturesAdminRequest, mapper Mapper[T]) (T, error) {
 	var zero T
 	raw, err := c.testFeaturesBulkRaw(ctx, tenant, request)
 	if err != nil {
@@ -283,7 +283,7 @@ func TestFeaturesBulk[T any](c *Client, ctx context.Context, tenant string, requ
 }
 
 // testFeaturesBulkRaw tests multiple features and returns raw JSON bytes
-func (c *Client) testFeaturesBulkRaw(ctx context.Context, tenant string, request TestFeaturesAdminRequest) ([]byte, error) {
+func (c *AdminClient) testFeaturesBulkRaw(ctx context.Context, tenant string, request TestFeaturesAdminRequest) ([]byte, error) {
 	path := apiAdminTenants + buildPath(tenant, "features", "_test")
 
 	req := c.http.R().SetContext(ctx)

@@ -27,13 +27,13 @@ type TempFeature struct {
 	Project     string
 	Enabled     bool
 	Tags        []string
-	client      *izanami.Client
+	client      *izanami.AdminClient
 	ctx         context.Context
 	created     bool
 }
 
 // NewTempFeature creates a new temporary feature helper with auto-generated unique name
-func NewTempFeature(t *testing.T, client *izanami.Client, tenant, project string) *TempFeature {
+func NewTempFeature(t *testing.T, client *izanami.AdminClient, tenant, project string) *TempFeature {
 	t.Helper()
 	name := fmt.Sprintf("test-feature-%d", time.Now().UnixNano())
 	return &TempFeature{

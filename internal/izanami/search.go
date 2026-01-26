@@ -15,7 +15,7 @@ import (
 
 // Search performs a global search and applies the given mapper.
 // Use Identity mapper for raw JSON output, or ParseSearchResults for typed slice.
-func Search[T any](c *Client, ctx context.Context, tenant, query string, filters []string, mapper Mapper[T]) (T, error) {
+func Search[T any](c *AdminClient, ctx context.Context, tenant, query string, filters []string, mapper Mapper[T]) (T, error) {
 	var zero T
 	raw, err := c.searchRaw(ctx, tenant, query, filters)
 	if err != nil {
@@ -25,7 +25,7 @@ func Search[T any](c *Client, ctx context.Context, tenant, query string, filters
 }
 
 // searchRaw fetches search results and returns raw JSON bytes
-func (c *Client) searchRaw(ctx context.Context, tenant, query string, filters []string) ([]byte, error) {
+func (c *AdminClient) searchRaw(ctx context.Context, tenant, query string, filters []string) ([]byte, error) {
 	var path string
 	if tenant != "" {
 		path = apiAdminTenants + buildPath(tenant, "search")

@@ -46,7 +46,7 @@ var defaultCompleter = &Completer{
 
 // listTenantsAPI is the production implementation for listing tenants.
 func listTenantsAPI(cfg *izanami.Config, ctx context.Context) ([]izanami.Tenant, error) {
-	client, err := izanami.NewClient(cfg)
+	client, err := izanami.NewAdminClient(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +55,7 @@ func listTenantsAPI(cfg *izanami.Config, ctx context.Context) ([]izanami.Tenant,
 
 // listProjectsAPI is the production implementation for listing projects.
 func listProjectsAPI(cfg *izanami.Config, ctx context.Context, tenant string) ([]izanami.Project, error) {
-	client, err := izanami.NewClient(cfg)
+	client, err := izanami.NewAdminClient(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +64,7 @@ func listProjectsAPI(cfg *izanami.Config, ctx context.Context, tenant string) ([
 
 // listTagsAPI is the production implementation for listing tags.
 func listTagsAPI(cfg *izanami.Config, ctx context.Context, tenant string) ([]izanami.Tag, error) {
-	client, err := izanami.NewClient(cfg)
+	client, err := izanami.NewAdminClient(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +73,7 @@ func listTagsAPI(cfg *izanami.Config, ctx context.Context, tenant string) ([]iza
 
 // listContextsAPI is the production implementation for listing contexts.
 func listContextsAPI(cfg *izanami.Config, ctx context.Context, tenant, project string) ([]izanami.Context, error) {
-	client, err := izanami.NewClient(cfg)
+	client, err := izanami.NewAdminClient(cfg)
 	if err != nil {
 		return nil, err
 	}

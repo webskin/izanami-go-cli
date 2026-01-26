@@ -32,7 +32,7 @@ var adminProjectsListCmd = &cobra.Command{
 			return err
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -68,7 +68,7 @@ var adminProjectsGetCmd = &cobra.Command{
 			return err
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -104,7 +104,7 @@ var adminProjectsCreateCmd = &cobra.Command{
 			return err
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -159,7 +159,7 @@ Examples:
 			return err
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -227,7 +227,7 @@ var adminProjectsDeleteCmd = &cobra.Command{
 			}
 		}
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}
@@ -273,7 +273,7 @@ Examples:
 
 		projectName := args[0]
 
-		client, err := izanami.NewClient(cfg)
+		client, err := izanami.NewAdminClient(cfg)
 		if err != nil {
 			return err
 		}

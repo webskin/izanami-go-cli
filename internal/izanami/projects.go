@@ -14,7 +14,7 @@ import (
 
 // ListProjects lists all projects in a tenant and applies the given mapper.
 // Use Identity mapper for raw JSON output, or ParseProjects for typed structs.
-func ListProjects[T any](c *Client, ctx context.Context, tenant string, mapper Mapper[T]) (T, error) {
+func ListProjects[T any](c *AdminClient, ctx context.Context, tenant string, mapper Mapper[T]) (T, error) {
 	var zero T
 	raw, err := c.listProjectsRaw(ctx, tenant)
 	if err != nil {
@@ -24,7 +24,7 @@ func ListProjects[T any](c *Client, ctx context.Context, tenant string, mapper M
 }
 
 // listProjectsRaw fetches projects and returns raw JSON bytes
-func (c *Client) listProjectsRaw(ctx context.Context, tenant string) ([]byte, error) {
+func (c *AdminClient) listProjectsRaw(ctx context.Context, tenant string) ([]byte, error) {
 	path := apiAdminTenants + buildPath(tenant, "projects")
 
 	req := c.http.R().SetContext(ctx)
@@ -44,7 +44,7 @@ func (c *Client) listProjectsRaw(ctx context.Context, tenant string) ([]byte, er
 
 // GetProject retrieves a specific project and applies the given mapper.
 // Use Identity mapper for raw JSON output, or ParseProject for typed struct.
-func GetProject[T any](c *Client, ctx context.Context, tenant, project string, mapper Mapper[T]) (T, error) {
+func GetProject[T any](c *AdminClient, ctx context.Context, tenant, project string, mapper Mapper[T]) (T, error) {
 	var zero T
 	raw, err := c.getProjectRaw(ctx, tenant, project)
 	if err != nil {
@@ -54,7 +54,7 @@ func GetProject[T any](c *Client, ctx context.Context, tenant, project string, m
 }
 
 // getProjectRaw fetches a project and returns raw JSON bytes
-func (c *Client) getProjectRaw(ctx context.Context, tenant, project string) ([]byte, error) {
+func (c *AdminClient) getProjectRaw(ctx context.Context, tenant, project string) ([]byte, error) {
 	path := apiAdminTenants + buildPath(tenant, "projects", project)
 
 	req := c.http.R().SetContext(ctx)
@@ -74,7 +74,7 @@ func (c *Client) getProjectRaw(ctx context.Context, tenant, project string) ([]b
 
 // CreateProject creates a new project
 // The project parameter accepts either a *Project or any compatible struct
-func (c *Client) CreateProject(ctx context.Context, tenant string, project interface{}) error {
+func (c *AdminClient) CreateProject(ctx context.Context, tenant string, project interface{}) error {
 	path := apiAdminTenants + buildPath(tenant, "projects")
 
 	req := c.http.R().
@@ -97,7 +97,7 @@ func (c *Client) CreateProject(ctx context.Context, tenant string, project inter
 
 // UpdateProject updates an existing project
 // The project parameter accepts either a *Project or any compatible struct
-func (c *Client) UpdateProject(ctx context.Context, tenant, name string, project interface{}) error {
+func (c *AdminClient) UpdateProject(ctx context.Context, tenant, name string, project interface{}) error {
 	path := apiAdminTenants + buildPath(tenant, "projects", name)
 
 	req := c.http.R().
@@ -119,7 +119,7 @@ func (c *Client) UpdateProject(ctx context.Context, tenant, name string, project
 }
 
 // DeleteProject deletes a project
-func (c *Client) DeleteProject(ctx context.Context, tenant, project string) error {
+func (c *AdminClient) DeleteProject(ctx context.Context, tenant, project string) error {
 	path := apiAdminTenants + buildPath(tenant, "projects", project)
 
 	req := c.http.R().SetContext(ctx)
@@ -139,7 +139,7 @@ func (c *Client) DeleteProject(ctx context.Context, tenant, project string) erro
 
 // ListProjectLogs retrieves event logs for a project and applies the given mapper.
 // Use Identity mapper for raw JSON output, or ParseLogsResponse for typed structs.
-func ListProjectLogs[T any](c *Client, ctx context.Context, tenant, project string, opts *LogsRequest, mapper Mapper[T]) (T, error) {
+func ListProjectLogs[T any](c *AdminClient, ctx context.Context, tenant, project string, opts *LogsRequest, mapper Mapper[T]) (T, error) {
 	var zero T
 	raw, err := c.listProjectLogsRaw(ctx, tenant, project, opts)
 	if err != nil {
@@ -149,7 +149,7 @@ func ListProjectLogs[T any](c *Client, ctx context.Context, tenant, project stri
 }
 
 // listProjectLogsRaw fetches project logs and returns raw JSON bytes
-func (c *Client) listProjectLogsRaw(ctx context.Context, tenant, project string, opts *LogsRequest) ([]byte, error) {
+func (c *AdminClient) listProjectLogsRaw(ctx context.Context, tenant, project string, opts *LogsRequest) ([]byte, error) {
 	path := apiAdminTenants + buildPath(tenant, "projects", project, "logs")
 
 	req := c.http.R().SetContext(ctx)

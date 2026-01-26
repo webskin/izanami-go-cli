@@ -89,15 +89,6 @@ Examples:
 
 		resolveClientCredentials(cmd, cfg, checkClientID, checkClientSecret, projects)
 
-		if err := cfg.Validate(); err != nil {
-			return err
-		}
-
-		client, err := izanami.NewClient(cfg)
-		if err != nil {
-			return err
-		}
-
 		ctx := context.Background()
 		featureIDOrName := args[0]
 		var featureID string
@@ -110,6 +101,7 @@ Examples:
 				fmt.Fprintf(cmd.OutOrStderr(), "Using feature UUID: %s\n", featureID)
 			}
 		} else {
+			// Name mode: need admin client to resolve feature name
 			if err := cfg.ValidateTenant(); err != nil {
 				return fmt.Errorf("feature name requires --tenant flag: %w", err)
 			}
@@ -118,8 +110,14 @@ Examples:
 				fmt.Fprintf(cmd.OutOrStderr(), "Resolving feature name '%s' in tenant '%s'...\n", featureIDOrName, cfg.Tenant)
 			}
 
+			// Create admin client for name resolution (uses BaseURL)
+			adminClient, err := izanami.NewAdminClient(cfg)
+			if err != nil {
+				return fmt.Errorf("failed to create admin client for name resolution: %w", err)
+			}
+
 			// List all features for the tenant
-			features, err := izanami.ListFeatures(client, ctx, cfg.Tenant, "", izanami.ParseFeatures)
+			features, err := izanami.ListFeatures(adminClient, ctx, cfg.Tenant, "", izanami.ParseFeatures)
 			if err != nil {
 				return fmt.Errorf("failed to list features: %w", err)
 			}
@@ -161,6 +159,12 @@ Examples:
 			}
 		}
 
+		// Create feature check client (uses ClientBaseURL if set, otherwise BaseURL)
+		checkClient, err := izanami.NewFeatureCheckClient(cfg)
+		if err != nil {
+			return err
+		}
+
 		// Use context from flag or config
 		contextPath := featureContextStr
 		if contextPath == "" {
@@ -186,7 +190,7 @@ Examples:
 
 		// For JSON output, use Identity mapper for raw JSON
 		if outputFormat == "json" {
-			raw, err := izanami.CheckFeature(client, ctx, featureID, featureUser, contextPath, payload, izanami.Identity)
+			raw, err := izanami.CheckFeature(checkClient, ctx, featureID, featureUser, contextPath, payload, izanami.Identity)
 			if err != nil {
 				return err
 			}
@@ -194,7 +198,7 @@ Examples:
 		}
 
 		// For table output, use ParseFeatureCheckResult mapper
-		result, err := izanami.CheckFeature(client, ctx, featureID, featureUser, contextPath, payload, izanami.ParseFeatureCheckResult)
+		result, err := izanami.CheckFeature(checkClient, ctx, featureID, featureUser, contextPath, payload, izanami.ParseFeatureCheckResult)
 		if err != nil {
 			return err
 		}
@@ -266,32 +270,73 @@ Examples:
 
 		resolveClientCredentials(cmd, cfg, checkClientID, checkClientSecret, projects)
 
-		if err := cfg.Validate(); err != nil {
-			return err
-		}
-
 		// Validate that at least one filter is provided
 		if len(checkFeatures) == 0 && len(checkProjects) == 0 {
 			return fmt.Errorf("at least one filter is required: --features or --projects")
 		}
 
-		client, err := izanami.NewClient(cfg)
-		if err != nil {
-			return err
-		}
-
 		ctx := context.Background()
 
+		// Check if we need admin client for name resolution
+		needsAdminClient := false
+		for _, f := range checkFeatures {
+			if !IsUUID(f) {
+				needsAdminClient = true
+				break
+			}
+		}
+		if !needsAdminClient {
+			for _, p := range checkProjects {
+				if !IsUUID(p) {
+					needsAdminClient = true
+					break
+				}
+			}
+		}
+		if !needsAdminClient {
+			for _, t := range checkOneTagIn {
+				if !IsUUID(t) {
+					needsAdminClient = true
+					break
+				}
+			}
+		}
+		if !needsAdminClient {
+			for _, t := range checkAllTagsIn {
+				if !IsUUID(t) {
+					needsAdminClient = true
+					break
+				}
+			}
+		}
+		if !needsAdminClient {
+			for _, t := range checkNoTagIn {
+				if !IsUUID(t) {
+					needsAdminClient = true
+					break
+				}
+			}
+		}
+
+		var adminClient *izanami.AdminClient
+		if needsAdminClient {
+			var err error
+			adminClient, err = izanami.NewAdminClient(cfg)
+			if err != nil {
+				return fmt.Errorf("failed to create admin client for name resolution: %w", err)
+			}
+		}
+
 		// Resolve tag names to UUIDs if needed
-		resolvedOneTagIn, err := resolveTagNames(ctx, client, cfg.Tenant, checkOneTagIn)
+		resolvedOneTagIn, err := resolveTagNames(ctx, adminClient, cfg.Tenant, checkOneTagIn)
 		if err != nil {
 			return err
 		}
-		resolvedAllTagsIn, err := resolveTagNames(ctx, client, cfg.Tenant, checkAllTagsIn)
+		resolvedAllTagsIn, err := resolveTagNames(ctx, adminClient, cfg.Tenant, checkAllTagsIn)
 		if err != nil {
 			return err
 		}
-		resolvedNoTagIn, err := resolveTagNames(ctx, client, cfg.Tenant, checkNoTagIn)
+		resolvedNoTagIn, err := resolveTagNames(ctx, adminClient, cfg.Tenant, checkNoTagIn)
 		if err != nil {
 			return err
 		}
@@ -321,14 +366,14 @@ Examples:
 			}
 
 			// List all projects for the tenant
-			projects, err := izanami.ListProjects(client, ctx, cfg.Tenant, izanami.ParseProjects)
+			projectsList, err := izanami.ListProjects(adminClient, ctx, cfg.Tenant, izanami.ParseProjects)
 			if err != nil {
 				return fmt.Errorf("failed to list projects: %w", err)
 			}
 
 			// Build name->ID map
 			nameToID := make(map[string]string)
-			for _, p := range projects {
+			for _, p := range projectsList {
 				nameToID[p.Name] = p.ID
 			}
 
@@ -371,7 +416,7 @@ Examples:
 			}
 
 			// List all features for the tenant
-			allFeatures, err := izanami.ListFeatures(client, ctx, cfg.Tenant, "", izanami.ParseFeatures)
+			allFeatures, err := izanami.ListFeatures(adminClient, ctx, cfg.Tenant, "", izanami.ParseFeatures)
 			if err != nil {
 				return fmt.Errorf("failed to list features: %w", err)
 			}
@@ -420,6 +465,12 @@ Examples:
 			}
 		}
 
+		// Create feature check client (uses ClientBaseURL if set, otherwise BaseURL)
+		checkClient, err := izanami.NewFeatureCheckClient(cfg)
+		if err != nil {
+			return err
+		}
+
 		// Use context from flag or config
 		contextPath := featureContextStr
 		if contextPath == "" {
@@ -458,7 +509,7 @@ Examples:
 
 		// For JSON output, use Identity mapper for raw JSON
 		if outputFormat == "json" {
-			raw, err := izanami.CheckFeatures(client, ctx, request, izanami.Identity)
+			raw, err := izanami.CheckFeatures(checkClient, ctx, request, izanami.Identity)
 			if err != nil {
 				return err
 			}
@@ -466,7 +517,7 @@ Examples:
 		}
 
 		// For table output, use ParseActivationsWithConditions mapper
-		results, err := izanami.CheckFeatures(client, ctx, request, izanami.ParseActivationsWithConditions)
+		results, err := izanami.CheckFeatures(checkClient, ctx, request, izanami.ParseActivationsWithConditions)
 		if err != nil {
 			return err
 		}
@@ -480,7 +531,7 @@ Examples:
 // resolveTagNames resolves tag names to UUIDs
 // Supports mixing UUIDs and names; requires tenant for name resolution
 // Uses the dedicated GET /api/admin/tenants/:tenant/tags/:name endpoint for individual lookups
-func resolveTagNames(ctx context.Context, client *izanami.Client, tenant string, tags []string) ([]string, error) {
+func resolveTagNames(ctx context.Context, client *izanami.AdminClient, tenant string, tags []string) ([]string, error) {
 	if len(tags) == 0 {
 		return nil, nil
 	}
@@ -495,6 +546,9 @@ func resolveTagNames(ctx context.Context, client *izanami.Client, tenant string,
 			// Not a UUID, need to resolve using dedicated endpoint
 			if tenant == "" {
 				return nil, fmt.Errorf("tag names require --tenant flag")
+			}
+			if client == nil {
+				return nil, fmt.Errorf("admin client required for tag name resolution")
 			}
 
 			tagObj, err := izanami.GetTag(client, ctx, tenant, tag, izanami.ParseTag)
@@ -546,11 +600,6 @@ func resolveClientCredentials(cmd *cobra.Command, cfg *izanami.Config, flagClien
 				}
 			}
 		}
-	}
-
-	// Apply ClientBaseURL to BaseURL for client operations if set
-	if cfg.ClientBaseURL != "" {
-		cfg.BaseURL = cfg.ClientBaseURL
 	}
 }
 
