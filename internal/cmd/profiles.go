@@ -498,6 +498,7 @@ func buildProfileSetLongHelp() string {
 	sb.WriteString("  iz profiles set base-url https://izanami.example.com\n")
 	sb.WriteString("  iz profiles set session sandbox-session\n")
 	sb.WriteString("  iz profiles set client-id my-client-id\n")
+	sb.WriteString("  iz profiles set client-base-url https://worker.example.com\n")
 	sb.WriteString("  iz profiles set personal-access-token my-pat-token\n")
 
 	return sb.String()
@@ -781,16 +782,17 @@ Credentials can be stored:
   - At the tenant level (for all projects in that tenant)
   - At the project level (for specific projects only)
 
-You can also specify a separate base URL for client operations (features/events)
-using --client-base-url. This is useful in leader/worker architectures where:
-  - Leader (admin commands) uses the session URL (IZ_BASE_URL)
-  - Worker (features/events) uses the client-base-url
-
 The 'iz features check' command will automatically use these credentials with
 the following precedence:
   1. --client-id/--client-secret flags (highest priority)
   2. IZ_CLIENT_ID/IZ_CLIENT_SECRET environment variables
   3. Stored credentials from active profile (this command)
+
+Note: If you need a separate base URL for client operations (features/events),
+set it at the profile level using one of:
+  - Flag: --client-base-url (on features check / events watch commands)
+  - Environment variable: IZ_CLIENT_BASE_URL
+  - Profile setting: iz profiles set client-base-url <url>
 
 Examples:
   # First, switch to the profile you want to configure
@@ -802,9 +804,6 @@ Examples:
   # Add project-specific credentials to the active profile
   iz profiles client-keys add --tenant my-tenant --projects proj1,proj2
 
-  # Add credentials with a separate client base URL (for leader/worker setup)
-  iz profiles client-keys add --tenant my-tenant --client-base-url https://worker.example.com
-
 Security:
   Credentials are stored in plaintext in ~/.config/iz/config.yaml
   File permissions are automatically set to 0600 (owner read/write only)
@@ -812,7 +811,6 @@ Security:
 	RunE: func(cmd *cobra.Command, args []string) error {
 		tenant, _ := cmd.Flags().GetString("tenant")
 		projects, _ := cmd.Flags().GetStringSlice("projects")
-		clientBaseURL, _ := cmd.Flags().GetString("client-base-url")
 
 		// Validate tenant is provided
 		if tenant == "" {
@@ -891,17 +889,13 @@ Security:
 		}
 
 		// Save credentials
-		if err := izanami.AddClientKeys(tenant, projects, clientID, clientSecret, clientBaseURL); err != nil {
+		if err := izanami.AddClientKeys(tenant, projects, clientID, clientSecret); err != nil {
 			return fmt.Errorf("failed to save credentials: %w", err)
 		}
 
 		// Success message
 		if len(projects) == 0 {
-			if clientBaseURL != "" {
-				fmt.Fprintf(cmd.OutOrStderr(), "\n✓ Client credentials saved to profile '%s' for tenant '%s' with client URL: %s\n", profileName, tenant, clientBaseURL)
-			} else {
-				fmt.Fprintf(cmd.OutOrStderr(), "\n✓ Client credentials saved to profile '%s' for tenant '%s'\n", profileName, tenant)
-			}
+			fmt.Fprintf(cmd.OutOrStderr(), "\n✓ Client credentials saved to profile '%s' for tenant '%s'\n", profileName, tenant)
 		} else {
 			fmt.Fprintf(cmd.OutOrStderr(), "\n✓ Client credentials saved to profile '%s' for tenant '%s', projects: %s\n", profileName, tenant, strings.Join(projects, ", "))
 		}
@@ -959,7 +953,6 @@ func init() {
 	// Flags for client-keys add
 	profileClientKeysAddCmd.Flags().String("tenant", "", "Tenant name (required)")
 	profileClientKeysAddCmd.Flags().StringSlice("projects", []string{}, "Project names (comma-separated)")
-	profileClientKeysAddCmd.Flags().String("client-base-url", "", "Base URL for client operations (features/events)")
 	profileClientKeysAddCmd.MarkFlagRequired("tenant")
 }
 

@@ -66,10 +66,9 @@ type Config struct {
 
 // TenantClientKeysConfig holds client credentials for a specific tenant
 type TenantClientKeysConfig struct {
-	ClientID      string                             `yaml:"client-id,omitempty" mapstructure:"client-id"`
-	ClientSecret  string                             `yaml:"client-secret,omitempty" mapstructure:"client-secret"`
-	ClientBaseURL string                             `yaml:"client-base-url,omitempty" mapstructure:"client-base-url"` // Optional URL for client operations
-	Projects      map[string]ProjectClientKeysConfig `yaml:"projects,omitempty" mapstructure:"projects"`               // Project-specific overrides
+	ClientID     string                             `yaml:"client-id,omitempty" mapstructure:"client-id"`
+	ClientSecret string                             `yaml:"client-secret,omitempty" mapstructure:"client-secret"`
+	Projects     map[string]ProjectClientKeysConfig `yaml:"projects,omitempty" mapstructure:"projects"` // Project-specific overrides
 }
 
 // ProjectClientKeysConfig holds client credentials for a specific project within a tenant
@@ -716,14 +715,14 @@ func ValidateConfigFile() []ValidationError {
 // 2. Tenant-wide credentials
 // Returns empty strings if no credentials are found for the given tenant/projects.
 // Also returns the client base URL if configured at the tenant level.
-func (c *Config) ResolveClientCredentials(tenant string, projects []string) (clientID, clientSecret, clientBaseURL string) {
+func (c *Config) ResolveClientCredentials(tenant string, projects []string) (clientID, clientSecret string) {
 	if c.ClientKeys == nil || tenant == "" {
-		return "", "", ""
+		return "", ""
 	}
 
 	tenantConfig, ok := c.ClientKeys[tenant]
 	if !ok {
-		return "", "", ""
+		return "", ""
 	}
 
 	// First, try project-specific credentials
@@ -732,8 +731,7 @@ func (c *Config) ResolveClientCredentials(tenant string, projects []string) (cli
 			if projectConfig, exists := tenantConfig.Projects[project]; exists {
 				// Only use project credentials if both ID and secret are present
 				if projectConfig.ClientID != "" && projectConfig.ClientSecret != "" {
-					// Return project credentials with tenant-level client base URL
-					return projectConfig.ClientID, projectConfig.ClientSecret, tenantConfig.ClientBaseURL
+					return projectConfig.ClientID, projectConfig.ClientSecret
 				}
 			}
 		}
@@ -741,10 +739,10 @@ func (c *Config) ResolveClientCredentials(tenant string, projects []string) (cli
 
 	// Fall back to tenant-wide credentials
 	if tenantConfig.ClientID != "" && tenantConfig.ClientSecret != "" {
-		return tenantConfig.ClientID, tenantConfig.ClientSecret, tenantConfig.ClientBaseURL
+		return tenantConfig.ClientID, tenantConfig.ClientSecret
 	}
 
-	return "", "", ""
+	return "", ""
 }
 
 // GetClientBaseURL returns the URL for client operations (features/events).
@@ -760,7 +758,7 @@ func (c *Config) GetClientBaseURL() string {
 // If projects is empty, credentials are stored at the tenant level.
 // If projects are specified, credentials are stored for each project.
 // If clientBaseURL is provided, it is stored at the tenant level for client operations.
-func AddClientKeys(tenant string, projects []string, clientID, clientSecret, clientBaseURL string) error {
+func AddClientKeys(tenant string, projects []string, clientID, clientSecret string) error {
 	if tenant == "" {
 		return fmt.Errorf("tenant is required")
 	}
@@ -807,11 +805,6 @@ func AddClientKeys(tenant string, projects []string, clientID, clientSecret, cli
 				ClientSecret: clientSecret,
 			}
 		}
-	}
-
-	// Store client base URL at tenant level (if provided)
-	if clientBaseURL != "" {
-		tenantConfig.ClientBaseURL = clientBaseURL
 	}
 
 	// Update the profile

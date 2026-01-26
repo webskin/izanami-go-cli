@@ -29,8 +29,9 @@ var (
 	eventsKeepAlive       int
 	eventsData            string
 	// Client credentials for events
-	eventsClientID     string
-	eventsClientSecret string
+	eventsClientID      string
+	eventsClientSecret  string
+	eventsClientBaseURL string
 )
 
 // eventsCmd represents the events command
@@ -94,41 +95,12 @@ and displays events as they occur.
 The connection will automatically reconnect if interrupted.
 Press Ctrl+C to stop watching.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Resolve client credentials
-		if eventsClientID != "" {
-			cfg.ClientID = eventsClientID
+		// Resolve client credentials using same logic as features check
+		var projects []string
+		if cfg.Project != "" {
+			projects = append(projects, cfg.Project)
 		}
-		if eventsClientSecret != "" {
-			cfg.ClientSecret = eventsClientSecret
-		}
-
-		if cfg.ClientID == "" && cfg.ClientSecret == "" {
-			tenant := cfg.Tenant
-			var projects []string
-			if cfg.Project != "" {
-				projects = append(projects, cfg.Project)
-			}
-
-			clientID, clientSecret, clientBaseURL := cfg.ResolveClientCredentials(tenant, projects)
-			if clientID != "" && clientSecret != "" {
-				cfg.ClientID = clientID
-				cfg.ClientSecret = clientSecret
-				// Also set ClientBaseURL from client-keys if not already set
-				if cfg.ClientBaseURL == "" && clientBaseURL != "" {
-					cfg.ClientBaseURL = clientBaseURL
-				}
-				if cfg.Verbose {
-					if len(projects) > 0 {
-						fmt.Fprintf(cmd.OutOrStderr(), "Using client credentials from config (tenant: %s, projects: %v)\n", tenant, projects)
-					} else {
-						fmt.Fprintf(cmd.OutOrStderr(), "Using client credentials from config (tenant: %s)\n", tenant)
-					}
-					if cfg.ClientBaseURL != "" {
-						fmt.Fprintf(cmd.OutOrStderr(), "Using client base URL: %s\n", cfg.ClientBaseURL)
-					}
-				}
-			}
-		}
+		resolveClientCredentials(cmd, cfg, eventsClientID, eventsClientSecret, eventsClientBaseURL, projects)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -347,4 +319,5 @@ func init() {
 	// Client credentials
 	eventsWatchCmd.Flags().StringVar(&eventsClientID, "client-id", "", "Client ID for authentication (env: IZ_CLIENT_ID)")
 	eventsWatchCmd.Flags().StringVar(&eventsClientSecret, "client-secret", "", "Client secret for authentication (env: IZ_CLIENT_SECRET)")
+	eventsWatchCmd.Flags().StringVar(&eventsClientBaseURL, "client-base-url", "", "Base URL for client operations (env: IZ_CLIENT_BASE_URL)")
 }

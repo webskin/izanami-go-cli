@@ -233,7 +233,7 @@ func TestIntegration_ProfileClientKeysAddMultipleTenants(t *testing.T) {
 
 	// Add credentials for each tenant
 	for _, tenant := range tenants {
-		err := izanami.AddClientKeys(tenant.name, nil, tenant.clientID, tenant.clientSecret, "")
+		err := izanami.AddClientKeys(tenant.name, nil, tenant.clientID, tenant.clientSecret)
 		require.NoError(t, err, "Should add client keys for tenant %s", tenant.name)
 	}
 
@@ -277,7 +277,7 @@ func TestIntegration_ProfileClientKeysAddProjectsInTenants(t *testing.T) {
 
 	// Add credentials for each project configuration
 	for _, tc := range testCases {
-		err := izanami.AddClientKeys(tc.tenant, tc.projects, tc.clientID, tc.clientSecret, "")
+		err := izanami.AddClientKeys(tc.tenant, tc.projects, tc.clientID, tc.clientSecret)
 		require.NoError(t, err, "Should add client keys for tenant %s projects %v", tc.tenant, tc.projects)
 	}
 
@@ -336,11 +336,11 @@ func TestIntegration_ProfileClientKeysTenantAndProjectLevels(t *testing.T) {
 	tenant := "mixed-tenant"
 
 	// Add tenant-level credentials (fallback for all projects)
-	err := izanami.AddClientKeys(tenant, nil, "tenant-default-id", "tenant-default-secret", "")
+	err := izanami.AddClientKeys(tenant, nil, "tenant-default-id", "tenant-default-secret")
 	require.NoError(t, err, "Should add tenant-level credentials")
 
 	// Add project-specific credentials (override for specific project)
-	err = izanami.AddClientKeys(tenant, []string{"special-project"}, "special-project-id", "special-project-secret", "")
+	err = izanami.AddClientKeys(tenant, []string{"special-project"}, "special-project-id", "special-project-secret")
 	require.NoError(t, err, "Should add project-level credentials")
 
 	// Verify both levels exist

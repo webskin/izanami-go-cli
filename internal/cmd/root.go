@@ -15,7 +15,6 @@ var (
 	cfgFile            string
 	profileName        string
 	baseURL            string
-	clientBaseURL      string
 	tenant             string
 	project            string
 	contextPath        string
@@ -96,7 +95,7 @@ For more information, visit: https://github.com/MAIF/izanami`,
 		// Environment variables override profile settings but are overridden by flags
 		cfg.MergeWithFlags(izanami.FlagValues{
 			BaseURL:            getValueWithEnvFallback(baseURL, "IZ_BASE_URL"),
-			ClientBaseURL:      getValueWithEnvFallback(clientBaseURL, "IZ_CLIENT_BASE_URL"),
+			ClientBaseURL:      getValueWithEnvFallback("", "IZ_CLIENT_BASE_URL"),
 			ClientID:           getValueWithEnvFallback("", "IZ_CLIENT_ID"),
 			ClientSecret:       getValueWithEnvFallback("", "IZ_CLIENT_SECRET"),
 			Tenant:             getValueWithEnvFallback(tenant, "IZ_TENANT"),
@@ -139,7 +138,6 @@ func init() {
 	// Global flags
 	rootCmd.PersistentFlags().StringVarP(&profileName, "profile", "p", "", "Use specific profile (overrides active profile)")
 	rootCmd.PersistentFlags().StringVar(&baseURL, "url", "", "Izanami base URL (env: IZ_BASE_URL)")
-	rootCmd.PersistentFlags().StringVar(&clientBaseURL, "client-base-url", "", "Base URL for client operations (features/events) (env: IZ_CLIENT_BASE_URL)")
 	rootCmd.PersistentFlags().StringVar(&tenant, "tenant", "", "Default tenant (env: IZ_TENANT)")
 	rootCmd.PersistentFlags().StringVar(&project, "project", "", "Default project (env: IZ_PROJECT)")
 	rootCmd.PersistentFlags().StringVar(&contextPath, "context", "", "Default context path (env: IZ_CONTEXT)")

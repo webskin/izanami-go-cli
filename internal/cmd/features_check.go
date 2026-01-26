@@ -12,8 +12,9 @@ import (
 
 var (
 	// Client credentials (only used by check command)
-	checkClientID     string
-	checkClientSecret string
+	checkClientID      string
+	checkClientSecret  string
+	checkClientBaseURL string
 	// Bulk check parameters
 	checkFeatures   []string
 	checkProjects   []string
@@ -87,7 +88,7 @@ Examples:
 			projects = append(projects, cfg.Project)
 		}
 
-		resolveClientCredentials(cmd, cfg, checkClientID, checkClientSecret, projects)
+		resolveClientCredentials(cmd, cfg, checkClientID, checkClientSecret, checkClientBaseURL, projects)
 
 		ctx := context.Background()
 		featureIDOrName := args[0]
@@ -268,7 +269,7 @@ Examples:
 			projects = append(projects, cfg.Project)
 		}
 
-		resolveClientCredentials(cmd, cfg, checkClientID, checkClientSecret, projects)
+		resolveClientCredentials(cmd, cfg, checkClientID, checkClientSecret, checkClientBaseURL, projects)
 
 		// Validate that at least one filter is provided
 		if len(checkFeatures) == 0 && len(checkProjects) == 0 {
@@ -564,11 +565,11 @@ func resolveTagNames(ctx context.Context, client *izanami.AdminClient, tenant st
 }
 
 // resolveClientCredentials resolves client credentials with 3-tier precedence:
-// 1. Command-specific flags (--client-id/--client-secret)
-// 2. Environment variables (IZ_CLIENT_ID/IZ_CLIENT_SECRET) - already in cfg via viper
+// 1. Command-specific flags (--client-id/--client-secret/--client-base-url)
+// 2. Environment variables (IZ_CLIENT_ID/IZ_CLIENT_SECRET/IZ_CLIENT_BASE_URL) - already in cfg via viper
 // 3. Config file (client-keys section) - fallback if both are empty
 // Also resolves ClientBaseURL from client-keys if not already set.
-func resolveClientCredentials(cmd *cobra.Command, cfg *izanami.Config, flagClientID, flagClientSecret string, projects []string) {
+func resolveClientCredentials(cmd *cobra.Command, cfg *izanami.Config, flagClientID, flagClientSecret, flagClientBaseURL string, projects []string) {
 	// First, apply command-specific flags if provided
 	if flagClientID != "" {
 		cfg.ClientID = flagClientID
@@ -576,27 +577,23 @@ func resolveClientCredentials(cmd *cobra.Command, cfg *izanami.Config, flagClien
 	if flagClientSecret != "" {
 		cfg.ClientSecret = flagClientSecret
 	}
+	if flagClientBaseURL != "" {
+		cfg.ClientBaseURL = flagClientBaseURL
+	}
 
 	// If still empty, try to resolve from client-keys in config
 	if cfg.ClientID == "" && cfg.ClientSecret == "" {
 		tenant := cfg.Tenant
 
-		clientID, clientSecret, clientBaseURL := cfg.ResolveClientCredentials(tenant, projects)
+		clientID, clientSecret := cfg.ResolveClientCredentials(tenant, projects)
 		if clientID != "" && clientSecret != "" {
 			cfg.ClientID = clientID
 			cfg.ClientSecret = clientSecret
-			// Also set ClientBaseURL from client-keys if not already set
-			if cfg.ClientBaseURL == "" && clientBaseURL != "" {
-				cfg.ClientBaseURL = clientBaseURL
-			}
 			if cfg.Verbose {
 				if len(projects) > 0 {
 					fmt.Fprintf(cmd.OutOrStderr(), "Using client credentials from config (tenant: %s, projects: %v)\n", tenant, projects)
 				} else {
 					fmt.Fprintf(cmd.OutOrStderr(), "Using client credentials from config (tenant: %s)\n", tenant)
-				}
-				if cfg.ClientBaseURL != "" {
-					fmt.Fprintf(cmd.OutOrStderr(), "Using client base URL: %s\n", cfg.ClientBaseURL)
 				}
 			}
 		}
@@ -615,6 +612,7 @@ func init() {
 	// Project disambiguation uses global --project flag
 	featuresCheckCmd.Flags().StringVar(&checkClientID, "client-id", "", "Client ID for authentication (env: IZ_CLIENT_ID)")
 	featuresCheckCmd.Flags().StringVar(&checkClientSecret, "client-secret", "", "Client secret for authentication (env: IZ_CLIENT_SECRET)")
+	featuresCheckCmd.Flags().StringVar(&checkClientBaseURL, "client-base-url", "", "Base URL for client operations (env: IZ_CLIENT_BASE_URL)")
 	featuresCheckCmd.Flags().StringVar(&featureData, "data", "", "JSON payload for script features (from file with @file.json, stdin with -, or inline)")
 
 	// Bulk check flags
@@ -629,5 +627,6 @@ func init() {
 	featuresCheckBulkCmd.Flags().StringSliceVar(&checkNoTagIn, "no-tag-in", []string{}, "Tag IDs or names - features must not have any of these tags (comma-separated, names require --tenant)")
 	featuresCheckBulkCmd.Flags().StringVar(&checkClientID, "client-id", "", "Client ID for authentication (env: IZ_CLIENT_ID)")
 	featuresCheckBulkCmd.Flags().StringVar(&checkClientSecret, "client-secret", "", "Client secret for authentication (env: IZ_CLIENT_SECRET)")
+	featuresCheckBulkCmd.Flags().StringVar(&checkClientBaseURL, "client-base-url", "", "Base URL for client operations (env: IZ_CLIENT_BASE_URL)")
 	featuresCheckBulkCmd.Flags().StringVar(&featureData, "data", "", "JSON payload for script features (from file with @file.json, stdin with -, or inline)")
 }

@@ -103,13 +103,12 @@ func _TestClientKeysConfigMarshaling(t *testing.T) {
 // TestResolveClientCredentials tests the credential resolution logic
 func TestResolveClientCredentials(t *testing.T) {
 	tests := []struct {
-		name                  string
-		config                Config
-		tenant                string
-		projects              []string
-		expectedClientID      string
-		expectedSecret        string
-		expectedClientBaseURL string
+		name             string
+		config           Config
+		tenant           string
+		projects         []string
+		expectedClientID string
+		expectedSecret   string
 	}{
 		{
 			name: "tenant-level credentials",
@@ -121,28 +120,10 @@ func TestResolveClientCredentials(t *testing.T) {
 					},
 				},
 			},
-			tenant:                "tenant1",
-			projects:              nil,
-			expectedClientID:      "tenant1-id",
-			expectedSecret:        "tenant1-secret",
-			expectedClientBaseURL: "",
-		},
-		{
-			name: "tenant-level credentials with ClientBaseURL",
-			config: Config{
-				ClientKeys: map[string]TenantClientKeysConfig{
-					"tenant1": {
-						ClientID:      "tenant1-id",
-						ClientSecret:  "tenant1-secret",
-						ClientBaseURL: "http://client.example.com",
-					},
-				},
-			},
-			tenant:                "tenant1",
-			projects:              nil,
-			expectedClientID:      "tenant1-id",
-			expectedSecret:        "tenant1-secret",
-			expectedClientBaseURL: "http://client.example.com",
+			tenant:           "tenant1",
+			projects:         nil,
+			expectedClientID: "tenant1-id",
+			expectedSecret:   "tenant1-secret",
 		},
 		{
 			name: "project-level credentials override tenant",
@@ -160,34 +141,10 @@ func TestResolveClientCredentials(t *testing.T) {
 					},
 				},
 			},
-			tenant:                "tenant1",
-			projects:              []string{"project1"},
-			expectedClientID:      "proj1-id",
-			expectedSecret:        "proj1-secret",
-			expectedClientBaseURL: "",
-		},
-		{
-			name: "project-level credentials return tenant-level ClientBaseURL",
-			config: Config{
-				ClientKeys: map[string]TenantClientKeysConfig{
-					"tenant1": {
-						ClientID:      "tenant1-id",
-						ClientSecret:  "tenant1-secret",
-						ClientBaseURL: "http://client.example.com",
-						Projects: map[string]ProjectClientKeysConfig{
-							"project1": {
-								ClientID:     "proj1-id",
-								ClientSecret: "proj1-secret",
-							},
-						},
-					},
-				},
-			},
-			tenant:                "tenant1",
-			projects:              []string{"project1"},
-			expectedClientID:      "proj1-id",
-			expectedSecret:        "proj1-secret",
-			expectedClientBaseURL: "http://client.example.com",
+			tenant:           "tenant1",
+			projects:         []string{"project1"},
+			expectedClientID: "proj1-id",
+			expectedSecret:   "proj1-secret",
 		},
 		{
 			name: "project not found falls back to tenant",
@@ -205,11 +162,10 @@ func TestResolveClientCredentials(t *testing.T) {
 					},
 				},
 			},
-			tenant:                "tenant1",
-			projects:              []string{"nonexistent-project"},
-			expectedClientID:      "tenant1-id",
-			expectedSecret:        "tenant1-secret",
-			expectedClientBaseURL: "",
+			tenant:           "tenant1",
+			projects:         []string{"nonexistent-project"},
+			expectedClientID: "tenant1-id",
+			expectedSecret:   "tenant1-secret",
 		},
 		{
 			name: "multiple projects - first match wins",
@@ -231,11 +187,10 @@ func TestResolveClientCredentials(t *testing.T) {
 					},
 				},
 			},
-			tenant:                "tenant1",
-			projects:              []string{"project2", "project1"},
-			expectedClientID:      "proj2-id",
-			expectedSecret:        "proj2-secret",
-			expectedClientBaseURL: "",
+			tenant:           "tenant1",
+			projects:         []string{"project2", "project1"},
+			expectedClientID: "proj2-id",
+			expectedSecret:   "proj2-secret",
 		},
 		{
 			name: "tenant not found",
@@ -247,20 +202,18 @@ func TestResolveClientCredentials(t *testing.T) {
 					},
 				},
 			},
-			tenant:                "nonexistent",
-			projects:              nil,
-			expectedClientID:      "",
-			expectedSecret:        "",
-			expectedClientBaseURL: "",
+			tenant:           "nonexistent",
+			projects:         nil,
+			expectedClientID: "",
+			expectedSecret:   "",
 		},
 		{
-			name:                  "no client keys configured",
-			config:                Config{},
-			tenant:                "tenant1",
-			projects:              nil,
-			expectedClientID:      "",
-			expectedSecret:        "",
-			expectedClientBaseURL: "",
+			name:             "no client keys configured",
+			config:           Config{},
+			tenant:           "tenant1",
+			projects:         nil,
+			expectedClientID: "",
+			expectedSecret:   "",
 		},
 		{
 			name: "empty tenant",
@@ -272,11 +225,10 @@ func TestResolveClientCredentials(t *testing.T) {
 					},
 				},
 			},
-			tenant:                "",
-			projects:              nil,
-			expectedClientID:      "",
-			expectedSecret:        "",
-			expectedClientBaseURL: "",
+			tenant:           "",
+			projects:         nil,
+			expectedClientID: "",
+			expectedSecret:   "",
 		},
 		{
 			name: "incomplete project credentials falls back to tenant",
@@ -294,11 +246,10 @@ func TestResolveClientCredentials(t *testing.T) {
 					},
 				},
 			},
-			tenant:                "tenant1",
-			projects:              []string{"project1"},
-			expectedClientID:      "tenant1-id",
-			expectedSecret:        "tenant1-secret",
-			expectedClientBaseURL: "",
+			tenant:           "tenant1",
+			projects:         []string{"project1"},
+			expectedClientID: "tenant1-id",
+			expectedSecret:   "tenant1-secret",
 		},
 		{
 			name: "incomplete tenant credentials returns empty",
@@ -310,20 +261,18 @@ func TestResolveClientCredentials(t *testing.T) {
 					},
 				},
 			},
-			tenant:                "tenant1",
-			projects:              nil,
-			expectedClientID:      "",
-			expectedSecret:        "",
-			expectedClientBaseURL: "",
+			tenant:           "tenant1",
+			projects:         nil,
+			expectedClientID: "",
+			expectedSecret:   "",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			clientID, clientSecret, clientBaseURL := tt.config.ResolveClientCredentials(tt.tenant, tt.projects)
+			clientID, clientSecret := tt.config.ResolveClientCredentials(tt.tenant, tt.projects)
 			assert.Equal(t, tt.expectedClientID, clientID, "Client ID mismatch")
 			assert.Equal(t, tt.expectedSecret, clientSecret, "Client secret mismatch")
-			assert.Equal(t, tt.expectedClientBaseURL, clientBaseURL, "Client base URL mismatch")
 		})
 	}
 }
@@ -558,7 +507,7 @@ func _TestAddClientKeys(t *testing.T) {
 			configPath := filepath.Join(tempDir, "config.yaml")
 			os.Remove(configPath)
 
-			err := AddClientKeys(tt.tenant, tt.projects, tt.clientID, tt.clientSecret, "")
+			err := AddClientKeys(tt.tenant, tt.projects, tt.clientID, tt.clientSecret)
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -616,7 +565,7 @@ func _TestAddClientKeysOverwrite(t *testing.T) {
 	}
 
 	// Add initial credentials
-	err := AddClientKeys("tenant1", nil, "old-id", "old-secret", "")
+	err := AddClientKeys("tenant1", nil, "old-id", "old-secret")
 	require.NoError(t, err)
 
 	// Verify initial credentials
@@ -625,7 +574,7 @@ func _TestAddClientKeysOverwrite(t *testing.T) {
 	assert.Equal(t, "old-id", config.ClientKeys["tenant1"].ClientID)
 
 	// Overwrite with new credentials
-	err = AddClientKeys("tenant1", nil, "new-id", "new-secret", "")
+	err = AddClientKeys("tenant1", nil, "new-id", "new-secret")
 	require.NoError(t, err)
 
 	// Verify credentials were updated
@@ -677,11 +626,11 @@ func _TestAddClientKeysMultipleTenants(t *testing.T) {
 	}
 
 	// Add credentials for tenant1
-	err := AddClientKeys("tenant1", nil, "tenant1-id", "tenant1-secret", "")
+	err := AddClientKeys("tenant1", nil, "tenant1-id", "tenant1-secret")
 	require.NoError(t, err)
 
 	// Add credentials for tenant2
-	err = AddClientKeys("tenant2", nil, "tenant2-id", "tenant2-secret", "")
+	err = AddClientKeys("tenant2", nil, "tenant2-id", "tenant2-secret")
 	require.NoError(t, err)
 
 	// Verify both tenants have credentials
