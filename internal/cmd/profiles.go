@@ -1000,6 +1000,88 @@ Example:
 	},
 }
 
+// profileClientKeysDeleteCmd represents the profiles client-keys delete command
+var profileClientKeysDeleteCmd = &cobra.Command{
+	Use:   "delete <client-id>",
+	Short: "Delete client credentials from active profile",
+	Long: `Delete client credentials from the active profile.
+
+Requires --tenant to specify the tenant. Use --project to delete
+project-level credentials, otherwise deletes tenant-level credentials.
+
+Examples:
+  # Delete tenant-level credentials
+  iz profiles client-keys delete --tenant my-tenant my-client-id
+
+  # Delete project-level credentials
+  iz profiles client-keys delete --tenant my-tenant --project proj1 proj1-client-id`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		clientID := args[0]
+		tenant, _ := cmd.Flags().GetString("tenant")
+		project, _ := cmd.Flags().GetString("project")
+
+		// Get active profile
+		profileName, err := izanami.GetActiveProfileName()
+		if err != nil || profileName == "" {
+			return fmt.Errorf("no active profile. Use 'iz profiles use <name>' first")
+		}
+
+		profile, err := izanami.GetProfile(profileName)
+		if err != nil {
+			return err
+		}
+
+		// Check tenant exists
+		cfg, exists := profile.ClientKeys[tenant]
+		if !exists {
+			return fmt.Errorf("tenant '%s' not found in profile '%s'", tenant, profileName)
+		}
+
+		if project == "" {
+			// Delete tenant-level credentials
+			if cfg.ClientID != clientID {
+				return fmt.Errorf("client-id '%s' not found at tenant level for '%s'", clientID, tenant)
+			}
+			cfg.ClientID = ""
+			cfg.ClientSecret = ""
+			profile.ClientKeys[tenant] = cfg
+		} else {
+			// Delete project-level credentials
+			if cfg.Projects == nil {
+				return fmt.Errorf("project '%s' not found in tenant '%s'", project, tenant)
+			}
+			pcfg, exists := cfg.Projects[project]
+			if !exists {
+				return fmt.Errorf("project '%s' not found in tenant '%s'", project, tenant)
+			}
+			if pcfg.ClientID != clientID {
+				return fmt.Errorf("client-id '%s' not found for project '%s/%s'", clientID, tenant, project)
+			}
+			delete(cfg.Projects, project)
+			profile.ClientKeys[tenant] = cfg
+		}
+
+		// Clean up: remove tenant entry if empty
+		cfg = profile.ClientKeys[tenant]
+		if cfg.ClientID == "" && len(cfg.Projects) == 0 {
+			delete(profile.ClientKeys, tenant)
+		}
+
+		// Save profile
+		if err := izanami.AddProfile(profileName, profile); err != nil {
+			return fmt.Errorf("failed to save profile: %w", err)
+		}
+
+		if project == "" {
+			fmt.Fprintf(cmd.OutOrStdout(), "Deleted credentials for tenant '%s' (client-id: %s)\n", tenant, clientID)
+		} else {
+			fmt.Fprintf(cmd.OutOrStdout(), "Deleted credentials for project '%s/%s' (client-id: %s)\n", tenant, project, clientID)
+		}
+		return nil
+	},
+}
+
 func init() {
 	rootCmd.AddCommand(profileCmd)
 
@@ -1018,6 +1100,7 @@ func init() {
 	// Add client-keys subcommands
 	profileClientKeysCmd.AddCommand(profileClientKeysAddCmd)
 	profileClientKeysCmd.AddCommand(profileClientKeysListCmd)
+	profileClientKeysCmd.AddCommand(profileClientKeysDeleteCmd)
 
 	// Dynamic completion for profile keys (same keys for set/unset)
 	profileSetCmd.ValidArgsFunction = completeProfileKeys
@@ -1046,6 +1129,11 @@ func init() {
 
 	// Flags for client-keys list
 	profileClientKeysListCmd.Flags().Bool("show-secrets", false, "Show sensitive values (client secrets)")
+
+	// Flags for client-keys delete
+	profileClientKeysDeleteCmd.Flags().String("tenant", "", "Tenant name (required)")
+	profileClientKeysDeleteCmd.Flags().String("project", "", "Project name (optional, for project-level credentials)")
+	profileClientKeysDeleteCmd.MarkFlagRequired("tenant")
 }
 
 // printProfile prints profile details in a formatted way

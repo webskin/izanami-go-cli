@@ -28,12 +28,13 @@ func setupProfileCommand(buf *bytes.Buffer, input *bytes.Buffer, args []string) 
 		profileDeleteCmd.SetIn(input)
 		profileClientKeysAddCmd.SetIn(input)
 		profileClientKeysListCmd.SetIn(input)
+		profileClientKeysDeleteCmd.SetIn(input)
 	}
 	profileCmd.SetOut(buf)
 	profileCmd.SetErr(buf)
 	cmd.SetArgs(args)
 
-	// Return cleanup function to reset command streams
+	// Return cleanup function to reset command streams and flag state
 	cleanup := func() {
 		profileCmd.SetIn(nil)
 		profileCmd.SetOut(nil)
@@ -43,6 +44,10 @@ func setupProfileCommand(buf *bytes.Buffer, input *bytes.Buffer, args []string) 
 		profileDeleteCmd.SetIn(nil)
 		profileClientKeysAddCmd.SetIn(nil)
 		profileClientKeysListCmd.SetIn(nil)
+		profileClientKeysDeleteCmd.SetIn(nil)
+		// Reset flag values to prevent state leaking between tests
+		profileClientKeysDeleteCmd.Flags().Set("tenant", "")
+		profileClientKeysDeleteCmd.Flags().Set("project", "")
 	}
 
 	return cmd, cleanup
@@ -1173,4 +1178,289 @@ func TestProfileClientKeysListCmd_SortedOutput(t *testing.T) {
 
 	assert.True(t, alphaIdx < middleIdx, "alpha should appear before middle")
 	assert.True(t, middleIdx < zebraIdx, "middle should appear before zebra")
+}
+
+// TestProfileClientKeysDeleteCmd_TenantLevel tests deleting tenant-level credentials
+func TestProfileClientKeysDeleteCmd_TenantLevel(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	profiles := map[string]*izanami.Profile{
+		"test": {
+			BaseURL: "http://localhost:9000",
+			ClientKeys: map[string]izanami.TenantClientKeysConfig{
+				"my-tenant": {
+					ClientID:     "tenant-client-id",
+					ClientSecret: "tenant-secret",
+					Projects: map[string]izanami.ProjectClientKeysConfig{
+						"proj1": {
+							ClientID:     "proj1-client-id",
+							ClientSecret: "proj1-secret",
+						},
+					},
+				},
+			},
+		},
+	}
+	createTestConfig(t, paths.configPath, profiles, "test")
+
+	var buf bytes.Buffer
+	cmd, cleanup := setupProfileCommand(&buf, nil, []string{"profiles", "client-keys", "delete", "--tenant", "my-tenant", "tenant-client-id"})
+	defer cleanup()
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	output := buf.String()
+	assert.Contains(t, output, "Deleted credentials for tenant 'my-tenant'")
+	assert.Contains(t, output, "tenant-client-id")
+
+	// Verify tenant-level credentials were deleted but project-level remain
+	data, err := os.ReadFile(paths.configPath)
+	require.NoError(t, err)
+	var config map[string]interface{}
+	yaml.Unmarshal(data, &config)
+	profilesMap := config["profiles"].(map[string]interface{})
+	profile := profilesMap["test"].(map[string]interface{})
+	clientKeys := profile["client-keys"].(map[string]interface{})
+	tenantConfig := clientKeys["my-tenant"].(map[string]interface{})
+
+	// Tenant-level should be cleared
+	_, hasClientID := tenantConfig["client-id"]
+	assert.False(t, hasClientID, "Tenant client-id should be deleted")
+
+	// Project-level should remain
+	projects := tenantConfig["projects"].(map[string]interface{})
+	proj1 := projects["proj1"].(map[string]interface{})
+	assert.Equal(t, "proj1-client-id", proj1["client-id"])
+}
+
+// TestProfileClientKeysDeleteCmd_ProjectLevel tests deleting project-level credentials
+func TestProfileClientKeysDeleteCmd_ProjectLevel(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	profiles := map[string]*izanami.Profile{
+		"test": {
+			BaseURL: "http://localhost:9000",
+			ClientKeys: map[string]izanami.TenantClientKeysConfig{
+				"my-tenant": {
+					ClientID:     "tenant-client-id",
+					ClientSecret: "tenant-secret",
+					Projects: map[string]izanami.ProjectClientKeysConfig{
+						"proj1": {
+							ClientID:     "proj1-client-id",
+							ClientSecret: "proj1-secret",
+						},
+						"proj2": {
+							ClientID:     "proj2-client-id",
+							ClientSecret: "proj2-secret",
+						},
+					},
+				},
+			},
+		},
+	}
+	createTestConfig(t, paths.configPath, profiles, "test")
+
+	var buf bytes.Buffer
+	cmd, cleanup := setupProfileCommand(&buf, nil, []string{"profiles", "client-keys", "delete", "--tenant", "my-tenant", "--project", "proj1", "proj1-client-id"})
+	defer cleanup()
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	output := buf.String()
+	assert.Contains(t, output, "Deleted credentials for project 'my-tenant/proj1'")
+	assert.Contains(t, output, "proj1-client-id")
+
+	// Verify proj1 was deleted but proj2 and tenant-level remain
+	data, err := os.ReadFile(paths.configPath)
+	require.NoError(t, err)
+	var config map[string]interface{}
+	yaml.Unmarshal(data, &config)
+	profilesMap := config["profiles"].(map[string]interface{})
+	profile := profilesMap["test"].(map[string]interface{})
+	clientKeys := profile["client-keys"].(map[string]interface{})
+	tenantConfig := clientKeys["my-tenant"].(map[string]interface{})
+
+	// Tenant-level should remain
+	assert.Equal(t, "tenant-client-id", tenantConfig["client-id"])
+
+	// proj1 should be deleted, proj2 should remain
+	projects := tenantConfig["projects"].(map[string]interface{})
+	_, hasProj1 := projects["proj1"]
+	assert.False(t, hasProj1, "proj1 should be deleted")
+	proj2 := projects["proj2"].(map[string]interface{})
+	assert.Equal(t, "proj2-client-id", proj2["client-id"])
+}
+
+// TestProfileClientKeysDeleteCmd_TenantNotFound tests error when tenant doesn't exist
+func TestProfileClientKeysDeleteCmd_TenantNotFound(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	profiles := map[string]*izanami.Profile{
+		"test": {
+			BaseURL: "http://localhost:9000",
+			ClientKeys: map[string]izanami.TenantClientKeysConfig{
+				"existing-tenant": {
+					ClientID:     "client-id",
+					ClientSecret: "secret",
+				},
+			},
+		},
+	}
+	createTestConfig(t, paths.configPath, profiles, "test")
+
+	var buf bytes.Buffer
+	cmd, cleanup := setupProfileCommand(&buf, nil, []string{"profiles", "client-keys", "delete", "--tenant", "nonexistent", "some-client-id"})
+	defer cleanup()
+
+	err := cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "tenant 'nonexistent' not found")
+}
+
+// TestProfileClientKeysDeleteCmd_ClientIdMismatch tests error when client-id doesn't match
+func TestProfileClientKeysDeleteCmd_ClientIdMismatch(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	profiles := map[string]*izanami.Profile{
+		"test": {
+			BaseURL: "http://localhost:9000",
+			ClientKeys: map[string]izanami.TenantClientKeysConfig{
+				"my-tenant": {
+					ClientID:     "actual-client-id",
+					ClientSecret: "secret",
+				},
+			},
+		},
+	}
+	createTestConfig(t, paths.configPath, profiles, "test")
+
+	var buf bytes.Buffer
+	cmd, cleanup := setupProfileCommand(&buf, nil, []string{"profiles", "client-keys", "delete", "--tenant", "my-tenant", "wrong-client-id"})
+	defer cleanup()
+
+	err := cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "client-id 'wrong-client-id' not found at tenant level")
+}
+
+// TestProfileClientKeysDeleteCmd_NoActiveProfile tests error when no active profile
+func TestProfileClientKeysDeleteCmd_NoActiveProfile(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	createTestConfig(t, paths.configPath, nil, "")
+
+	var buf bytes.Buffer
+	cmd, cleanup := setupProfileCommand(&buf, nil, []string{"profiles", "client-keys", "delete", "--tenant", "my-tenant", "client-id"})
+	defer cleanup()
+
+	err := cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no active profile")
+}
+
+// TestProfileClientKeysDeleteCmd_CleanupEmptyTenant tests that empty tenant is removed after deletion
+func TestProfileClientKeysDeleteCmd_CleanupEmptyTenant(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	// Profile with only tenant-level credentials (no projects)
+	profiles := map[string]*izanami.Profile{
+		"test": {
+			BaseURL: "http://localhost:9000",
+			ClientKeys: map[string]izanami.TenantClientKeysConfig{
+				"my-tenant": {
+					ClientID:     "client-id",
+					ClientSecret: "secret",
+				},
+			},
+		},
+	}
+	createTestConfig(t, paths.configPath, profiles, "test")
+
+	var buf bytes.Buffer
+	cmd, cleanup := setupProfileCommand(&buf, nil, []string{"profiles", "client-keys", "delete", "--tenant", "my-tenant", "client-id"})
+	defer cleanup()
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	// Verify the entire tenant entry was removed (since it's now empty)
+	data, err := os.ReadFile(paths.configPath)
+	require.NoError(t, err)
+	var config map[string]interface{}
+	yaml.Unmarshal(data, &config)
+	profilesMap := config["profiles"].(map[string]interface{})
+	profile := profilesMap["test"].(map[string]interface{})
+
+	// client-keys should either be nil or not contain "my-tenant"
+	clientKeys, hasClientKeys := profile["client-keys"].(map[string]interface{})
+	if hasClientKeys {
+		_, hasTenant := clientKeys["my-tenant"]
+		assert.False(t, hasTenant, "Empty tenant should be removed from client-keys")
+	}
+}
+
+// TestProfileClientKeysDeleteCmd_ProjectNotFound tests error when project doesn't exist
+func TestProfileClientKeysDeleteCmd_ProjectNotFound(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	profiles := map[string]*izanami.Profile{
+		"test": {
+			BaseURL: "http://localhost:9000",
+			ClientKeys: map[string]izanami.TenantClientKeysConfig{
+				"my-tenant": {
+					ClientID:     "tenant-client-id",
+					ClientSecret: "secret",
+				},
+			},
+		},
+	}
+	createTestConfig(t, paths.configPath, profiles, "test")
+
+	var buf bytes.Buffer
+	cmd, cleanup := setupProfileCommand(&buf, nil, []string{"profiles", "client-keys", "delete", "--tenant", "my-tenant", "--project", "nonexistent-project", "some-client-id"})
+	defer cleanup()
+
+	err := cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "project 'nonexistent-project' not found")
+}
+
+// TestProfileClientKeysDeleteCmd_ProjectClientIdMismatch tests error when project client-id doesn't match
+func TestProfileClientKeysDeleteCmd_ProjectClientIdMismatch(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	profiles := map[string]*izanami.Profile{
+		"test": {
+			BaseURL: "http://localhost:9000",
+			ClientKeys: map[string]izanami.TenantClientKeysConfig{
+				"my-tenant": {
+					Projects: map[string]izanami.ProjectClientKeysConfig{
+						"proj1": {
+							ClientID:     "actual-proj-client-id",
+							ClientSecret: "secret",
+						},
+					},
+				},
+			},
+		},
+	}
+	createTestConfig(t, paths.configPath, profiles, "test")
+
+	var buf bytes.Buffer
+	cmd, cleanup := setupProfileCommand(&buf, nil, []string{"profiles", "client-keys", "delete", "--tenant", "my-tenant", "--project", "proj1", "wrong-client-id"})
+	defer cleanup()
+
+	err := cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "client-id 'wrong-client-id' not found for project 'my-tenant/proj1'")
 }
