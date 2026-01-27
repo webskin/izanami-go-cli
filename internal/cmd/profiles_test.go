@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -26,6 +27,7 @@ func setupProfileCommand(buf *bytes.Buffer, input *bytes.Buffer, args []string) 
 		profileInitCmd.SetIn(input)
 		profileDeleteCmd.SetIn(input)
 		profileClientKeysAddCmd.SetIn(input)
+		profileClientKeysListCmd.SetIn(input)
 	}
 	profileCmd.SetOut(buf)
 	profileCmd.SetErr(buf)
@@ -40,6 +42,7 @@ func setupProfileCommand(buf *bytes.Buffer, input *bytes.Buffer, args []string) 
 		profileInitCmd.SetIn(nil)
 		profileDeleteCmd.SetIn(nil)
 		profileClientKeysAddCmd.SetIn(nil)
+		profileClientKeysListCmd.SetIn(nil)
 	}
 
 	return cmd, cleanup
@@ -940,4 +943,234 @@ func TestProfileClientKeysAddCmd_MissingTenant(t *testing.T) {
 	require.Error(t, err)
 	// The error should be about missing tenant flag or reading client ID
 	// (Command tries to read input which will fail or require flag check)
+}
+
+// TestProfileClientKeysListCmd_NoKeys tests listing when no client keys exist
+func TestProfileClientKeysListCmd_NoKeys(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	profiles := map[string]*izanami.Profile{
+		"test": {BaseURL: "http://localhost:9000"},
+	}
+	createTestConfig(t, paths.configPath, profiles, "test")
+
+	var buf bytes.Buffer
+	cmd, cleanup := setupProfileCommand(&buf, nil, []string{"profiles", "client-keys", "list"})
+	defer cleanup()
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	output := buf.String()
+	assert.Contains(t, output, "No client keys configured")
+	assert.Contains(t, output, "iz profiles client-keys add --tenant")
+}
+
+// TestProfileClientKeysListCmd_NoActiveProfile tests listing without active profile
+func TestProfileClientKeysListCmd_NoActiveProfile(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	createTestConfig(t, paths.configPath, nil, "")
+
+	var buf bytes.Buffer
+	cmd, cleanup := setupProfileCommand(&buf, nil, []string{"profiles", "client-keys", "list"})
+	defer cleanup()
+
+	err := cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no active profile")
+}
+
+// TestProfileClientKeysListCmd_WithKeys tests listing with client keys configured
+func TestProfileClientKeysListCmd_WithKeys(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	profiles := map[string]*izanami.Profile{
+		"test": {
+			BaseURL: "http://localhost:9000",
+			ClientKeys: map[string]izanami.TenantClientKeysConfig{
+				"tenant1": {
+					ClientID:     "client-id-1",
+					ClientSecret: "secret-1",
+				},
+				"tenant2": {
+					ClientID:     "client-id-2",
+					ClientSecret: "secret-2",
+					Projects: map[string]izanami.ProjectClientKeysConfig{
+						"proj1": {
+							ClientID:     "proj1-client-id",
+							ClientSecret: "proj1-secret",
+						},
+					},
+				},
+			},
+		},
+	}
+	createTestConfig(t, paths.configPath, profiles, "test")
+
+	var buf bytes.Buffer
+	cmd, cleanup := setupProfileCommand(&buf, nil, []string{"profiles", "client-keys", "list"})
+	defer cleanup()
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	output := buf.String()
+
+	// Check headers
+	assert.Contains(t, output, "TENANT")
+	assert.Contains(t, output, "SCOPE")
+	assert.Contains(t, output, "CLIENT-ID")
+	assert.Contains(t, output, "CLIENT-SECRET")
+
+	// Check tenant-level entries
+	assert.Contains(t, output, "tenant1")
+	assert.Contains(t, output, "tenant2")
+	assert.Contains(t, output, "client-id-1")
+	assert.Contains(t, output, "client-id-2")
+	assert.Contains(t, output, "(tenant)")
+
+	// Check project-level entries
+	assert.Contains(t, output, "proj1")
+	assert.Contains(t, output, "proj1-client-id")
+
+	// Secrets should be redacted by default
+	assert.Contains(t, output, "<redacted>")
+	assert.NotContains(t, output, "secret-1")
+	assert.NotContains(t, output, "secret-2")
+	assert.NotContains(t, output, "proj1-secret")
+
+	t.Logf("Client keys list output:\n%s", output)
+}
+
+// TestProfileClientKeysListCmd_ShowSecrets tests --show-secrets flag
+func TestProfileClientKeysListCmd_ShowSecrets(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	profiles := map[string]*izanami.Profile{
+		"test": {
+			BaseURL: "http://localhost:9000",
+			ClientKeys: map[string]izanami.TenantClientKeysConfig{
+				"tenant1": {
+					ClientID:     "client-id-1",
+					ClientSecret: "secret-value-1",
+				},
+			},
+		},
+	}
+	createTestConfig(t, paths.configPath, profiles, "test")
+
+	var buf bytes.Buffer
+	cmd, cleanup := setupProfileCommand(&buf, nil, []string{"profiles", "client-keys", "list", "--show-secrets"})
+	defer cleanup()
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	output := buf.String()
+
+	// Secrets should be shown
+	assert.Contains(t, output, "secret-value-1")
+	assert.NotContains(t, output, "<redacted>")
+
+	t.Logf("Client keys list (show secrets) output:\n%s", output)
+}
+
+// TestProfileClientKeysListCmd_ProjectOnlyCredentials tests listing with only project-level credentials
+func TestProfileClientKeysListCmd_ProjectOnlyCredentials(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	// Create profile with only project-level credentials (no tenant-level)
+	profiles := map[string]*izanami.Profile{
+		"test": {
+			BaseURL: "http://localhost:9000",
+			ClientKeys: map[string]izanami.TenantClientKeysConfig{
+				"my-tenant": {
+					// No ClientID/ClientSecret at tenant level
+					Projects: map[string]izanami.ProjectClientKeysConfig{
+						"proj1": {
+							ClientID:     "proj1-client-id",
+							ClientSecret: "proj1-secret",
+						},
+						"proj2": {
+							ClientID:     "proj2-client-id",
+							ClientSecret: "proj2-secret",
+						},
+					},
+				},
+			},
+		},
+	}
+	createTestConfig(t, paths.configPath, profiles, "test")
+
+	var buf bytes.Buffer
+	cmd, cleanup := setupProfileCommand(&buf, nil, []string{"profiles", "client-keys", "list"})
+	defer cleanup()
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	output := buf.String()
+
+	// Tenant name should appear on every row
+	assert.Contains(t, output, "my-tenant")
+	assert.Contains(t, output, "proj1")
+	assert.Contains(t, output, "proj2")
+	assert.Contains(t, output, "proj1-client-id")
+	assert.Contains(t, output, "proj2-client-id")
+	// Should NOT show "(tenant)" scope since there's no tenant-level credential
+	assert.NotContains(t, output, "(tenant)")
+	// Count occurrences of "my-tenant" - should appear twice (once per project)
+	assert.Equal(t, 2, strings.Count(output, "my-tenant"), "Tenant name should appear on every row")
+
+	t.Logf("Client keys list (project-only) output:\n%s", output)
+}
+
+// TestProfileClientKeysListCmd_SortedOutput tests that output is sorted alphabetically
+func TestProfileClientKeysListCmd_SortedOutput(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	profiles := map[string]*izanami.Profile{
+		"test": {
+			BaseURL: "http://localhost:9000",
+			ClientKeys: map[string]izanami.TenantClientKeysConfig{
+				"zebra": {
+					ClientID:     "zebra-id",
+					ClientSecret: "secret",
+				},
+				"alpha": {
+					ClientID:     "alpha-id",
+					ClientSecret: "secret",
+				},
+				"middle": {
+					ClientID:     "middle-id",
+					ClientSecret: "secret",
+				},
+			},
+		},
+	}
+	createTestConfig(t, paths.configPath, profiles, "test")
+
+	var buf bytes.Buffer
+	cmd, cleanup := setupProfileCommand(&buf, nil, []string{"profiles", "client-keys", "list"})
+	defer cleanup()
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	output := buf.String()
+
+	// Verify order: alpha should come before middle, middle before zebra
+	alphaIdx := len(output) - len(output[strings.Index(output, "alpha"):])
+	middleIdx := len(output) - len(output[strings.Index(output, "middle"):])
+	zebraIdx := len(output) - len(output[strings.Index(output, "zebra"):])
+
+	assert.True(t, alphaIdx < middleIdx, "alpha should appear before middle")
+	assert.True(t, middleIdx < zebraIdx, "middle should appear before zebra")
 }

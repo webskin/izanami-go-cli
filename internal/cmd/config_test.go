@@ -184,7 +184,7 @@ func TestConfigListCmd_WithActiveProfile(t *testing.T) {
 	// Should show helpful footer
 	assert.Contains(t, output, "iz config set", "Should show config set hint")
 	assert.Contains(t, output, "iz profiles set", "Should show profiles set hint")
-	assert.Contains(t, output, "iz profiles client-keys add", "Should show client-keys hint")
+	assert.Contains(t, output, "iz profiles client-keys list|add", "Should show client-keys hint")
 	assert.Contains(t, output, "iz profiles show sandbox", "Should show profiles show hint")
 
 	t.Logf("Config list (with profile) output:\n%s", output)
@@ -239,7 +239,6 @@ func TestConfigListCmd_SensitiveValuesRedacted(t *testing.T) {
 	profiles := map[string]*izanami.Profile{
 		"test": {
 			BaseURL:             "http://localhost:9000",
-			ClientSecret:        "super-secret-value",
 			PersonalAccessToken: "my-personal-token",
 		},
 	}
@@ -256,7 +255,6 @@ func TestConfigListCmd_SensitiveValuesRedacted(t *testing.T) {
 
 	// Sensitive values should be redacted
 	assert.Contains(t, output, "<redacted>", "Should show redacted for sensitive values")
-	assert.NotContains(t, output, "super-secret-value", "Should NOT show client-secret value")
 	assert.NotContains(t, output, "my-personal-token", "Should NOT show personal-access-token value")
 
 	t.Logf("Config list (secrets redacted) output:\n%s", output)
@@ -271,7 +269,6 @@ func TestConfigListCmd_ShowSecrets(t *testing.T) {
 	profiles := map[string]*izanami.Profile{
 		"test": {
 			BaseURL:             "http://localhost:9000",
-			ClientSecret:        "super-secret-value",
 			PersonalAccessToken: "my-personal-token",
 		},
 	}
@@ -287,11 +284,83 @@ func TestConfigListCmd_ShowSecrets(t *testing.T) {
 	output := buf.String()
 
 	// Sensitive values should be shown
-	assert.Contains(t, output, "super-secret-value", "Should show client-secret value with --show-secrets")
 	assert.Contains(t, output, "my-personal-token", "Should show personal-access-token value with --show-secrets")
 	assert.NotContains(t, output, "<redacted>", "Should NOT show redacted with --show-secrets")
 
 	t.Logf("Config list (show secrets) output:\n%s", output)
+}
+
+// TestConfigListCmd_BaseURLFromSession tests that base-url is resolved from session
+func TestConfigListCmd_BaseURLFromSession(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	// Create session with URL
+	sessions := map[string]*izanami.Session{
+		"my-session": {
+			URL:      "http://session-url.example.com",
+			Username: "testuser",
+		},
+	}
+	createTestSessions(t, paths.sessionsPath, sessions)
+
+	// Create profile that references session but has no base-url
+	profiles := map[string]*izanami.Profile{
+		"test": {
+			Session: "my-session",
+			Tenant:  "test-tenant",
+		},
+	}
+	createConfigTestFile(t, paths.configPath, profiles, "test")
+
+	var buf bytes.Buffer
+	cmd, cleanup := setupConfigCommand(&buf, nil, []string{"config", "list"})
+	defer cleanup()
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	output := buf.String()
+
+	// Should show URL from session and source as "session"
+	assert.Contains(t, output, "http://session-url.example.com", "Should show base-url from session")
+	assert.Contains(t, output, "session", "Should show 'session' as source for base-url")
+	assert.Contains(t, output, "my-session", "Should show session name")
+
+	t.Logf("Config list (base-url from session) output:\n%s", output)
+}
+
+// TestConfigListCmd_NoClientIdClientSecret tests that client-id and client-secret are not shown
+func TestConfigListCmd_NoClientIdClientSecret(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	// Create config with client-id and client-secret (these are legacy fields)
+	profiles := map[string]*izanami.Profile{
+		"test": {
+			BaseURL:      "http://localhost:9000",
+			ClientID:     "legacy-client-id",
+			ClientSecret: "legacy-client-secret",
+		},
+	}
+	createConfigTestFile(t, paths.configPath, profiles, "test")
+
+	var buf bytes.Buffer
+	cmd, cleanup := setupConfigCommand(&buf, nil, []string{"config", "list"})
+	defer cleanup()
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	output := buf.String()
+
+	// client-id and client-secret should NOT be shown in config list
+	// (they are legacy fields, client-keys is preferred)
+	assert.NotContains(t, output, "client-id\t", "Should NOT show client-id row")
+	assert.NotContains(t, output, "legacy-client-id", "Should NOT show client-id value")
+	assert.NotContains(t, output, "client-secret\t", "Should NOT show client-secret row")
+
+	t.Logf("Config list (no client-id/client-secret) output:\n%s", output)
 }
 
 // TestFormatClientKeysCount tests the formatClientKeysCount helper function

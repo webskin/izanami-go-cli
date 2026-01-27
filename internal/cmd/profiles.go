@@ -912,6 +912,94 @@ Security:
 	},
 }
 
+// profileClientKeysListCmd represents the profiles client-keys list command
+var profileClientKeysListCmd = &cobra.Command{
+	Use:   "list",
+	Short: "List client credentials in active profile",
+	Long: `List all client API credentials stored in the active profile.
+
+Shows credentials organized by tenant, with project-specific overrides indented.
+Credentials are redacted by default; use --show-secrets to display them.
+
+Example:
+  iz profiles client-keys list
+  iz profiles client-keys list --show-secrets`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		showSecrets, _ := cmd.Flags().GetBool("show-secrets")
+
+		// Get active profile
+		profileName, err := izanami.GetActiveProfileName()
+		if err != nil || profileName == "" {
+			return fmt.Errorf("no active profile. Use 'iz profiles use <name>' first")
+		}
+
+		profile, err := izanami.GetProfile(profileName)
+		if err != nil {
+			return err
+		}
+
+		if len(profile.ClientKeys) == 0 {
+			fmt.Fprintln(cmd.OutOrStdout(), "No client keys configured in profile '"+profileName+"'")
+			fmt.Fprintln(cmd.OutOrStdout(), "\nTo add client keys: iz profiles client-keys add --tenant <tenant>")
+			return nil
+		}
+
+		// Build table
+		table := tablewriter.NewWriter(cmd.OutOrStdout())
+		table.SetHeader([]string{"TENANT", "SCOPE", "CLIENT-ID", "CLIENT-SECRET"})
+		table.SetBorder(false)
+		table.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
+		table.SetAlignment(tablewriter.ALIGN_LEFT)
+		table.SetCenterSeparator("")
+		table.SetColumnSeparator("")
+		table.SetRowSeparator("")
+		table.SetHeaderLine(false)
+		table.SetTablePadding("\t")
+		table.SetNoWhiteSpace(true)
+
+		// Sort tenant names for consistent output
+		tenants := make([]string, 0, len(profile.ClientKeys))
+		for t := range profile.ClientKeys {
+			tenants = append(tenants, t)
+		}
+		sort.Strings(tenants)
+
+		for _, tenant := range tenants {
+			cfg := profile.ClientKeys[tenant]
+			secret := cfg.ClientSecret
+			if !showSecrets && secret != "" {
+				secret = izanami.RedactedValue
+			}
+
+			// Tenant-level row (if tenant has credentials at tenant level)
+			if cfg.ClientID != "" {
+				table.Append([]string{tenant, "(tenant)", cfg.ClientID, secret})
+			}
+
+			// Project-level rows
+			if cfg.Projects != nil {
+				projects := make([]string, 0, len(cfg.Projects))
+				for p := range cfg.Projects {
+					projects = append(projects, p)
+				}
+				sort.Strings(projects)
+
+				for _, proj := range projects {
+					pcfg := cfg.Projects[proj]
+					psecret := pcfg.ClientSecret
+					if !showSecrets && psecret != "" {
+						psecret = izanami.RedactedValue
+					}
+					table.Append([]string{tenant, proj, pcfg.ClientID, psecret})
+				}
+			}
+		}
+
+		table.Render()
+		return nil
+	},
+}
+
 func init() {
 	rootCmd.AddCommand(profileCmd)
 
@@ -929,6 +1017,7 @@ func init() {
 
 	// Add client-keys subcommands
 	profileClientKeysCmd.AddCommand(profileClientKeysAddCmd)
+	profileClientKeysCmd.AddCommand(profileClientKeysListCmd)
 
 	// Dynamic completion for profile keys (same keys for set/unset)
 	profileSetCmd.ValidArgsFunction = completeProfileKeys
@@ -954,6 +1043,9 @@ func init() {
 	profileClientKeysAddCmd.Flags().String("tenant", "", "Tenant name (required)")
 	profileClientKeysAddCmd.Flags().StringSlice("projects", []string{}, "Project names (comma-separated)")
 	profileClientKeysAddCmd.MarkFlagRequired("tenant")
+
+	// Flags for client-keys list
+	profileClientKeysListCmd.Flags().Bool("show-secrets", false, "Show sensitive values (client secrets)")
 }
 
 // printProfile prints profile details in a formatted way

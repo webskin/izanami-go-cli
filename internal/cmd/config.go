@@ -315,31 +315,48 @@ Use --show-secrets to display sensitive values.`,
 		profileTable.SetTablePadding("\t")
 		profileTable.SetNoWhiteSpace(true)
 
+		// Resolve base-url from session if profile has Session but no BaseURL
+		baseURL := profile.BaseURL
+		baseURLSource := "profile"
+		if baseURL == "" && profile.Session != "" {
+			sessions, err := izanami.LoadSessions()
+			if err == nil {
+				sessionData, err := sessions.GetSession(profile.Session)
+				if err == nil && sessionData.URL != "" {
+					baseURL = sessionData.URL
+					baseURLSource = "session"
+				}
+			}
+		}
+
 		// Define profile settings to display (in order)
+		// Note: client-id and client-secret are removed - use client-keys instead
 		type profileSetting struct {
-			key         string
-			value       string
-			isSensitive bool
+			key          string
+			value        string
+			source       string // optional source override (empty = use default logic)
+			isSensitive  bool
 		}
 
 		settings := []profileSetting{
-			{"base-url", profile.BaseURL, false},
-			{"client-base-url", profile.ClientBaseURL, false},
-			{"session", profile.Session, false},
-			{"client-id", profile.ClientID, false},
-			{"client-secret", profile.ClientSecret, true},
-			{"client-keys", formatClientKeysCount(profile.ClientKeys), false},
-			{"tenant", profile.Tenant, false},
-			{"project", profile.Project, false},
-			{"context", profile.Context, false},
-			{"personal-access-token", profile.PersonalAccessToken, true},
-			{"personal-access-token-username", profile.PersonalAccessTokenUsername, false},
+			{"base-url", baseURL, baseURLSource, false},
+			{"client-base-url", profile.ClientBaseURL, "", false},
+			{"session", profile.Session, "", false},
+			{"client-keys", formatClientKeysCount(profile.ClientKeys), "", false},
+			{"tenant", profile.Tenant, "", false},
+			{"project", profile.Project, "", false},
+			{"context", profile.Context, "", false},
+			{"personal-access-token", profile.PersonalAccessToken, "", true},
+			{"personal-access-token-username", profile.PersonalAccessTokenUsername, "", false},
 		}
 
 		// Add profile settings to table
 		for _, setting := range settings {
 			value := setting.value
-			source := "profile"
+			source := setting.source
+			if source == "" {
+				source = "profile"
+			}
 
 			// Redact sensitive values unless --show-secrets is set
 			if setting.isSensitive && !showSecrets && value != "" {
@@ -361,7 +378,7 @@ Use --show-secrets to display sensitive values.`,
 		fmt.Fprintln(cmd.OutOrStdout())
 		fmt.Fprintln(cmd.OutOrStdout(), "To change global settings:     iz config set <key> <value>")
 		fmt.Fprintln(cmd.OutOrStdout(), "To change profile settings:    iz profiles set <key> <value>")
-		fmt.Fprintln(cmd.OutOrStdout(), "To manage client keys:         iz profiles client-keys add")
+		fmt.Fprintln(cmd.OutOrStdout(), "To manage client keys:         iz profiles client-keys list|add")
 		fmt.Fprintf(cmd.OutOrStdout(), "To view full profile details:  iz profiles show %s\n", profileName)
 
 		return nil
