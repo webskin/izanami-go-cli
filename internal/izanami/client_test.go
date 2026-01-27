@@ -282,3 +282,123 @@ func TestClient_StructuredLogger(t *testing.T) {
 	// With verbose mode enabled, structured logger should be called
 	assert.True(t, logCalled)
 }
+
+func TestNewAdminClientNoAuth(t *testing.T) {
+	t.Run("valid config without auth", func(t *testing.T) {
+		config := &Config{
+			BaseURL: "http://localhost:9000",
+			Timeout: 30,
+		}
+
+		client, err := NewAdminClientNoAuth(config)
+
+		require.NoError(t, err)
+		assert.NotNil(t, client)
+	})
+
+	t.Run("missing base URL returns error", func(t *testing.T) {
+		config := &Config{
+			Timeout: 30,
+		}
+
+		client, err := NewAdminClientNoAuth(config)
+
+		assert.Error(t, err)
+		assert.Nil(t, client)
+		assert.Contains(t, err.Error(), "base URL")
+	})
+
+	t.Run("can make health check without auth", func(t *testing.T) {
+		server := mockServer(t, func(w http.ResponseWriter, r *http.Request) {
+			// Verify no auth headers are required
+			assert.Empty(t, r.Header.Get("Authorization"))
+			assert.Empty(t, r.Header.Get("Cookie"))
+
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(HealthStatus{
+				Database: true,
+				Status:   "UP",
+				Version:  "1.0.0",
+			})
+		})
+		defer server.Close()
+
+		config := &Config{
+			BaseURL: server.URL,
+			Timeout: 30,
+		}
+
+		client, err := NewAdminClientNoAuth(config)
+		require.NoError(t, err)
+
+		ctx := context.Background()
+		health, err := Health(client, ctx, ParseHealthStatus)
+
+		require.NoError(t, err)
+		assert.True(t, health.Database)
+		assert.Equal(t, "UP", health.Status)
+	})
+}
+
+func TestAPIError_Error(t *testing.T) {
+	tests := []struct {
+		name       string
+		apiError   APIError
+		wantString string
+	}{
+		{
+			name: "formats with status code and message",
+			apiError: APIError{
+				StatusCode: 404,
+				Message:    "Feature not found",
+				RawBody:    `{"message":"Feature not found"}`,
+			},
+			wantString: "API error (404): Feature not found",
+		},
+		{
+			name: "handles 401 unauthorized",
+			apiError: APIError{
+				StatusCode: 401,
+				Message:    "Invalid credentials",
+				RawBody:    "",
+			},
+			wantString: "API error (401): Invalid credentials",
+		},
+		{
+			name: "handles 500 server error",
+			apiError: APIError{
+				StatusCode: 500,
+				Message:    "Internal server error",
+				RawBody:    "Internal server error",
+			},
+			wantString: "API error (500): Internal server error",
+		},
+		{
+			name: "handles empty message",
+			apiError: APIError{
+				StatusCode: 400,
+				Message:    "",
+				RawBody:    "",
+			},
+			wantString: "API error (400): ",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.apiError.Error()
+			assert.Equal(t, tt.wantString, got)
+		})
+	}
+}
+
+func TestAPIError_Interface(t *testing.T) {
+	// Verify APIError implements error interface
+	var err error = &APIError{
+		StatusCode: 404,
+		Message:    "Not found",
+	}
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "404")
+}

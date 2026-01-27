@@ -239,3 +239,53 @@ func TestClient_DeleteAPIKey(t *testing.T) {
 
 	assert.NoError(t, err)
 }
+
+func TestClient_ListAPIKeyUsers(t *testing.T) {
+	expectedUsers := []KeyScopedUser{
+		{
+			Username:    "user1",
+			Email:       "user1@example.com",
+			UserType:    "INTERNAL",
+			Admin:       false,
+			TenantAdmin: false,
+			Right:       "Read",
+		},
+		{
+			Username:    "user2",
+			Email:       "user2@example.com",
+			UserType:    "INTERNAL",
+			Admin:       true,
+			TenantAdmin: true,
+			Right:       "Admin",
+		},
+	}
+
+	server := mockServer(t, func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/admin/tenants/test-tenant/keys/test-client-id/users", r.URL.Path)
+		assert.Equal(t, "GET", r.Method)
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(expectedUsers)
+	})
+	defer server.Close()
+
+	config := &Config{
+		BaseURL:  server.URL,
+		Username: "test-user",
+		JwtToken: "test-jwt-token",
+		Timeout:  30,
+	}
+
+	client, err := NewAdminClient(config)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	users, err := ListAPIKeyUsers(client, ctx, "test-tenant", "test-client-id", ParseKeyScopedUsers)
+
+	assert.NoError(t, err)
+	assert.Len(t, users, 2)
+	assert.Equal(t, "user1", users[0].Username)
+	assert.Equal(t, "Read", users[0].Right)
+	assert.Equal(t, "user2", users[1].Username)
+	assert.Equal(t, "Admin", users[1].Right)
+}
