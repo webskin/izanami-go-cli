@@ -615,13 +615,17 @@ func TestIntegration_ConfigList(t *testing.T) {
 	require.NoError(t, err)
 	output := buf.String()
 
-	// Should show table with keys
+	// Should show Global Settings section
+	assert.Contains(t, output, "=== Global Settings ===", "Should have Global Settings header")
 	assert.Contains(t, output, "KEY", "Should have KEY header")
 	assert.Contains(t, output, "VALUE", "Should have VALUE header")
 	assert.Contains(t, output, "SOURCE", "Should have SOURCE header")
 	assert.Contains(t, output, "timeout", "Should show timeout key")
 	assert.Contains(t, output, "output-format", "Should show output-format key")
-	assert.Contains(t, output, "Client keys are profile-specific", "Should show note about client keys")
+	// Should NOT show profile-specific keys in global section
+	assert.NotContains(t, output, "base-url\t", "Should NOT show base-url in global section")
+	// Without a profile, should show no active profile message
+	assert.Contains(t, output, "No active profile set", "Should show no active profile message")
 
 	t.Logf("Config list output:\n%s", output)
 }
@@ -985,8 +989,17 @@ func TestIntegration_ConfigListAfterLogin(t *testing.T) {
 	require.NoError(t, err)
 	output := buf.String()
 
-	// Should show config values including those from profile
-	assert.Contains(t, output, "base-url", "Should show base-url key")
+	// Should show Global Settings section
+	assert.Contains(t, output, "=== Global Settings ===", "Should have Global Settings header")
+	// Should show Active Profile section with profile name
+	assert.Contains(t, output, "=== Active Profile:", "Should have Active Profile header")
+	// Should show profile-specific config values
+	assert.Contains(t, output, "base-url", "Should show base-url key in profile section")
+	assert.Contains(t, output, "client-keys", "Should show client-keys key in profile section")
+	assert.Contains(t, output, "tenant", "Should show tenant key in profile section")
+	// Should show helpful footer
+	assert.Contains(t, output, "iz config set", "Should show config set hint")
+	assert.Contains(t, output, "iz profiles set", "Should show profiles set hint")
 
 	t.Logf("Config list after login output:\n%s", output)
 }

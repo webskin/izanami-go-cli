@@ -229,10 +229,9 @@ var configListCmd = &cobra.Command{
 	Short: "List all configuration values",
 	Long: `List all configuration values with their sources.
 
-The output shows:
-  - KEY    : Configuration key name
-  - VALUE  : Current value (sensitive values shown as <redacted>)
-  - SOURCE : Where the value comes from (file/env/default/not set)
+The output shows two sections:
+  1. Global Settings - Apply to all profiles (timeout, verbose, output-format, color)
+  2. Active Profile Settings - Profile-specific values (base-url, client-keys, tenant, etc.)
 
 Use --show-secrets to display sensitive values.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -243,50 +242,138 @@ Use --show-secrets to display sensitive values.`,
 			return err
 		}
 
-		// Create table
-		table := tablewriter.NewWriter(cmd.OutOrStdout())
-		table.SetHeader([]string{"KEY", "VALUE", "SOURCE"})
-		table.SetBorder(false)
-		table.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
-		table.SetAlignment(tablewriter.ALIGN_LEFT)
-		table.SetCenterSeparator("")
-		table.SetColumnSeparator("")
-		table.SetRowSeparator("")
-		table.SetHeaderLine(false)
-		table.SetTablePadding("\t")
-		table.SetNoWhiteSpace(true)
+		// === Global Settings Section ===
+		fmt.Fprintln(cmd.OutOrStdout(), "=== Global Settings ===")
 
-		// Create sorted list of keys (client-keys are profile-specific, not shown here)
-		keys := make([]string, 0, len(allValues))
-		for key := range allValues {
-			keys = append(keys, key)
+		// Create table for global settings
+		globalTable := tablewriter.NewWriter(cmd.OutOrStdout())
+		globalTable.SetHeader([]string{"KEY", "VALUE", "SOURCE"})
+		globalTable.SetBorder(false)
+		globalTable.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
+		globalTable.SetAlignment(tablewriter.ALIGN_LEFT)
+		globalTable.SetCenterSeparator("")
+		globalTable.SetColumnSeparator("")
+		globalTable.SetRowSeparator("")
+		globalTable.SetHeaderLine(false)
+		globalTable.SetTablePadding("\t")
+		globalTable.SetNoWhiteSpace(true)
+
+		// Create sorted list of global keys only
+		globalKeys := make([]string, 0, len(izanami.GlobalConfigKeys))
+		for key := range izanami.GlobalConfigKeys {
+			globalKeys = append(globalKeys, key)
 		}
-		sort.Strings(keys)
+		sort.Strings(globalKeys)
 
-		// Add config values
-		for _, key := range keys {
+		// Add global config values
+		for _, key := range globalKeys {
 			configValue := allValues[key]
 			value := configValue.Value
-
-			// Redact sensitive values unless --show-secrets is set
-			if izanami.SensitiveKeys[key] && !showSecrets && value != "" {
-				value = izanami.RedactedValue
-			}
 
 			// Show empty values as "(not set)"
 			if value == "" {
 				value = "(not set)"
 			}
 
-			table.Append([]string{key, value, configValue.Source})
+			globalTable.Append([]string{key, value, configValue.Source})
 		}
 
-		table.Render()
+		globalTable.Render()
 
-		// Add note about profile-specific settings
-		fmt.Fprintln(cmd.OutOrStderr(), "\nNote: Client keys are profile-specific. Use 'iz profiles client-keys' to manage them.")
+		// === Active Profile Section ===
+		profileName, err := izanami.GetActiveProfileName()
+		if err != nil {
+			// If there's an error getting profile name, just show the message
+			fmt.Fprintln(cmd.OutOrStdout(), "\nNo active profile set. Use 'iz profiles use <name>' to select a profile.")
+			return nil
+		}
+
+		if profileName == "" {
+			fmt.Fprintln(cmd.OutOrStdout(), "\nNo active profile set. Use 'iz profiles use <name>' to select a profile.")
+			return nil
+		}
+
+		// Load the active profile
+		profile, err := izanami.GetProfile(profileName)
+		if err != nil {
+			fmt.Fprintf(cmd.OutOrStderr(), "\nWarning: Could not load active profile '%s': %v\n", profileName, err)
+			return nil
+		}
+
+		fmt.Fprintf(cmd.OutOrStdout(), "\n=== Active Profile: %s ===\n", profileName)
+
+		// Create table for profile settings
+		profileTable := tablewriter.NewWriter(cmd.OutOrStdout())
+		profileTable.SetHeader([]string{"KEY", "VALUE", "SOURCE"})
+		profileTable.SetBorder(false)
+		profileTable.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
+		profileTable.SetAlignment(tablewriter.ALIGN_LEFT)
+		profileTable.SetCenterSeparator("")
+		profileTable.SetColumnSeparator("")
+		profileTable.SetRowSeparator("")
+		profileTable.SetHeaderLine(false)
+		profileTable.SetTablePadding("\t")
+		profileTable.SetNoWhiteSpace(true)
+
+		// Define profile settings to display (in order)
+		type profileSetting struct {
+			key         string
+			value       string
+			isSensitive bool
+		}
+
+		settings := []profileSetting{
+			{"base-url", profile.BaseURL, false},
+			{"client-base-url", profile.ClientBaseURL, false},
+			{"session", profile.Session, false},
+			{"client-id", profile.ClientID, false},
+			{"client-secret", profile.ClientSecret, true},
+			{"client-keys", formatClientKeysCount(profile.ClientKeys), false},
+			{"tenant", profile.Tenant, false},
+			{"project", profile.Project, false},
+			{"context", profile.Context, false},
+			{"personal-access-token", profile.PersonalAccessToken, true},
+			{"personal-access-token-username", profile.PersonalAccessTokenUsername, false},
+		}
+
+		// Add profile settings to table
+		for _, setting := range settings {
+			value := setting.value
+			source := "profile"
+
+			// Redact sensitive values unless --show-secrets is set
+			if setting.isSensitive && !showSecrets && value != "" {
+				value = izanami.RedactedValue
+			}
+
+			// Show empty values as "(not set)"
+			if value == "" {
+				value = "(not set)"
+				source = "-"
+			}
+
+			profileTable.Append([]string{setting.key, value, source})
+		}
+
+		profileTable.Render()
+
+		// Print helpful footer
+		fmt.Fprintln(cmd.OutOrStdout())
+		fmt.Fprintln(cmd.OutOrStdout(), "To change global settings:     iz config set <key> <value>")
+		fmt.Fprintln(cmd.OutOrStdout(), "To change profile settings:    iz profiles set <key> <value>")
+		fmt.Fprintln(cmd.OutOrStdout(), "To manage client keys:         iz profiles client-keys add")
+		fmt.Fprintf(cmd.OutOrStdout(), "To view full profile details:  iz profiles show %s\n", profileName)
+
 		return nil
 	},
+}
+
+// formatClientKeysCount returns a summary of configured client keys
+func formatClientKeysCount(keys map[string]izanami.TenantClientKeysConfig) string {
+	if len(keys) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%d tenant(s) configured", len(keys))
 }
 
 // configPathCmd represents the config path command
