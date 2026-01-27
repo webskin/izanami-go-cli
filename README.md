@@ -4,7 +4,7 @@ A cross-platform command-line client for [Izanami](https://github.com/MAIF/izana
 
 Izanami is an open-source feature flag and configuration management system. This CLI provides a convenient way to interact with Izanami for both administration tasks and standard feature flag operations.
 
-> **⚠️ WARNING: WORK IN PROGRESS**
+> **WARNING: WORK IN PROGRESS**
 >
 > This CLI is currently under active development and **NOT ready for production use**.
 > Features may be incomplete, APIs may change, and bugs are expected.
@@ -12,16 +12,20 @@ Izanami is an open-source feature flag and configuration management system. This
 
 ## Features
 
-- ✅ **Cross-platform**: Works on Linux, macOS (Intel & ARM), and Windows
-- 🔐 **Flexible Authentication**: Supports both client API keys and personal access tokens
-- ⚙️ **Multiple Configuration Sources**: Environment variables, config files, and command-line flags
-- 📊 **Multiple Output Formats**: JSON (default) and human-friendly table format
-- 🚀 **Feature Management**: Create, update, delete, and evaluate feature flags
-- 🌍 **Context Management**: Manage feature contexts (environments/overrides)
-- 👨‍💼 **Admin Operations**: Manage tenants, projects, tags, webhooks, and users
-- 📦 **Import/Export**: Bulk data migration capabilities
-- 🔍 **Global Search**: Search across all Izanami resources
-- 🐚 **Shell Completion**: Bash, Zsh, Fish, and PowerShell support
+- **Cross-platform**: Works on Linux, macOS (Intel & ARM), and Windows
+- **Profile Management**: Multiple environment profiles with per-tenant/project credentials
+- **OAuth/OIDC Login**: Browser-based authentication flow
+- **Flexible Authentication**: Supports client API keys, personal access tokens, and JWT sessions
+- **Multiple Configuration Sources**: Environment variables, config files, and command-line flags
+- **Multiple Output Formats**: JSON (default) and human-friendly table format
+- **Feature Management**: Create, update, delete, and evaluate feature flags
+- **Real-time Events**: Watch feature flag changes via SSE
+- **Context Management**: Manage feature contexts (environments/overrides)
+- **Admin Operations**: Manage tenants, projects, tags, webhooks, and users
+- **Import/Export**: Bulk data migration capabilities
+- **Global Search**: Search across all Izanami resources
+- **Config Management**: CLI configuration commands
+- **Shell Completion**: Bash, Zsh, Fish, and PowerShell support
 
 ## Installation
 
@@ -76,13 +80,35 @@ make install
 make build-all
 ```
 
+## Quick Start
+
+```bash
+# Login to Izanami (opens browser for OIDC)
+iz login --url https://izanami.example.com --oidc
+
+# Or login with username/password
+iz login https://izanami.example.com admin
+
+# Create a profile with saved settings
+iz profiles add prod --url https://izanami.example.com
+iz profiles use prod
+iz profiles set tenant my-tenant
+
+# Check a feature flag
+iz features check my-feature --tenant my-tenant
+
+# Watch for real-time changes
+iz events watch --tenant my-tenant
+```
+
 ## Configuration
 
 The CLI can be configured through three methods (in order of precedence):
 
 1. **Command-line flags** (highest priority)
 2. **Environment variables** (prefixed with `IZ_`)
-3. **Config file** (lowest priority)
+3. **Profile settings** (via `iz profiles`)
+4. **Config file** (lowest priority)
 
 ### Config File
 
@@ -128,18 +154,149 @@ All config file options can be set via environment variables:
 export IZ_BASE_URL="https://izanami.example.com"
 export IZ_CLIENT_ID="your-client-id"
 export IZ_CLIENT_SECRET="your-client-secret"
+export IZ_CLIENT_BASE_URL="https://client.izanami.example.com"  # Optional: separate URL for client operations
 export IZ_USERNAME="your-username"
 export IZ_TOKEN="your-personal-access-token"
+export IZ_JWT_TOKEN="your-jwt-token"  # From login session
 export IZ_TENANT="default"
 export IZ_PROJECT="my-project"
 export IZ_CONTEXT="prod"
 ```
 
-### Authentication
+### Profiles
 
-The CLI supports two authentication methods:
+Profiles allow separate configurations for different environments.
 
-#### 1. Client API Key (for feature evaluation)
+```bash
+# Create profiles
+iz profiles add local --url http://localhost:9000
+iz profiles add prod --url https://izanami.prod.com
+
+# Switch profiles
+iz profiles use prod
+
+# Show current profile
+iz profiles current
+
+# List all profiles
+iz profiles list
+
+# Show profile details
+iz profiles show prod
+
+# Update profile settings
+iz profiles set tenant my-default-tenant
+iz profiles set project my-default-project
+iz profiles set client-base-url https://client.example.com
+
+# Remove a profile setting
+iz profiles unset tenant
+
+# Use different profile for single command
+iz features check my-feature --profile local
+
+# Delete a profile
+iz profiles delete old-profile
+```
+
+#### Client Keys (per tenant/project)
+
+Store client credentials for feature evaluation at the tenant or project level:
+
+```bash
+# Add client credentials for a tenant
+iz profiles client-keys add --tenant my-tenant
+
+# Add client credentials for a specific project
+iz profiles client-keys add --tenant my-tenant --project my-project
+
+# List stored client credentials
+iz profiles client-keys list
+
+# Delete client credentials
+iz profiles client-keys delete --tenant my-tenant <client-id>
+```
+
+### Sessions
+
+Sessions store JWT tokens from login. Sessions are referenced by profiles.
+
+```bash
+# List all sessions
+iz sessions list
+
+# Delete a session
+iz sessions delete my-session
+```
+
+### Configuration Commands
+
+```bash
+# View all settings (global and profile-specific)
+iz config list
+
+# Get a specific value
+iz config get timeout
+
+# Set a global value
+iz config set timeout 60
+
+# Remove a global value
+iz config unset verbose
+
+# Show config file location
+iz config path
+
+# Initialize config file
+iz config init
+
+# Validate configuration
+iz config validate
+
+# Reset configuration to defaults
+iz config reset
+```
+
+## Authentication
+
+The CLI supports multiple authentication methods:
+
+### 1. OAuth/OIDC Login (browser-based)
+
+```bash
+# Login via OIDC (opens browser, waits for authentication)
+iz login --oidc --url https://izanami.example.com
+
+# Login with custom session name
+iz login --oidc --url https://izanami.example.com --name prod-session
+
+# Login with custom timeout
+iz login --oidc --url https://izanami.example.com --timeout 10m
+
+# Login without opening browser (prints URL only)
+iz login --oidc --url https://izanami.example.com --no-browser
+
+# Login with token directly (for scripting)
+iz login --oidc --url https://izanami.example.com --token "eyJhbGciOiJIUzI1NiIs..."
+
+# Logout
+iz logout
+
+# Logout from specific profile's session
+iz logout --profile prod
+```
+
+### 2. Username/Password Login
+
+```bash
+# Login with username (will prompt for password)
+iz login http://localhost:9000 admin
+
+# Login with password (not recommended for security)
+iz login http://localhost:9000 admin --password secret
+```
+
+### 3. Client API Key (for feature evaluation)
 
 Used for checking feature flags (read-only operations):
 
@@ -151,15 +308,15 @@ iz features check my-feature \
   --user user123
 ```
 
-#### 2. Personal Access Token (for admin operations)
+### 4. Personal Access Token (for admin operations)
 
 Used for administrative operations:
 
 ```bash
 iz admin projects list \
   --url https://izanami.example.com \
-  --username your-username \
-  --token your-personal-access-token \
+  --personal-access-token-username your-username \
+  --personal-access-token your-personal-access-token \
   --tenant default
 ```
 
@@ -192,30 +349,9 @@ iz version
 #   Platform:  linux/amd64
 ```
 
-### Feature Management
+### Feature Management (Client)
 
-#### List Features
-
-```bash
-# List all features in a tenant
-iz features list --tenant my-tenant
-
-# List features in a specific project
-iz features list --tenant my-tenant --project my-project
-
-# Filter by tags
-iz features list --tenant my-tenant --tags auth,beta
-
-# Output as table
-iz features list --tenant my-tenant -o table
-```
-
-#### Get Feature
-
-```bash
-# Get detailed feature information (including context overloads)
-iz features get my-feature --tenant my-tenant
-```
+Client operations for checking feature flags.
 
 #### Check Feature (Evaluate)
 
@@ -241,24 +377,91 @@ iz features check my-feature \
 # }
 ```
 
+#### Bulk Check Multiple Features
+
+```bash
+# Check multiple features at once
+iz features check-bulk feat1,feat2,feat3 --tenant my-tenant
+
+# With user context
+iz features check-bulk feat1,feat2 --tenant my-tenant --user user123
+```
+
+### Events
+
+Watch for real-time feature flag changes via Server-Sent Events.
+
+```bash
+# Watch all events for a tenant
+iz events watch --tenant my-tenant
+
+# Watch specific features (by name, requires --project)
+iz events watch --tenant my-tenant --project my-project --features my-feature
+
+# Watch specific features (by UUID)
+iz events watch --features 550e8400-e29b-41d4-a716-446655440000
+
+# Watch all features in a project
+iz events watch --tenant my-tenant --projects my-project
+
+# Watch with context
+iz events watch --tenant my-tenant --projects my-project --context PROD
+
+# Watch with tag filtering
+iz events watch --tenant my-tenant --one-tag-in beta,experimental
+
+# Watch events with pretty JSON formatting
+iz events watch --pretty
+
+# Watch raw SSE format (shows event IDs and types)
+iz events watch --raw
+```
+
+### Admin Feature Management
+
+Administrative operations require elevated privileges (JWT or PAT authentication).
+
+#### List Features
+
+```bash
+# List all features in a tenant
+iz admin features list --tenant my-tenant
+
+# List features in a specific project
+iz admin features list --tenant my-tenant --project my-project
+
+# Filter by tags
+iz admin features list --tenant my-tenant --tags auth,beta
+
+# Output as table
+iz admin features list --tenant my-tenant -o table
+```
+
+#### Get Feature
+
+```bash
+# Get detailed feature information (including context overloads)
+iz admin features get my-feature --tenant my-tenant --project my-project
+```
+
 #### Create Feature
 
 ```bash
 # Create a simple boolean feature
-iz features create my-new-feature \
+iz admin features create my-new-feature \
   --tenant my-tenant \
   --project my-project \
   --description "My new feature" \
   --enabled
 
 # Create from JSON file
-iz features create my-feature \
+iz admin features create my-feature \
   --tenant my-tenant \
   --project my-project \
   --data @feature.json
 
 # Create from stdin
-cat feature.json | iz features create my-feature \
+cat feature.json | iz admin features create my-feature \
   --tenant my-tenant \
   --project my-project \
   --data -
@@ -286,13 +489,13 @@ Example `feature.json`:
 
 ```bash
 # Update from file (feature ID is UUID, not name)
-iz features update e878a149-df86-4f28-b1db-059580304e1e \
+iz admin features update e878a149-df86-4f28-b1db-059580304e1e \
   --tenant my-tenant \
   --project my-project \
   --data @updated-feature.json
 
 # Update from stdin
-cat <<EOF | iz features update e878a149-df86-4f28-b1db-059580304e1e \
+cat <<EOF | iz admin features update e878a149-df86-4f28-b1db-059580304e1e \
   --tenant my-tenant \
   --project my-project \
   --data -
@@ -322,7 +525,27 @@ The feature ID (UUID) and project are provided via command arguments and automat
 #### Delete Feature
 
 ```bash
-iz features delete my-feature --tenant my-tenant
+iz admin features delete my-feature --tenant my-tenant --project my-project
+```
+
+#### Patch Features (Batch Update)
+
+```bash
+# Batch update multiple features
+iz admin features patch --tenant my-tenant --project my-project --data @patch.json
+```
+
+#### Test Features
+
+```bash
+# Test an existing feature's evaluation
+iz admin features test my-feature --tenant my-tenant --project my-project --user testuser
+
+# Test a feature definition without saving
+iz admin features test-definition --tenant my-tenant --project my-project --data @feature-def.json
+
+# Test multiple features at once
+iz admin features test-bulk feat1,feat2 --tenant my-tenant --project my-project --user testuser
 ```
 
 ### Context Management
@@ -333,28 +556,28 @@ Contexts allow different feature behavior in different environments.
 
 ```bash
 # List root-level contexts
-iz contexts list --tenant my-tenant
+iz admin contexts list --tenant my-tenant
 
 # List all nested contexts
-iz contexts list --tenant my-tenant --all
+iz admin contexts list --tenant my-tenant --all
 
 # List project-specific contexts
-iz contexts list --tenant my-tenant --project my-project
+iz admin contexts list --tenant my-tenant --project my-project
 ```
 
 #### Create Context
 
 ```bash
 # Create a root-level global context
-iz contexts create prod --tenant my-tenant --global
+iz admin contexts create prod --tenant my-tenant --global
 
 # Create a project-specific context
-iz contexts create prod \
+iz admin contexts create prod \
   --tenant my-tenant \
   --project my-project
 
 # Create a nested context
-iz contexts create france \
+iz admin contexts create france \
   --tenant my-tenant \
   --project my-project \
   --parent prod/eu
@@ -363,14 +586,35 @@ iz contexts create france \
 #### Delete Context
 
 ```bash
-iz contexts delete prod/eu/france \
+iz admin contexts delete prod/eu/france \
   --tenant my-tenant \
   --project my-project
 ```
 
+### Feature Overloads
+
+Overloads allow context-specific feature strategies.
+
+```bash
+# Set a simple overload (enable feature for all users in PROD)
+iz admin overloads set my-feature --context PROD --project my-project --enabled
+
+# Set an overload with conditions
+iz admin overloads set my-feature --context PROD --project my-project --data '{
+  "enabled": true,
+  "conditions": [{"rule": {"type": "UserList", "users": ["Bob"]}}]
+}'
+
+# View an existing overload
+iz admin overloads get my-feature --context PROD --project my-project
+
+# Delete an overload
+iz admin overloads delete my-feature --context PROD --project my-project
+```
+
 ### Admin Operations
 
-Admin operations require username and personal access token authentication.
+Admin operations require username and personal access token authentication (or JWT from login).
 
 #### Tenant Management
 
@@ -384,8 +628,14 @@ iz admin tenants get my-tenant
 # Create a tenant
 iz admin tenants create new-tenant --description "New tenant"
 
+# Update a tenant
+iz admin tenants update my-tenant --description "Updated description"
+
 # Delete a tenant (WARNING: deletes all data)
 iz admin tenants delete old-tenant
+
+# View tenant event logs
+iz admin tenants logs --tenant my-tenant
 ```
 
 #### Project Management
@@ -402,8 +652,14 @@ iz admin projects create new-project \
   --tenant my-tenant \
   --description "New project"
 
+# Update a project
+iz admin projects update my-project --tenant my-tenant --description "Updated"
+
 # Delete a project
 iz admin projects delete old-project --tenant my-tenant
+
+# View project event logs
+iz admin projects logs --tenant my-tenant --project my-project
 ```
 
 #### Tag Management
@@ -419,6 +675,65 @@ iz admin tags create beta \
 
 # Delete a tag
 iz admin tags delete old-tag --tenant my-tenant
+```
+
+#### API Key Management
+
+```bash
+# List API keys
+iz admin keys list --tenant my-tenant
+
+# Create an API key
+iz admin keys create my-key --tenant my-tenant --project my-project
+
+# Delete an API key
+iz admin keys delete my-key --tenant my-tenant
+```
+
+#### User Management
+
+```bash
+# List all users
+iz admin users list
+
+# List users for a specific tenant
+iz admin users list-for-tenant --tenant my-tenant
+
+# List users for a specific project
+iz admin users list-for-project --tenant my-tenant --project my-project
+
+# Search for users
+iz admin users search john
+
+# Get user details
+iz admin users get johndoe
+
+# Get user's rights for a tenant
+iz admin users get-for-tenant johndoe --tenant my-tenant
+
+# Create a new user
+iz admin users create johndoe --email john@example.com --password secret123 --admin
+
+# Update user information
+iz admin users update johndoe --email newemail@example.com
+
+# Invite users to a tenant
+iz admin users invite-to-tenant --tenant my-tenant --users user1,user2 --level READ
+
+# Invite users to a project
+iz admin users invite-to-project --tenant my-tenant --project my-project --users user1 --level WRITE
+
+# Update user's global rights
+iz admin users update-rights johndoe --admin
+
+# Update user's tenant rights
+iz admin users update-tenant-rights johndoe --tenant my-tenant --level ADMIN
+
+# Update user's project rights
+iz admin users update-project-rights johndoe --tenant my-tenant --project my-project --level WRITE
+
+# Delete a user
+iz admin users delete johndoe
 ```
 
 #### Search
@@ -457,6 +772,9 @@ iz admin import backup.ndjson \
 iz admin import backup.ndjson \
   --tenant my-tenant \
   --timezone "Europe/Paris"
+
+# Check status of async V1 import
+iz admin import-status <import-id>
 ```
 
 Conflict strategies: `FAIL` (default), `SKIP`, `OVERWRITE`
@@ -465,10 +783,10 @@ Conflict strategies: `FAIL` (default), `SKIP`, `OVERWRITE`
 
 The CLI supports two output formats:
 
-#### JSON (default)
+#### JSON (default with --output json)
 
 ```bash
-iz features list --tenant my-tenant
+iz admin features list --tenant my-tenant -o json
 ```
 
 Output:
@@ -485,10 +803,10 @@ Output:
 ]
 ```
 
-#### Table
+#### Table (default)
 
 ```bash
-iz features list --tenant my-tenant -o table
+iz admin features list --tenant my-tenant -o table
 ```
 
 Output:
@@ -569,12 +887,12 @@ iz health || exit 1
 # Create or update feature
 FEATURE_ID="e878a149-df86-4f28-b1db-059580304e1e"  # Feature UUID
 
-if iz features get "$FEATURE_ID" --tenant "$IZ_TENANT" 2>/dev/null; then
+if iz admin features get "$FEATURE_ID" --tenant "$IZ_TENANT" --project my-project 2>/dev/null; then
   echo "Updating existing feature..."
-  iz features update "$FEATURE_ID" --tenant "$IZ_TENANT" --project my-project --data @feature.json
+  iz admin features update "$FEATURE_ID" --tenant "$IZ_TENANT" --project my-project --data @feature.json
 else
   echo "Creating new feature..."
-  iz features create my-new-feature --tenant "$IZ_TENANT" --project my-project --data @feature.json
+  iz admin features create my-new-feature --tenant "$IZ_TENANT" --project my-project --data @feature.json
 fi
 
 echo "Feature deployed successfully!"
@@ -593,7 +911,7 @@ PROJECT="web-app"
 
 # Start at 10%
 echo "Rolling out to 10% of users..."
-cat <<EOF | iz features update $FEATURE_ID --tenant $TENANT --project $PROJECT --data -
+cat <<EOF | iz admin features update $FEATURE_ID --tenant $TENANT --project $PROJECT --data -
 {
   "name": "$FEATURE_NAME",
   "enabled": true,
@@ -614,7 +932,7 @@ sleep 300  # Wait 5 minutes
 
 # Increase to 50%
 echo "Rolling out to 50% of users..."
-cat <<EOF | iz features update $FEATURE_ID --tenant $TENANT --project $PROJECT --data -
+cat <<EOF | iz admin features update $FEATURE_ID --tenant $TENANT --project $PROJECT --data -
 {
   "name": "$FEATURE_NAME",
   "enabled": true,
@@ -635,7 +953,7 @@ sleep 300  # Wait 5 minutes
 
 # Full rollout
 echo "Full rollout - 100% of users..."
-cat <<EOF | iz features update $FEATURE_ID --tenant $TENANT --project $PROJECT --data -
+cat <<EOF | iz admin features update $FEATURE_ID --tenant $TENANT --project $PROJECT --data -
 {
   "name": "$FEATURE_NAME",
   "enabled": true,
@@ -711,13 +1029,28 @@ izanami-go-cli/
 │       └── main.go              # CLI entry point
 ├── internal/
 │   ├── cmd/
-│   │   ├── root.go              # Root command
-│   │   ├── features.go          # Feature commands
+│   │   ├── root.go              # Root command & global flags
+│   │   ├── admin.go             # Admin command group
+│   │   ├── config.go            # Config commands
 │   │   ├── contexts.go          # Context commands
-│   │   ├── admin.go             # Admin commands
-│   │   ├── version.go           # Version command
+│   │   ├── events.go            # Event commands (SSE)
+│   │   ├── features.go          # Admin feature commands
+│   │   ├── features_check.go    # Client feature check commands
 │   │   ├── health.go            # Health check
-│   │   └── completion.go        # Shell completion
+│   │   ├── import_export.go     # Import/export commands
+│   │   ├── keys.go              # API key commands
+│   │   ├── login.go             # Login/logout commands
+│   │   ├── overloads.go         # Overload commands
+│   │   ├── profiles.go          # Profile commands
+│   │   ├── projects.go          # Project commands
+│   │   ├── search.go            # Search command
+│   │   ├── sessions.go          # Session commands
+│   │   ├── tags.go              # Tag commands
+│   │   ├── tenants.go           # Tenant commands
+│   │   ├── users.go             # User commands
+│   │   ├── webhooks.go          # Webhook commands
+│   │   ├── completion.go        # Shell completion
+│   │   └── version.go           # Version command
 │   ├── izanami/
 │   │   ├── client.go            # HTTP client
 │   │   ├── client_test.go       # Client tests
@@ -755,6 +1088,6 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## Support
 
-- 📖 [Izanami Documentation](https://maif.github.io/izanami/)
-- 🐛 [Report Issues](https://github.com/webskin/izanami-go-cli/issues)
-- 💬 [Discussions](https://github.com/webskin/izanami-go-cli/discussions)
+- [Izanami Documentation](https://maif.github.io/izanami/)
+- [Report Issues](https://github.com/webskin/izanami-go-cli/issues)
+- [Discussions](https://github.com/webskin/izanami-go-cli/discussions)
