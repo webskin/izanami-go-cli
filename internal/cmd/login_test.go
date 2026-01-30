@@ -35,6 +35,7 @@ func setupLoginCommand(buf *bytes.Buffer, input *bytes.Buffer, args []string) (*
 		baseURL = ""
 		profileName = ""
 		loginPassword = ""
+		loginOIDC = false
 	}
 
 	return cmd, cleanup
@@ -325,4 +326,156 @@ func TestLogin_ResolveDefaults_EnvURL(t *testing.T) {
 	assert.Contains(t, err.Error(), "login failed")
 	output := buf.String()
 	assert.Contains(t, output, "http://env-url.com:9999")
+}
+
+// TestLogin_ZeroArgs_OIDCAutoDetect verifies that when a previous OIDC session
+// exists and no password flag is provided, the login auto-redirects to OIDC flow.
+func TestLogin_ZeroArgs_OIDCAutoDetect(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	// Create session with OIDC auth method
+	createTestSessions(t, paths.sessionsPath, map[string]*izanami.Session{
+		"my-session": {
+			URL:        "http://localhost:9999",
+			Username:   "oidc-user",
+			AuthMethod: izanami.AuthMethodOIDC,
+		},
+	})
+	createTestConfig(t, paths.configPath, map[string]*izanami.Profile{
+		"test": {Session: "my-session"},
+	}, "test")
+
+	var buf bytes.Buffer
+	cmd, cleanup := setupLoginCommand(&buf, nil, []string{"login"})
+	defer cleanup()
+
+	err := cmd.Execute()
+	// OIDC flow will fail (no server) but the error should come from the OIDC path
+	require.Error(t, err)
+	// The OIDC flow tries to resolve URL and check server support —
+	// it should NOT ask for a password (which would be the password flow)
+	assert.NotContains(t, err.Error(), "password cannot be empty")
+}
+
+// TestLogin_ZeroArgs_OIDCAutoDetect_PasswordOverride verifies that providing
+// --password flag overrides OIDC auto-detection and stays in password flow.
+func TestLogin_ZeroArgs_OIDCAutoDetect_PasswordOverride(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	// Create session with OIDC auth method
+	createTestSessions(t, paths.sessionsPath, map[string]*izanami.Session{
+		"my-session": {
+			URL:        "http://localhost:9999",
+			Username:   "oidc-user",
+			AuthMethod: izanami.AuthMethodOIDC,
+		},
+	})
+	createTestConfig(t, paths.configPath, map[string]*izanami.Profile{
+		"test": {Session: "my-session"},
+	}, "test")
+
+	var buf bytes.Buffer
+	cmd, cleanup := setupLoginCommand(&buf, nil, []string{
+		"login", "--password", "dummy",
+	})
+	defer cleanup()
+
+	err := cmd.Execute()
+	// With --password flag, should stay in password flow (connection error)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "login failed")
+}
+
+// TestLogin_OneArg_URL_OIDCAutoDetect verifies that a URL arg with an OIDC
+// session auto-redirects to the OIDC flow.
+func TestLogin_OneArg_URL_OIDCAutoDetect(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	// Create session with OIDC auth method
+	createTestSessions(t, paths.sessionsPath, map[string]*izanami.Session{
+		"my-session": {
+			URL:        "http://localhost:9999",
+			Username:   "oidc-user",
+			AuthMethod: izanami.AuthMethodOIDC,
+		},
+	})
+	createTestConfig(t, paths.configPath, map[string]*izanami.Profile{
+		"test": {Session: "my-session"},
+	}, "test")
+
+	var buf bytes.Buffer
+	cmd, cleanup := setupLoginCommand(&buf, nil, []string{
+		"login", "http://localhost:9999",
+	})
+	defer cleanup()
+
+	err := cmd.Execute()
+	// OIDC flow will fail (no server) but should NOT be a password flow error
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "password cannot be empty")
+}
+
+// TestLogin_OneArg_Username_NoOIDCAutoDetect verifies that a username arg
+// (non-URL) does NOT trigger OIDC auto-detection since providing a username
+// implies password-based login.
+func TestLogin_OneArg_Username_NoOIDCAutoDetect(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	// Create session with OIDC auth method
+	createTestSessions(t, paths.sessionsPath, map[string]*izanami.Session{
+		"my-session": {
+			URL:        "http://localhost:9999",
+			Username:   "oidc-user",
+			AuthMethod: izanami.AuthMethodOIDC,
+		},
+	})
+	createTestConfig(t, paths.configPath, map[string]*izanami.Profile{
+		"test": {Session: "my-session"},
+	}, "test")
+
+	var buf bytes.Buffer
+	cmd, cleanup := setupLoginCommand(&buf, nil, []string{
+		"login", "newuser", "--password", "dummy",
+	})
+	defer cleanup()
+
+	err := cmd.Execute()
+	// Username arg takes the username-path (case 1, non-URL), which does NOT
+	// check for OIDC auto-detect. Should stay in password flow.
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "login failed")
+}
+
+// TestLogin_ZeroArgs_NoAuthMethod_DefaultsToPassword verifies backward
+// compatibility: old sessions without AuthMethod default to password flow.
+func TestLogin_ZeroArgs_NoAuthMethod_DefaultsToPassword(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	// Create session WITHOUT AuthMethod (backward compat)
+	createTestSessions(t, paths.sessionsPath, map[string]*izanami.Session{
+		"my-session": {
+			URL:      "http://localhost:9999",
+			Username: "testuser",
+			// AuthMethod deliberately empty
+		},
+	})
+	createTestConfig(t, paths.configPath, map[string]*izanami.Profile{
+		"test": {Session: "my-session"},
+	}, "test")
+
+	var buf bytes.Buffer
+	cmd, cleanup := setupLoginCommand(&buf, nil, []string{
+		"login", "--password", "dummy",
+	})
+	defer cleanup()
+
+	err := cmd.Execute()
+	// Should stay in password flow (connection error), not redirect to OIDC
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "login failed")
 }

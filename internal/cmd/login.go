@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"strings"
 	"syscall"
@@ -64,16 +63,16 @@ Examples:
   iz login http://localhost:9000
 
   # Login via OIDC (opens browser, waits for authentication)
-  iz login --oidc --url https://izanami.prod.com
+  iz login --oidc https://izanami.prod.com
 
   # Login via OIDC with custom timeout
-  iz login --oidc --url https://izanami.prod.com --timeout 10m
+  iz login --oidc https://izanami.prod.com --timeout 10m
 
   # Login via OIDC with token directly (for scripting or fallback)
-  iz login --oidc --url https://izanami.prod.com --token "eyJhbGciOiJIUzI1NiIs..."
+  iz login --oidc https://izanami.prod.com --token "eyJhbGciOiJIUzI1NiIs..."
 
   # Login via OIDC without opening browser (prints URL only)
-  iz login --oidc --url https://izanami.prod.com --no-browser
+  iz login --oidc https://izanami.prod.com --no-browser
 
 When called without arguments, both the URL and username must be
 available from the active session. A single argument is treated as a
@@ -98,7 +97,7 @@ The missing value is resolved from the active session.`,
 			if strings.HasPrefix(args[0], "http://") || strings.HasPrefix(args[0], "https://") {
 				// iz login <url> — resolve username from session
 				loginBaseURL = args[0]
-				_, _, resolvedUser, userSrc := resolveLoginDefaults(cmd)
+				_, _, resolvedUser, userSrc, prevAuth := resolveLoginDefaults(cmd)
 				if resolvedUser == "" {
 					return fmt.Errorf("no username available for login\n\n"+
 						"Provide both URL and username:  iz login %s <username>",
@@ -108,10 +107,18 @@ The missing value is resolved from the active session.`,
 				if verbose {
 					fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Using username from %s: %s\n", userSrc, username)
 				}
+
+				// Auto-detect OIDC: if previous session used OIDC and no password flag, redirect
+				if prevAuth == izanami.AuthMethodOIDC && !cmd.Flags().Changed("password") {
+					if verbose {
+						fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Previous session used OIDC, redirecting to OIDC flow\n")
+					}
+					return runOIDCLogin(cmd, args)
+				}
 			} else {
 				// iz login <username> — resolve URL from profile/session/env/flag
 				username = args[0]
-				resolved, source, _, _ := resolveLoginDefaults(cmd)
+				resolved, source, _, _, _ := resolveLoginDefaults(cmd)
 				if resolved == "" {
 					return fmt.Errorf("no base URL available for login\n\n"+
 						"Provide URL explicitly:  iz login <url> %s\n"+
@@ -126,7 +133,7 @@ The missing value is resolved from the active session.`,
 			}
 		case 0:
 			// iz login — resolve both from profile/session
-			resolvedURL, urlSrc, resolvedUser, userSrc := resolveLoginDefaults(cmd)
+			resolvedURL, urlSrc, resolvedUser, userSrc, prevAuth := resolveLoginDefaults(cmd)
 			if resolvedURL == "" && resolvedUser == "" {
 				return fmt.Errorf("no URL or username available for login\n\n" +
 					"Usage:\n" +
@@ -147,6 +154,14 @@ The missing value is resolved from the active session.`,
 			if verbose {
 				fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Using URL from %s: %s\n", urlSrc, loginBaseURL)
 				fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Using username from %s: %s\n", userSrc, username)
+			}
+
+			// Auto-detect OIDC: if previous session used OIDC and no password flag, redirect
+			if prevAuth == izanami.AuthMethodOIDC && !cmd.Flags().Changed("password") {
+				if verbose {
+					fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Previous session used OIDC, redirecting to OIDC flow\n")
+				}
+				return runOIDCLogin(cmd, args)
 			}
 		}
 
@@ -199,46 +214,12 @@ The missing value is resolved from the active session.`,
 			fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Token received: <redacted> (%d chars)\n", len(token))
 		}
 
-		// Determine profile name first (create or find existing)
-		profileName, profileCreated, profileUpdated := determineProfileName(cmd.InOrStdin(), cmd.OutOrStderr(), loginBaseURL, username)
-
-		// Generate deterministic session name: <profile-name>-<username>-session
-		sessionName := fmt.Sprintf("%s-%s-session", profileName, username)
-
-		if verbose {
-			fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Profile: %s (created: %v, updated: %v)\n", profileName, profileCreated, profileUpdated)
-			fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Session name: %s\n", sessionName)
-		}
+		// Determine profile and session name
+		profileName, sessionName, profileCreated, profileUpdated := resolveProfileAndSession(cmd, loginBaseURL, username, "session")
 
 		// Save session
-		sessions, err := izanami.LoadSessions()
-		if err != nil {
-			return fmt.Errorf("failed to load sessions: %w", err)
-		}
-
-		session := &izanami.Session{
-			URL:       loginBaseURL,
-			Username:  username,
-			JwtToken:  token,
-			CreatedAt: time.Now(),
-		}
-
-		// Check if session with same URL+username exists and overwrite
-		for name, existingSession := range sessions.Sessions {
-			if existingSession.URL == loginBaseURL && existingSession.Username == username {
-				// Delete old session if it has a different name
-				if name != sessionName {
-					delete(sessions.Sessions, name)
-					fmt.Fprintf(cmd.OutOrStderr(), "   Replacing existing session: %s\n", name)
-				}
-				break
-			}
-		}
-
-		sessions.AddSession(sessionName, session)
-
-		if err := sessions.Save(); err != nil {
-			return fmt.Errorf("failed to save session: %w", err)
+		if err := saveLoginSession(cmd, loginBaseURL, username, token, izanami.AuthMethodPassword, sessionName); err != nil {
+			return err
 		}
 
 		// Update profile with session reference (username is stored in session, not profile)
@@ -246,27 +227,7 @@ The missing value is resolved from the active session.`,
 			fmt.Fprintf(cmd.OutOrStderr(), "\n   Warning: failed to update profile: %v\n", err)
 		}
 
-		// Success messages
-		fmt.Fprintf(cmd.OutOrStderr(), "✅ Successfully logged in as %s\n", username)
-		fmt.Fprintf(cmd.OutOrStderr(), "   Session saved as: %s\n", sessionName)
-
-		// Profile messages
-		if profileCreated {
-			fmt.Fprintf(cmd.OutOrStderr(), "\n✓ Profile '%s' created\n", profileName)
-		} else if profileUpdated {
-			fmt.Fprintf(cmd.OutOrStderr(), "\n   Using existing profile: %s (session updated)\n", profileName)
-		}
-
-		if profileName != "" {
-			activeProfile, _ := izanami.GetActiveProfileName()
-			if activeProfile == profileName {
-				fmt.Fprintf(cmd.OutOrStderr(), "   Active profile: %s\n", profileName)
-			}
-		}
-
-		fmt.Fprintf(cmd.OutOrStderr(), "\nYou can now run commands like:\n")
-		fmt.Fprintf(cmd.OutOrStderr(), "  iz admin tenants list\n")
-		fmt.Fprintf(cmd.OutOrStderr(), "  iz features list --tenant <tenant>\n")
+		printLoginSuccess(cmd.OutOrStderr(), username, sessionName, profileName, profileCreated, profileUpdated, false)
 
 		return nil
 	},
@@ -274,7 +235,8 @@ The missing value is resolved from the active session.`,
 
 // resolveLoginDefaults resolves login defaults from existing config.
 // Best-effort: returns empty strings on any error.
-func resolveLoginDefaults(cmd *cobra.Command) (resolvedURL, urlSource, resolvedUser, userSource string) {
+// authMethod is the auth method from the previous session (if any).
+func resolveLoginDefaults(cmd *cobra.Command) (resolvedURL, urlSource, resolvedUser, userSource, authMethod string) {
 	// 1. --url flag (global persistent flag)
 	if baseURL != "" {
 		resolvedURL = baseURL
@@ -305,6 +267,9 @@ func resolveLoginDefaults(cmd *cobra.Command) (resolvedURL, urlSource, resolvedU
 	if loadedCfg.Username != "" {
 		resolvedUser = loadedCfg.Username
 		userSource = "active session"
+	}
+	if loadedCfg.AuthMethod != "" {
+		authMethod = loadedCfg.AuthMethod
 	}
 	return
 }
@@ -451,6 +416,102 @@ func updateProfileWithSession(profileName, sessionName string) error {
 	return nil
 }
 
+// saveLoginSession creates and saves a session, deduplicating by URL+username.
+func saveLoginSession(cmd *cobra.Command, baseURL, username, token, authMethod, sessionName string) error {
+	sessions, err := izanami.LoadSessions()
+	if err != nil {
+		if verbose {
+			fmt.Fprintf(cmd.OutOrStderr(), "[verbose] No existing sessions found, creating new session store\n")
+		}
+		sessions = &izanami.Sessions{Sessions: make(map[string]*izanami.Session)}
+	} else if verbose {
+		fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Loaded %d existing sessions\n", len(sessions.Sessions))
+	}
+
+	session := &izanami.Session{
+		URL:        baseURL,
+		Username:   username,
+		JwtToken:   token,
+		AuthMethod: authMethod,
+		CreatedAt:  time.Now(),
+	}
+
+	// Check if session with same URL+username exists and overwrite
+	for name, existing := range sessions.Sessions {
+		if existing.URL == baseURL && existing.Username == username {
+			if name != sessionName {
+				if verbose {
+					fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Found existing session with same URL+username: %s\n", name)
+				}
+				delete(sessions.Sessions, name)
+				fmt.Fprintf(cmd.OutOrStderr(), "   Replacing existing session: %s\n", name)
+			}
+			break
+		}
+	}
+
+	sessions.AddSession(sessionName, session)
+
+	if verbose {
+		fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Saving session to disk...\n")
+	}
+
+	if err := sessions.Save(); err != nil {
+		return fmt.Errorf("failed to save session: %w", err)
+	}
+
+	if verbose {
+		fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Session saved successfully\n")
+	}
+
+	return nil
+}
+
+// printLoginSuccess prints post-login success messages to stderr.
+func printLoginSuccess(w io.Writer, username, sessionName, profileName string, profileCreated, profileUpdated bool, viaOIDC bool) {
+	method := ""
+	if viaOIDC {
+		method = " (via OIDC)"
+	}
+	fmt.Fprintf(w, "✅ Successfully logged in as %s%s\n", username, method)
+	fmt.Fprintf(w, "   Session saved as: %s\n", sessionName)
+
+	if profileCreated {
+		fmt.Fprintf(w, "\n✓ Profile '%s' created\n", profileName)
+	} else if profileUpdated {
+		fmt.Fprintf(w, "\n   Using existing profile: %s (session updated)\n", profileName)
+	}
+
+	if profileName != "" {
+		activeProfile, _ := izanami.GetActiveProfileName()
+		if activeProfile == profileName {
+			fmt.Fprintf(w, "   Active profile: %s\n", profileName)
+		}
+	}
+
+	fmt.Fprintf(w, "\nYou can now run commands like:\n")
+	fmt.Fprintf(w, "  iz admin tenants list\n")
+	fmt.Fprintf(w, "  iz features list --tenant <tenant>\n")
+}
+
+// resolveProfileAndSession determines the profile name, generates a session name, and logs verbose details.
+// suffix is appended to the session name (e.g., "session" or "oidc").
+func resolveProfileAndSession(cmd *cobra.Command, baseURL, username, suffix string) (profName, sessName string, profileCreated, profileUpdated bool) {
+	profName, profileCreated, profileUpdated = determineProfileName(cmd.InOrStdin(), cmd.OutOrStderr(), baseURL, username)
+
+	sessName = loginSessionName
+	if sessName == "" {
+		sessName = fmt.Sprintf("%s-%s-%s", profName, username, suffix)
+	}
+
+	if verbose {
+		fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Profile: %s (created: %v, updated: %v)\n", profName, profileCreated, profileUpdated)
+		fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Session name: %s\n", sessName)
+	}
+
+	return
+}
+
 // runOIDCLogin handles the OIDC authentication flow with automatic token polling.
 //
 // # Authentication Flow
@@ -497,7 +558,7 @@ func runOIDCLogin(cmd *cobra.Command, args []string) error {
 			fmt.Fprintf(cmd.OutOrStderr(), "[verbose] URL source: command argument\n")
 		}
 	} else {
-		resolved, source, _, _ := resolveLoginDefaults(cmd)
+		resolved, source, _, _, _ := resolveLoginDefaults(cmd)
 		if resolved != "" {
 			oidcBaseURL = resolved
 			if verbose {
@@ -507,7 +568,7 @@ func runOIDCLogin(cmd *cobra.Command, args []string) error {
 	}
 
 	if oidcBaseURL == "" {
-		return fmt.Errorf("base URL is required (use --url flag, provide as argument, or set IZ_BASE_URL)")
+		return fmt.Errorf("base URL is required (provide as argument, use --url flag, or set IZ_BASE_URL)")
 	}
 
 	// Normalize URL - remove trailing slash for consistent URL building
@@ -547,7 +608,7 @@ required for automatic token polling.
 Workaround: Authenticate manually and provide the token:
   1. Visit: %s/api/admin/openid-connect
   2. After login, copy the JWT from browser cookies (DevTools > Application > Cookies > 'token')
-  3. Run: iz login --oidc --url %s --token "your-jwt-token"`, oidcBaseURL, oidcBaseURL, oidcBaseURL)
+  3. Run: iz login --oidc %s --token "your-jwt-token"`, oidcBaseURL, oidcBaseURL, oidcBaseURL)
 	}
 
 	if verbose {
@@ -655,7 +716,7 @@ Workaround: Authenticate manually and provide the token:
 		}
 		spinner.Error(fmt.Sprintf("Authentication failed: %v", err))
 		fmt.Fprintf(cmd.OutOrStderr(), "\nTip: You can manually provide a token using:\n")
-		fmt.Fprintf(cmd.OutOrStderr(), "  iz login --oidc --url %s --token \"your-jwt-token\"\n", oidcBaseURL)
+		fmt.Fprintf(cmd.OutOrStderr(), "  iz login --oidc %s --token \"your-jwt-token\"\n", oidcBaseURL)
 		return err
 	}
 
@@ -685,65 +746,12 @@ func saveOIDCSession(cmd *cobra.Command, baseURL, token string) error {
 		fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Decoded username from JWT: %s\n", username)
 	}
 
-	// Determine profile name
-	profileName, profileCreated, profileUpdated := determineProfileName(cmd.InOrStdin(), cmd.OutOrStderr(), baseURL, username)
+	// Determine profile and session name
+	profileName, sessionName, profileCreated, profileUpdated := resolveProfileAndSession(cmd, baseURL, username, "oidc")
 
-	// Generate session name
-	sessionName := loginSessionName
-	if sessionName == "" {
-		sessionName = fmt.Sprintf("%s-%s-oidc", profileName, username)
-	}
-
-	if verbose {
-		fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Profile: %s (created: %v, updated: %v)\n", profileName, profileCreated, profileUpdated)
-		fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Session name: %s\n", sessionName)
-	}
-
-	// Load existing sessions
-	sessions, err := izanami.LoadSessions()
-	if err != nil {
-		if verbose {
-			fmt.Fprintf(cmd.OutOrStderr(), "[verbose] No existing sessions found, creating new session store\n")
-		}
-		sessions = &izanami.Sessions{Sessions: make(map[string]*izanami.Session)}
-	} else if verbose {
-		fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Loaded %d existing sessions\n", len(sessions.Sessions))
-	}
-
-	// Create session
-	session := &izanami.Session{
-		URL:       baseURL,
-		Username:  username,
-		JwtToken:  token,
-		CreatedAt: time.Now(),
-	}
-
-	// Check if session with same URL+username exists and overwrite
-	for name, existingSession := range sessions.Sessions {
-		if existingSession.URL == baseURL && existingSession.Username == username {
-			if name != sessionName {
-				if verbose {
-					fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Found existing session with same URL+username: %s\n", name)
-				}
-				delete(sessions.Sessions, name)
-				fmt.Fprintf(cmd.OutOrStderr(), "   Replacing existing session: %s\n", name)
-			}
-			break
-		}
-	}
-
-	sessions.AddSession(sessionName, session)
-
-	if verbose {
-		fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Saving session to disk...\n")
-	}
-
-	if err := sessions.Save(); err != nil {
-		return fmt.Errorf("failed to save session: %w", err)
-	}
-
-	if verbose {
-		fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Session saved successfully\n")
+	// Save session
+	if err := saveLoginSession(cmd, baseURL, username, token, izanami.AuthMethodOIDC, sessionName); err != nil {
+		return err
 	}
 
 	// Update profile with session reference (username is stored in session, not profile)
@@ -751,27 +759,7 @@ func saveOIDCSession(cmd *cobra.Command, baseURL, token string) error {
 		fmt.Fprintf(cmd.OutOrStderr(), "\n   Warning: failed to update profile: %v\n", err)
 	}
 
-	// Success messages
-	fmt.Fprintf(cmd.OutOrStderr(), "\n✅ Successfully logged in as %s (via OIDC)\n", username)
-	fmt.Fprintf(cmd.OutOrStderr(), "   Session saved as: %s\n", sessionName)
-
-	// Profile messages
-	if profileCreated {
-		fmt.Fprintf(cmd.OutOrStderr(), "\n✓ Profile '%s' created\n", profileName)
-	} else if profileUpdated {
-		fmt.Fprintf(cmd.OutOrStderr(), "\n   Using existing profile: %s (session updated)\n", profileName)
-	}
-
-	if profileName != "" {
-		activeProfile, _ := izanami.GetActiveProfileName()
-		if activeProfile == profileName {
-			fmt.Fprintf(cmd.OutOrStderr(), "   Active profile: %s\n", profileName)
-		}
-	}
-
-	fmt.Fprintf(cmd.OutOrStderr(), "\nYou can now run commands like:\n")
-	fmt.Fprintf(cmd.OutOrStderr(), "  iz admin tenants list\n")
-	fmt.Fprintf(cmd.OutOrStderr(), "  iz features list --tenant <tenant>\n")
+	printLoginSuccess(cmd.OutOrStderr(), username, sessionName, profileName, profileCreated, profileUpdated, true)
 
 	return nil
 }
@@ -869,16 +857,6 @@ func decodeJWTUsername(token string) string {
 
 	return "oidc-user"
 }
-
-// generateOIDCSessionName generates a session name from the base URL
-func generateOIDCSessionName(baseURL string) string {
-	u, err := url.Parse(baseURL)
-	if err != nil {
-		return "oidc-session"
-	}
-	return u.Host + "-oidc"
-}
-
 func init() {
 	rootCmd.AddCommand(loginCmd)
 

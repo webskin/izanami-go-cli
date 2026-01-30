@@ -731,3 +731,36 @@ func TestSessions_SpecialCharactersInName(t *testing.T) {
 		assert.Equal(t, "http://"+name, session.URL)
 	}
 }
+
+func TestSession_IsOIDC(t *testing.T) {
+	tests := []struct {
+		name       string
+		authMethod string
+		want       bool
+	}{
+		{
+			name:       "oidc auth method returns true",
+			authMethod: AuthMethodOIDC,
+			want:       true,
+		},
+		{
+			name:       "password auth method returns false",
+			authMethod: AuthMethodPassword,
+			want:       false,
+		},
+		{
+			name:       "empty auth method returns false (backward compat)",
+			authMethod: "",
+			want:       false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			session := &Session{
+				AuthMethod: tt.authMethod,
+			}
+			assert.Equal(t, tt.want, session.IsOIDC())
+		})
+	}
+}

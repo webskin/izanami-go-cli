@@ -51,6 +51,7 @@ type Config struct {
 	Project                     string                            `yaml:"-" mapstructure:"-"` // Comes from active profile
 	Context                     string                            `yaml:"-" mapstructure:"-"` // Comes from active profile
 	ClientKeys                  map[string]TenantClientKeysConfig `yaml:"-" mapstructure:"-"` // Comes from active profile
+	AuthMethod                  string                            `yaml:"-" mapstructure:"-"` // From session: "password" or "oidc"
 	InsecureSkipVerify          bool                              `yaml:"-" mapstructure:"-"` // Skip TLS certificate verification
 
 	// Global settings (stored in top-level YAML)
@@ -898,6 +899,11 @@ func (c *Config) MergeWithProfile(profile *Profile) {
 	// JwtToken: ONLY from session (short-lived, not stored in profiles)
 	if sessionData != nil && sessionData.JwtToken != "" && c.JwtToken == "" {
 		c.JwtToken = sessionData.JwtToken
+	}
+
+	// AuthMethod: from session only (to detect OIDC sessions for auto-login)
+	if sessionData != nil && sessionData.AuthMethod != "" && c.AuthMethod == "" {
+		c.AuthMethod = sessionData.AuthMethod
 	}
 
 	// PersonalAccessToken: only from profile (long-lived, not stored in sessions)

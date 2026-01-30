@@ -269,3 +269,55 @@ func TestIntegration_LoginZeroArgs_ReusesSession(t *testing.T) {
 	require.NoError(t, err, "Login with zero args should succeed")
 	assert.Contains(t, output, "Successfully logged in")
 }
+
+// TestIntegration_LoginPasswordCustomSessionName tests that the --name flag
+// is respected in the password login flow, saving the session with the custom name.
+func TestIntegration_LoginPasswordCustomSessionName(t *testing.T) {
+	env := setupIntegrationTest(t)
+
+	if env.Username == "" || env.Password == "" {
+		t.Skip("IZ_TEST_USERNAME or IZ_TEST_PASSWORD not set")
+	}
+
+	var buf bytes.Buffer
+	input := bytes.NewBufferString("default\n") // Profile name
+
+	cmd := &cobra.Command{Use: "iz"}
+	cmd.AddCommand(loginCmd)
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetIn(input)
+	loginCmd.SetOut(&buf)
+	loginCmd.SetErr(&buf)
+	loginCmd.SetIn(input)
+
+	customName := "my-custom-session"
+	cmd.SetArgs([]string{"login", env.BaseURL, env.Username, "--password", env.Password, "--name", customName})
+	err := cmd.Execute()
+
+	loginCmd.SetIn(nil)
+	loginCmd.SetOut(nil)
+	loginCmd.SetErr(nil)
+	loginSessionName = "" // Reset global flag
+
+	output := buf.String()
+	t.Logf("Login custom session name output:\n%s", output)
+
+	require.NoError(t, err, "Login with --name should succeed")
+	assert.Contains(t, output, "Successfully logged in")
+	assert.Contains(t, output, customName)
+
+	// Verify the session was saved with the custom name
+	sessions, err := izanami.LoadSessions()
+	require.NoError(t, err, "Should load sessions")
+
+	_, exists := sessions.Sessions[customName]
+	assert.True(t, exists, "Session should be saved with custom name %q, found keys: %v",
+		customName, func() []string {
+			keys := make([]string, 0, len(sessions.Sessions))
+			for k := range sessions.Sessions {
+				keys = append(keys, k)
+			}
+			return keys
+		}())
+}
