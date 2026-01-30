@@ -3,6 +3,9 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"sort"
+	"strconv"
+	"strings"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
@@ -111,6 +114,8 @@ For more information, visit: https://github.com/MAIF/izanami`,
 
 		// Log authentication mode in verbose mode
 		if cfg.Verbose {
+			logEnvironmentVariables(cmd)
+			logEffectiveConfig(cmd, cfg)
 			logAuthenticationMode(cmd, cfg)
 			// Also log active profile if any
 			if profileName != "" {
@@ -162,6 +167,172 @@ func GetOutputFormat() izanami.OutputFormat {
 		return izanami.OutputTable
 	}
 	return izanami.OutputJSON
+}
+
+// sensitiveEnvVars lists environment variable names whose values should be redacted in verbose output.
+var sensitiveEnvVars = map[string]bool{
+	"IZ_CLIENT_SECRET":         true,
+	"IZ_PERSONAL_ACCESS_TOKEN": true,
+	"IZ_JWT_TOKEN":             true,
+}
+
+// configFieldInfo describes a config field for verbose source reporting.
+type configFieldInfo struct {
+	key       string                       // display name (e.g., "base-url")
+	flagName  string                       // cobra flag name (empty if no flag)
+	envVar    string                       // env var name (empty if no env)
+	getValue  func(*izanami.Config) string // extracts the effective value
+	sensitive bool                         // whether to redact the value
+}
+
+// configFields lists the config fields to display in verbose mode.
+var configFields = []configFieldInfo{
+	{key: "base-url", flagName: "url", envVar: "IZ_BASE_URL", getValue: func(c *izanami.Config) string { return c.BaseURL }},
+	{key: "client-base-url", envVar: "IZ_CLIENT_BASE_URL", getValue: func(c *izanami.Config) string { return c.ClientBaseURL }},
+	{key: "client-id", envVar: "IZ_CLIENT_ID", getValue: func(c *izanami.Config) string { return c.ClientID }},
+	{key: "client-secret", envVar: "IZ_CLIENT_SECRET", getValue: func(c *izanami.Config) string { return c.ClientSecret }, sensitive: true},
+	{key: "tenant", flagName: "tenant", envVar: "IZ_TENANT", getValue: func(c *izanami.Config) string { return c.Tenant }},
+	{key: "project", flagName: "project", envVar: "IZ_PROJECT", getValue: func(c *izanami.Config) string { return c.Project }},
+	{key: "context", flagName: "context", envVar: "IZ_CONTEXT", getValue: func(c *izanami.Config) string { return c.Context }},
+	{key: "timeout", flagName: "timeout", getValue: func(c *izanami.Config) string { return strconv.Itoa(c.Timeout) }},
+	{key: "insecure", flagName: "insecure", getValue: func(c *izanami.Config) string { return strconv.FormatBool(c.InsecureSkipVerify) }},
+}
+
+// logEffectiveConfig prints each effective config value with its source in verbose mode.
+func logEffectiveConfig(cmd *cobra.Command, cfg *izanami.Config) {
+	// Load the active profile for source determination
+	var activeProfileName string
+	var profile *izanami.Profile
+	if profileName != "" {
+		activeProfileName = profileName
+	} else {
+		activeProfileName, _ = izanami.GetActiveProfileName()
+	}
+	if activeProfileName != "" {
+		profile, _ = izanami.GetProfile(activeProfileName)
+	}
+
+	// Load session data if profile references one
+	var session *izanami.Session
+	if profile != nil && profile.Session != "" {
+		sessions, err := izanami.LoadSessions()
+		if err == nil {
+			session, _ = sessions.GetSession(profile.Session)
+		}
+	}
+
+	for _, field := range configFields {
+		value := field.getValue(cfg)
+
+		// Skip unset string fields
+		if value == "" {
+			continue
+		}
+		// Skip insecure when false (uninteresting default)
+		if field.key == "insecure" && value == "false" {
+			continue
+		}
+
+		source := determineConfigSource(cmd, field, profile, session)
+
+		displayValue := value
+		if field.sensitive {
+			displayValue = izanami.RedactedValue
+		}
+
+		fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Config: %s=%s (source: %s)\n", field.key, displayValue, source)
+	}
+}
+
+// determineConfigSource checks layers in priority order to determine where
+// the effective config value came from.
+func determineConfigSource(cmd *cobra.Command, field configFieldInfo, profile *izanami.Profile, session *izanami.Session) string {
+	// 1. Flag explicitly set?
+	if field.flagName != "" && cmd.Flags().Changed(field.flagName) {
+		return "flag"
+	}
+
+	// 2. Env var set?
+	if field.envVar != "" && os.Getenv(field.envVar) != "" {
+		return "env"
+	}
+
+	// 3. Session? (base-url and jwt-token can come from session)
+	if session != nil {
+		switch field.key {
+		case "base-url":
+			if session.URL != "" && (profile == nil || profile.BaseURL == "") {
+				return "session"
+			}
+		}
+	}
+
+	// 4. Profile?
+	if profile != nil {
+		profileValue := getProfileFieldValue(profile, field.key)
+		if profileValue != "" && profileValue != "false" {
+			return "profile"
+		}
+	}
+
+	// 5. Global config keys: use GetConfigValue to distinguish file/env/default
+	if izanami.GlobalConfigKeys[field.key] {
+		if cv, err := izanami.GetConfigValue(field.key); err == nil {
+			return cv.Source
+		}
+	}
+
+	// 6. Fallback
+	return "default"
+}
+
+// getProfileFieldValue returns the profile's raw value for a given config key.
+func getProfileFieldValue(profile *izanami.Profile, key string) string {
+	switch key {
+	case "base-url":
+		return profile.BaseURL
+	case "client-base-url":
+		return profile.ClientBaseURL
+	case "client-id":
+		return profile.ClientID
+	case "client-secret":
+		return profile.ClientSecret
+	case "tenant":
+		return profile.Tenant
+	case "project":
+		return profile.Project
+	case "context":
+		return profile.Context
+	case "insecure":
+		return strconv.FormatBool(profile.InsecureSkipVerify)
+	default:
+		return ""
+	}
+}
+
+// logEnvironmentVariables prints all IZ_* environment variables in verbose mode,
+// redacting values for sensitive variables.
+func logEnvironmentVariables(cmd *cobra.Command) {
+	var izVars []string
+	for _, env := range os.Environ() {
+		if strings.HasPrefix(env, "IZ_") {
+			izVars = append(izVars, env)
+		}
+	}
+
+	if len(izVars) == 0 {
+		fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Environment: no IZ_* variables set\n")
+		return
+	}
+
+	sort.Strings(izVars)
+	for _, env := range izVars {
+		name, value, _ := strings.Cut(env, "=")
+		if sensitiveEnvVars[name] {
+			value = izanami.RedactedValue
+		}
+		fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Environment: %s=%s\n", name, value)
+	}
 }
 
 // logAuthenticationMode logs the available authentication modes

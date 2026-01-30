@@ -332,10 +332,10 @@ Use --show-secrets to display sensitive values.`,
 		// Define profile settings to display (in order)
 		// Note: client-id and client-secret are removed - use client-keys instead
 		type profileSetting struct {
-			key          string
-			value        string
-			source       string // optional source override (empty = use default logic)
-			isSensitive  bool
+			key         string
+			value       string
+			source      string // optional source override (empty = use default logic)
+			isSensitive bool
 		}
 
 		settings := []profileSetting{
