@@ -164,3 +164,108 @@ func TestIntegration_AuthenticatedClient(t *testing.T) {
 	// Verify client can make authenticated requests (health check doesn't need auth, but tests client creation)
 	t.Log("Authenticated client created successfully")
 }
+
+// TestIntegration_LoginOneArg_Username tests login with a single username arg
+// when the URL is available from a prior session.
+func TestIntegration_LoginOneArg_Username(t *testing.T) {
+	env := setupIntegrationTest(t)
+
+	// First: full login to establish session and profile
+	env.Login(t)
+
+	// Second: login with username only (URL resolved from session)
+	var buf bytes.Buffer
+	input := bytes.NewBufferString("default\n")
+
+	cmd := &cobra.Command{Use: "iz"}
+	cmd.AddCommand(loginCmd)
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetIn(input)
+	loginCmd.SetOut(&buf)
+	loginCmd.SetErr(&buf)
+	loginCmd.SetIn(input)
+
+	cmd.SetArgs([]string{"login", env.Username, "--password", env.Password})
+	err := cmd.Execute()
+
+	loginCmd.SetIn(nil)
+	loginCmd.SetOut(nil)
+	loginCmd.SetErr(nil)
+
+	output := buf.String()
+	t.Logf("Login one-arg username output:\n%s", output)
+
+	require.NoError(t, err, "Login with username only should succeed")
+	assert.Contains(t, output, "Successfully logged in")
+}
+
+// TestIntegration_LoginOneArg_URL tests login with a single URL arg
+// when the username is available from a prior session.
+func TestIntegration_LoginOneArg_URL(t *testing.T) {
+	env := setupIntegrationTest(t)
+
+	// First: full login to establish session and profile
+	env.Login(t)
+
+	// Second: login with URL only (username resolved from session)
+	var buf bytes.Buffer
+	input := bytes.NewBufferString("default\n")
+
+	cmd := &cobra.Command{Use: "iz"}
+	cmd.AddCommand(loginCmd)
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetIn(input)
+	loginCmd.SetOut(&buf)
+	loginCmd.SetErr(&buf)
+	loginCmd.SetIn(input)
+
+	cmd.SetArgs([]string{"login", env.BaseURL, "--password", env.Password})
+	err := cmd.Execute()
+
+	loginCmd.SetIn(nil)
+	loginCmd.SetOut(nil)
+	loginCmd.SetErr(nil)
+
+	output := buf.String()
+	t.Logf("Login one-arg URL output:\n%s", output)
+
+	require.NoError(t, err, "Login with URL only should succeed")
+	assert.Contains(t, output, "Successfully logged in")
+}
+
+// TestIntegration_LoginZeroArgs_ReusesSession tests login with zero args
+// when both URL and username are available from a prior session.
+func TestIntegration_LoginZeroArgs_ReusesSession(t *testing.T) {
+	env := setupIntegrationTest(t)
+
+	// First: full login to establish session and profile
+	env.Login(t)
+
+	// Second: login with zero args (both resolved from session)
+	var buf bytes.Buffer
+	input := bytes.NewBufferString("default\n")
+
+	cmd := &cobra.Command{Use: "iz"}
+	cmd.AddCommand(loginCmd)
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetIn(input)
+	loginCmd.SetOut(&buf)
+	loginCmd.SetErr(&buf)
+	loginCmd.SetIn(input)
+
+	cmd.SetArgs([]string{"login", "--password", env.Password})
+	err := cmd.Execute()
+
+	loginCmd.SetIn(nil)
+	loginCmd.SetOut(nil)
+	loginCmd.SetErr(nil)
+
+	output := buf.String()
+	t.Logf("Login zero-args output:\n%s", output)
+
+	require.NoError(t, err, "Login with zero args should succeed")
+	assert.Contains(t, output, "Successfully logged in")
+}

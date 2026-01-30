@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"syscall"
 	"time"
@@ -32,7 +33,7 @@ var (
 
 // loginCmd represents the login command
 var loginCmd = &cobra.Command{
-	Use:         "login [url] [username]",
+	Use:         "login [url | username | url username]",
 	Short:       "Login to Izanami and save session",
 	Annotations: map[string]string{"route": "POST /api/admin/login"},
 	Long: `Login to an Izanami instance and save the authentication session.
@@ -53,6 +54,15 @@ Examples:
   # Login with username/password
   iz login http://localhost:9000 RESERVED_ADMIN_USER
 
+  # Re-login (reuse URL and username from active session)
+  iz login
+
+  # Login with just username (reuse URL from active profile)
+  iz login RESERVED_ADMIN_USER
+
+  # Login with just URL (reuse username from active session)
+  iz login http://localhost:9000
+
   # Login via OIDC (opens browser, waits for authentication)
   iz login --oidc --url https://izanami.prod.com
 
@@ -63,7 +73,12 @@ Examples:
   iz login --oidc --url https://izanami.prod.com --token "eyJhbGciOiJIUzI1NiIs..."
 
   # Login via OIDC without opening browser (prints URL only)
-  iz login --oidc --url https://izanami.prod.com --no-browser`,
+  iz login --oidc --url https://izanami.prod.com --no-browser
+
+When called without arguments, both the URL and username must be
+available from the active session. A single argument is treated as a
+URL (if it starts with http:// or https://) or as a username otherwise.
+The missing value is resolved from the active session.`,
 	Args: cobra.MaximumNArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// OIDC flow
@@ -71,18 +86,74 @@ Examples:
 			return runOIDCLogin(cmd, args)
 		}
 
-		// Traditional username/password flow requires both args
-		if len(args) < 2 {
-			return fmt.Errorf("username/password login requires: iz login <url> <username>\nFor OIDC login, use: iz login --oidc --url <url>")
-		}
+		// Resolve URL and username from args, falling back to profile/session
+		var loginBaseURL, username string
 
-		baseURL := args[0]
-		username := args[1]
+		switch len(args) {
+		case 2:
+			// iz login <url> <username>
+			loginBaseURL = args[0]
+			username = args[1]
+		case 1:
+			if strings.HasPrefix(args[0], "http://") || strings.HasPrefix(args[0], "https://") {
+				// iz login <url> — resolve username from session
+				loginBaseURL = args[0]
+				_, _, resolvedUser, userSrc := resolveLoginDefaults(cmd)
+				if resolvedUser == "" {
+					return fmt.Errorf("no username available for login\n\n"+
+						"Provide both URL and username:  iz login %s <username>",
+						args[0])
+				}
+				username = resolvedUser
+				if verbose {
+					fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Using username from %s: %s\n", userSrc, username)
+				}
+			} else {
+				// iz login <username> — resolve URL from profile/session/env/flag
+				username = args[0]
+				resolved, source, _, _ := resolveLoginDefaults(cmd)
+				if resolved == "" {
+					return fmt.Errorf("no base URL available for login\n\n"+
+						"Provide URL explicitly:  iz login <url> %s\n"+
+						"Or set env variable:     IZ_BASE_URL=<url> iz login %s\n"+
+						"Or use --url flag:       iz login --url <url> %s",
+						args[0], args[0], args[0])
+				}
+				loginBaseURL = resolved
+				if verbose {
+					fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Using URL from %s: %s\n", source, loginBaseURL)
+				}
+			}
+		case 0:
+			// iz login — resolve both from profile/session
+			resolvedURL, urlSrc, resolvedUser, userSrc := resolveLoginDefaults(cmd)
+			if resolvedURL == "" && resolvedUser == "" {
+				return fmt.Errorf("no URL or username available for login\n\n" +
+					"Usage:\n" +
+					"  iz login <url> <username>    provide both explicitly\n" +
+					"  iz login <username>          reuse URL from active profile\n" +
+					"  iz login                     reuse URL and username from session")
+			}
+			if resolvedURL == "" {
+				return fmt.Errorf("no base URL available (username '%s' found in session)\n\n"+
+					"Provide URL: iz login <url> %s", resolvedUser, resolvedUser)
+			}
+			if resolvedUser == "" {
+				return fmt.Errorf("no username available (URL found from %s)\n\n"+
+					"Provide username: iz login <username>", urlSrc)
+			}
+			loginBaseURL = resolvedURL
+			username = resolvedUser
+			if verbose {
+				fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Using URL from %s: %s\n", urlSrc, loginBaseURL)
+				fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Using username from %s: %s\n", userSrc, username)
+			}
+		}
 
 		// Verbose: Log login attempt details
 		if verbose {
 			fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Login attempt:\n")
-			fmt.Fprintf(cmd.OutOrStderr(), "[verbose]   URL: %s\n", baseURL)
+			fmt.Fprintf(cmd.OutOrStderr(), "[verbose]   URL: %s\n", loginBaseURL)
 			fmt.Fprintf(cmd.OutOrStderr(), "[verbose]   Username: %s\n", username)
 		}
 
@@ -110,12 +181,12 @@ Examples:
 		}
 
 		// Login to Izanami
-		fmt.Fprintf(cmd.OutOrStderr(), "Authenticating with %s...\n", baseURL)
+		fmt.Fprintf(cmd.OutOrStderr(), "Authenticating with %s...\n", loginBaseURL)
 		if verbose {
-			fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Sending POST request to %s/api/admin/login\n", baseURL)
+			fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Sending POST request to %s/api/admin/login\n", loginBaseURL)
 		}
 
-		token, err := performLogin(baseURL, username, password)
+		token, err := performLogin(loginBaseURL, username, password)
 		if err != nil {
 			if verbose {
 				fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Login failed: %v\n", err)
@@ -129,7 +200,7 @@ Examples:
 		}
 
 		// Determine profile name first (create or find existing)
-		profileName, profileCreated, profileUpdated := determineProfileName(cmd.InOrStdin(), cmd.OutOrStderr(), baseURL, username)
+		profileName, profileCreated, profileUpdated := determineProfileName(cmd.InOrStdin(), cmd.OutOrStderr(), loginBaseURL, username)
 
 		// Generate deterministic session name: <profile-name>-<username>-session
 		sessionName := fmt.Sprintf("%s-%s-session", profileName, username)
@@ -146,7 +217,7 @@ Examples:
 		}
 
 		session := &izanami.Session{
-			URL:       baseURL,
+			URL:       loginBaseURL,
 			Username:  username,
 			JwtToken:  token,
 			CreatedAt: time.Now(),
@@ -154,7 +225,7 @@ Examples:
 
 		// Check if session with same URL+username exists and overwrite
 		for name, existingSession := range sessions.Sessions {
-			if existingSession.URL == baseURL && existingSession.Username == username {
+			if existingSession.URL == loginBaseURL && existingSession.Username == username {
 				// Delete old session if it has a different name
 				if name != sessionName {
 					delete(sessions.Sessions, name)
@@ -199,6 +270,43 @@ Examples:
 
 		return nil
 	},
+}
+
+// resolveLoginDefaults resolves login defaults from existing config.
+// Best-effort: returns empty strings on any error.
+func resolveLoginDefaults(cmd *cobra.Command) (resolvedURL, urlSource, resolvedUser, userSource string) {
+	// 1. --url flag (global persistent flag)
+	if baseURL != "" {
+		resolvedURL = baseURL
+		urlSource = "--url flag"
+	}
+
+	// 2. IZ_BASE_URL env var
+	if resolvedURL == "" {
+		if envURL := os.Getenv("IZ_BASE_URL"); envURL != "" {
+			resolvedURL = envURL
+			urlSource = "IZ_BASE_URL env"
+		}
+	}
+
+	// 3. Load config best-effort for profile/session data
+	loadedCfg, err := izanami.LoadConfigWithProfile(profileName)
+	if err != nil {
+		if verbose {
+			fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Could not load config for defaults: %v\n", err)
+		}
+		return
+	}
+
+	if resolvedURL == "" && loadedCfg.BaseURL != "" {
+		resolvedURL = loadedCfg.BaseURL
+		urlSource = "active profile/session"
+	}
+	if loadedCfg.Username != "" {
+		resolvedUser = loadedCfg.Username
+		userSource = "active session"
+	}
+	return
 }
 
 // performLogin performs the actual login to Izanami
@@ -381,24 +489,20 @@ func runOIDCLogin(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(cmd.OutOrStderr(), "[verbose] OIDC login flow initiated\n")
 	}
 
-	// Get base URL from args or global flag
+	// Get base URL from args, flags, env, or active profile/session
 	var oidcBaseURL string
 	if len(args) > 0 {
 		oidcBaseURL = args[0]
 		if verbose {
 			fmt.Fprintf(cmd.OutOrStderr(), "[verbose] URL source: command argument\n")
 		}
-	} else if baseURL != "" {
-		// Use global --url flag
-		oidcBaseURL = baseURL
-		if verbose {
-			fmt.Fprintf(cmd.OutOrStderr(), "[verbose] URL source: --url flag\n")
-		}
-	} else if cfg != nil && cfg.BaseURL != "" {
-		// Fall back to config
-		oidcBaseURL = cfg.BaseURL
-		if verbose {
-			fmt.Fprintf(cmd.OutOrStderr(), "[verbose] URL source: config file\n")
+	} else {
+		resolved, source, _, _ := resolveLoginDefaults(cmd)
+		if resolved != "" {
+			oidcBaseURL = resolved
+			if verbose {
+				fmt.Fprintf(cmd.OutOrStderr(), "[verbose] URL source: %s\n", source)
+			}
 		}
 	}
 
