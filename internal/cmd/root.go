@@ -17,7 +17,7 @@ var (
 	// Global flags
 	cfgFile            string
 	profileName        string
-	baseURL            string
+	leaderURL          string
 	tenant             string
 	project            string
 	contextPath        string
@@ -28,7 +28,8 @@ var (
 	insecureSkipVerify bool
 
 	// Global config
-	cfg *izanami.Config
+	cfg           *izanami.ResolvedConfig
+	activeProfile *izanami.Profile
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -44,7 +45,7 @@ standard feature flag operations.
 Configuration can be provided via:
   - Profiles: Named environment configurations (local, sandbox, build, prod)
   - Config file: ~/.config/iz/config.yaml (or platform-equivalent)
-  - Environment variables: IZ_BASE_URL, IZ_TENANT, IZ_PROJECT, etc.
+  - Environment variables: IZ_LEADER_URL, IZ_TENANT, IZ_PROJECT, etc.
   - Command-line flags: --url, --tenant, --project, etc.
 
 Examples:
@@ -84,10 +85,10 @@ For more information, visit: https://github.com/MAIF/izanami`,
 		// Load config via profile system (profiles load their referenced sessions)
 		if profileName != "" {
 			// Load with specific profile from --profile flag
-			cfg, err = izanami.LoadConfigWithProfile(profileName)
+			cfg, activeProfile, err = izanami.LoadConfigWithProfile(profileName)
 		} else {
 			// Load with active profile (if any)
-			cfg, err = izanami.LoadConfigWithProfile("")
+			cfg, activeProfile, err = izanami.LoadConfigWithProfile("")
 		}
 
 		if err != nil {
@@ -97,8 +98,7 @@ For more information, visit: https://github.com/MAIF/izanami`,
 		// Command-line flags override everything (highest priority)
 		// Environment variables override profile settings but are overridden by flags
 		cfg.MergeWithFlags(izanami.FlagValues{
-			BaseURL:            getValueWithEnvFallback(baseURL, "IZ_BASE_URL"),
-			ClientBaseURL:      getValueWithEnvFallback("", "IZ_CLIENT_BASE_URL"),
+			LeaderURL:          getValueWithEnvFallback(leaderURL, "IZ_LEADER_URL"),
 			ClientID:           getValueWithEnvFallback("", "IZ_CLIENT_ID"),
 			ClientSecret:       getValueWithEnvFallback("", "IZ_CLIENT_SECRET"),
 			Tenant:             getValueWithEnvFallback(tenant, "IZ_TENANT"),
@@ -142,7 +142,7 @@ func Execute() {
 func init() {
 	// Global flags
 	rootCmd.PersistentFlags().StringVarP(&profileName, "profile", "p", "", "Use specific profile (overrides active profile)")
-	rootCmd.PersistentFlags().StringVar(&baseURL, "url", "", "Izanami base URL (env: IZ_BASE_URL)")
+	rootCmd.PersistentFlags().StringVar(&leaderURL, "url", "", "Izanami leader URL (env: IZ_LEADER_URL)")
 	rootCmd.PersistentFlags().StringVar(&tenant, "tenant", "", "Default tenant (env: IZ_TENANT)")
 	rootCmd.PersistentFlags().StringVar(&project, "project", "", "Default project (env: IZ_PROJECT)")
 	rootCmd.PersistentFlags().StringVar(&contextPath, "context", "", "Default context path (env: IZ_CONTEXT)")
@@ -157,7 +157,7 @@ func init() {
 }
 
 // GetConfig returns the global configuration
-func GetConfig() *izanami.Config {
+func GetConfig() *izanami.ResolvedConfig {
 	return cfg
 }
 
@@ -178,28 +178,27 @@ var sensitiveEnvVars = map[string]bool{
 
 // configFieldInfo describes a config field for verbose source reporting.
 type configFieldInfo struct {
-	key       string                       // display name (e.g., "base-url")
-	flagName  string                       // cobra flag name (empty if no flag)
-	envVar    string                       // env var name (empty if no env)
-	getValue  func(*izanami.Config) string // extracts the effective value
-	sensitive bool                         // whether to redact the value
+	key       string                               // display name (e.g., "leader-url")
+	flagName  string                               // cobra flag name (empty if no flag)
+	envVar    string                               // env var name (empty if no env)
+	getValue  func(*izanami.ResolvedConfig) string // extracts the effective value
+	sensitive bool                                 // whether to redact the value
 }
 
 // configFields lists the config fields to display in verbose mode.
 var configFields = []configFieldInfo{
-	{key: "base-url", flagName: "url", envVar: "IZ_BASE_URL", getValue: func(c *izanami.Config) string { return c.BaseURL }},
-	{key: "client-base-url", envVar: "IZ_CLIENT_BASE_URL", getValue: func(c *izanami.Config) string { return c.ClientBaseURL }},
-	{key: "client-id", envVar: "IZ_CLIENT_ID", getValue: func(c *izanami.Config) string { return c.ClientID }},
-	{key: "client-secret", envVar: "IZ_CLIENT_SECRET", getValue: func(c *izanami.Config) string { return c.ClientSecret }, sensitive: true},
-	{key: "tenant", flagName: "tenant", envVar: "IZ_TENANT", getValue: func(c *izanami.Config) string { return c.Tenant }},
-	{key: "project", flagName: "project", envVar: "IZ_PROJECT", getValue: func(c *izanami.Config) string { return c.Project }},
-	{key: "context", flagName: "context", envVar: "IZ_CONTEXT", getValue: func(c *izanami.Config) string { return c.Context }},
-	{key: "timeout", flagName: "timeout", getValue: func(c *izanami.Config) string { return strconv.Itoa(c.Timeout) }},
-	{key: "insecure", flagName: "insecure", getValue: func(c *izanami.Config) string { return strconv.FormatBool(c.InsecureSkipVerify) }},
+	{key: "leader-url", flagName: "url", envVar: "IZ_LEADER_URL", getValue: func(c *izanami.ResolvedConfig) string { return c.LeaderURL }},
+	{key: "client-id", envVar: "IZ_CLIENT_ID", getValue: func(c *izanami.ResolvedConfig) string { return c.ClientID }},
+	{key: "client-secret", envVar: "IZ_CLIENT_SECRET", getValue: func(c *izanami.ResolvedConfig) string { return c.ClientSecret }, sensitive: true},
+	{key: "tenant", flagName: "tenant", envVar: "IZ_TENANT", getValue: func(c *izanami.ResolvedConfig) string { return c.Tenant }},
+	{key: "project", flagName: "project", envVar: "IZ_PROJECT", getValue: func(c *izanami.ResolvedConfig) string { return c.Project }},
+	{key: "context", flagName: "context", envVar: "IZ_CONTEXT", getValue: func(c *izanami.ResolvedConfig) string { return c.Context }},
+	{key: "timeout", flagName: "timeout", getValue: func(c *izanami.ResolvedConfig) string { return strconv.Itoa(c.Timeout) }},
+	{key: "insecure", flagName: "insecure", getValue: func(c *izanami.ResolvedConfig) string { return strconv.FormatBool(c.InsecureSkipVerify) }},
 }
 
 // logEffectiveConfig prints each effective config value with its source in verbose mode.
-func logEffectiveConfig(cmd *cobra.Command, cfg *izanami.Config) {
+func logEffectiveConfig(cmd *cobra.Command, cfg *izanami.ResolvedConfig) {
 	// Load the active profile for source determination
 	var activeProfileName string
 	var profile *izanami.Profile
@@ -257,11 +256,11 @@ func determineConfigSource(cmd *cobra.Command, field configFieldInfo, profile *i
 		return "env"
 	}
 
-	// 3. Session? (base-url and jwt-token can come from session)
+	// 3. Session? (leader-url and jwt-token can come from session)
 	if session != nil {
 		switch field.key {
-		case "base-url":
-			if session.URL != "" && (profile == nil || profile.BaseURL == "") {
+		case "leader-url":
+			if session.URL != "" && (profile == nil || profile.LeaderURL == "") {
 				return "session"
 			}
 		}
@@ -289,10 +288,10 @@ func determineConfigSource(cmd *cobra.Command, field configFieldInfo, profile *i
 // getProfileFieldValue returns the profile's raw value for a given config key.
 func getProfileFieldValue(profile *izanami.Profile, key string) string {
 	switch key {
-	case "base-url":
-		return profile.BaseURL
-	case "client-base-url":
-		return profile.ClientBaseURL
+	case "leader-url":
+		return profile.LeaderURL
+	case "default-worker":
+		return profile.DefaultWorker
 	case "client-id":
 		return profile.ClientID
 	case "client-secret":
@@ -336,7 +335,7 @@ func logEnvironmentVariables(cmd *cobra.Command) {
 }
 
 // logAuthenticationMode logs the available authentication modes
-func logAuthenticationMode(cmd *cobra.Command, cfg *izanami.Config) {
+func logAuthenticationMode(cmd *cobra.Command, cfg *izanami.ResolvedConfig) {
 	var adminAuth, clientAuth string
 
 	// Check admin authentication (for admin operations)

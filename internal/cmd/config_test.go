@@ -66,11 +66,11 @@ func createConfigTestFile(t *testing.T, configPath string, profiles map[string]*
 			if profile.Session != "" {
 				profileMap["session"] = profile.Session
 			}
-			if profile.BaseURL != "" {
-				profileMap["base-url"] = profile.BaseURL
+			if profile.LeaderURL != "" {
+				profileMap["leader-url"] = profile.LeaderURL
 			}
-			if profile.ClientBaseURL != "" {
-				profileMap["client-base-url"] = profile.ClientBaseURL
+			if profile.DefaultWorker != "" {
+				profileMap["default-worker"] = profile.DefaultWorker
 			}
 			if profile.Tenant != "" {
 				profileMap["tenant"] = profile.Tenant
@@ -150,8 +150,8 @@ func TestConfigListCmd_WithActiveProfile(t *testing.T) {
 	// Create config with active profile
 	profiles := map[string]*izanami.Profile{
 		"sandbox": {
-			BaseURL:       "http://localhost:9000",
-			ClientBaseURL: "http://worker.localhost:9000",
+			LeaderURL:     "http://localhost:9000",
+			DefaultWorker: "local-worker",
 			Tenant:        "dev-tenant",
 			Project:       "test-project",
 			Context:       "dev",
@@ -173,10 +173,10 @@ func TestConfigListCmd_WithActiveProfile(t *testing.T) {
 	// Should show Active Profile section
 	assert.Contains(t, output, "=== Active Profile: sandbox ===", "Should have Active Profile header")
 	// Should show profile-specific keys
-	assert.Contains(t, output, "base-url", "Should show base-url in profile section")
-	assert.Contains(t, output, "client-base-url", "Should show client-base-url in profile section")
-	assert.Contains(t, output, "http://localhost:9000", "Should show base-url value")
-	assert.Contains(t, output, "http://worker.localhost:9000", "Should show client-base-url value")
+	assert.Contains(t, output, "leader-url", "Should show leader-url in profile section")
+	assert.Contains(t, output, "http://localhost:9000", "Should show leader-url value")
+	assert.Contains(t, output, "default-worker", "Should show default-worker key")
+	assert.Contains(t, output, "local-worker", "Should show default-worker value")
 	assert.Contains(t, output, "tenant", "Should show tenant key")
 	assert.Contains(t, output, "dev-tenant", "Should show tenant value")
 	assert.Contains(t, output, "project", "Should show project key")
@@ -198,8 +198,8 @@ func TestConfigListCmd_WithClientKeys(t *testing.T) {
 	// Create config with client-keys
 	profiles := map[string]*izanami.Profile{
 		"prod": {
-			BaseURL: "https://izanami.prod.com",
-			Tenant:  "production",
+			LeaderURL: "https://izanami.prod.com",
+			Tenant:    "production",
 			ClientKeys: map[string]izanami.TenantClientKeysConfig{
 				"tenant1": {
 					ClientID:     "client1",
@@ -238,7 +238,7 @@ func TestConfigListCmd_SensitiveValuesRedacted(t *testing.T) {
 	// Create config with sensitive values
 	profiles := map[string]*izanami.Profile{
 		"test": {
-			BaseURL:             "http://localhost:9000",
+			LeaderURL:           "http://localhost:9000",
 			PersonalAccessToken: "my-personal-token",
 		},
 	}
@@ -268,7 +268,7 @@ func TestConfigListCmd_ShowSecrets(t *testing.T) {
 	// Create config with sensitive values
 	profiles := map[string]*izanami.Profile{
 		"test": {
-			BaseURL:             "http://localhost:9000",
+			LeaderURL:           "http://localhost:9000",
 			PersonalAccessToken: "my-personal-token",
 		},
 	}
@@ -290,8 +290,8 @@ func TestConfigListCmd_ShowSecrets(t *testing.T) {
 	t.Logf("Config list (show secrets) output:\n%s", output)
 }
 
-// TestConfigListCmd_BaseURLFromSession tests that base-url is resolved from session
-func TestConfigListCmd_BaseURLFromSession(t *testing.T) {
+// TestConfigListCmd_LeaderURLFromSession tests that base-url is resolved from session
+func TestConfigListCmd_LeaderURLFromSession(t *testing.T) {
 	paths := setupTestPaths(t)
 	overridePathFunctions(t, paths)
 
@@ -338,7 +338,7 @@ func TestConfigListCmd_NoClientIdClientSecret(t *testing.T) {
 	// Create config with client-id and client-secret (these are legacy fields)
 	profiles := map[string]*izanami.Profile{
 		"test": {
-			BaseURL:      "http://localhost:9000",
+			LeaderURL:    "http://localhost:9000",
 			ClientID:     "legacy-client-id",
 			ClientSecret: "legacy-client-secret",
 		},

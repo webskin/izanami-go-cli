@@ -18,7 +18,9 @@ const (
 	MsgFailedToWriteSessionsFile = "failed to write sessions file"
 
 	// Authentication error messages
-	MsgBaseURLRequired      = "base URL is required"
+	MsgBaseURLRequired   = "leader URL is required"
+	MsgLeaderURLRequired = "leader URL is required"
+
 	MsgLoginRequestFailed   = "login request failed"
 	MsgLoginFailed          = "login failed (status %d): invalid credentials"
 	MsgNoJWTTokenInResponse = "no JWT token in login response"
@@ -113,4 +115,13 @@ const (
 	MsgInvalidConfigKey        = "invalid config key: %s"
 	MsgFailedToCreateConfigDir = "failed to create config directory: %w"
 	MsgFailedToReadConfigFile  = "failed to read config file: %w"
+
+	// Worker error messages
+	MsgWorkerNotFound           = "worker '%s' not found in profile '%s'"
+	MsgWorkerNotFoundHint       = "worker '%s' not found in profile '%s'; available workers: %s. Add workers with: iz profiles workers add"
+	MsgNoWorkersConfigured      = "no workers configured in profile '%s'. Add workers with: iz profiles workers add <name> --url <url>"
+	MsgWorkerRequiresProfile    = "--worker flag requires an active profile"
+	MsgDefaultWorkerNotFound    = "[warning] default-worker '%s' not found in profile '%s'; falling back to standalone mode"
+	MsgWorkerAlreadyExists      = "worker '%s' already exists in profile '%s'. Use --force to overwrite"
+	MsgNoActiveProfileForWorker = "no active profile. Use 'iz profiles use <name>' to select a profile first"
 )

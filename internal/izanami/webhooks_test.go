@@ -37,11 +37,11 @@ func TestListWebhooks(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -67,11 +67,11 @@ func TestListWebhooks_WithIdentityMapper(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -92,11 +92,11 @@ func TestListWebhooks_ServerError(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -116,11 +116,11 @@ func TestListWebhooks_Empty(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -167,11 +167,11 @@ func TestClient_CreateWebhook(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -200,11 +200,11 @@ func TestClient_CreateWebhook_WithStatusOK(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -227,11 +227,11 @@ func TestClient_CreateWebhook_BadRequest(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -271,11 +271,11 @@ func TestClient_UpdateWebhook(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -293,11 +293,11 @@ func TestClient_UpdateWebhook_WithStatusOK(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -317,11 +317,11 @@ func TestClient_UpdateWebhook_NotFound(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -344,11 +344,11 @@ func TestClient_UpdateWebhook_BadRequest(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -372,11 +372,11 @@ func TestClient_DeleteWebhook(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -394,11 +394,11 @@ func TestClient_DeleteWebhook_WithStatusOK(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -418,11 +418,11 @@ func TestClient_DeleteWebhook_NotFound(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -464,11 +464,11 @@ func TestListWebhookUsers(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -495,11 +495,11 @@ func TestListWebhookUsers_WithIdentityMapper(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -519,11 +519,11 @@ func TestListWebhookUsers_Empty(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -544,11 +544,11 @@ func TestListWebhookUsers_NotFound(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -569,11 +569,11 @@ func TestListWebhookUsers_Unauthorized(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "invalid-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "invalid-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -609,11 +609,11 @@ func TestClient_CreateWebhook_WithFeatures(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -649,11 +649,11 @@ func TestClient_CreateWebhook_WithProjects(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -693,11 +693,11 @@ func TestClient_CreateWebhook_WithHeaders(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)

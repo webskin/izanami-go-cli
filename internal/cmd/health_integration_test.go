@@ -19,9 +19,9 @@ func setupHealthTest(t *testing.T, env *IntegrationTestEnv) func() {
 	origOutputFormat := outputFormat
 
 	// Set up config for health check
-	cfg = &izanami.Config{
-		BaseURL: env.BaseURL,
-		Timeout: 30,
+	cfg = &izanami.ResolvedConfig{
+		LeaderURL: env.LeaderURL,
+		Timeout:   30,
 	}
 	outputFormat = "table"
 
@@ -58,7 +58,7 @@ func TestIntegration_HealthCheckNoAuth(t *testing.T) {
 	// Verify health output
 	assert.Contains(t, output, "UP", "Should show server is UP")
 	assert.Contains(t, output, "Database", "Should show database status")
-	assert.Contains(t, output, env.BaseURL, "Should show URL")
+	assert.Contains(t, output, env.LeaderURL, "Should show URL")
 
 	t.Logf("Health check output:\n%s", output)
 }
@@ -121,7 +121,7 @@ func TestIntegration_HealthCheckNoURL(t *testing.T) {
 
 	// Should fail because no URL is configured
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "base URL is required", "Should indicate URL is required")
+	assert.Contains(t, err.Error(), "leader URL is required", "Should indicate URL is required")
 
 	t.Log("Health check correctly failed when no URL configured")
 }

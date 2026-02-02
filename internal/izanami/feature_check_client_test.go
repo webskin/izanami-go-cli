@@ -16,8 +16,8 @@ import (
 
 func TestNewFeatureCheckClient(t *testing.T) {
 	t.Run("valid config with client credentials", func(t *testing.T) {
-		config := &Config{
-			BaseURL:      "http://localhost:9000",
+		config := &ResolvedConfig{
+			LeaderURL:    "http://localhost:9000",
 			ClientID:     "test-client-id",
 			ClientSecret: "test-client-secret",
 			Timeout:      30,
@@ -30,8 +30,8 @@ func TestNewFeatureCheckClient(t *testing.T) {
 	})
 
 	t.Run("missing client-id returns error", func(t *testing.T) {
-		config := &Config{
-			BaseURL:      "http://localhost:9000",
+		config := &ResolvedConfig{
+			LeaderURL:    "http://localhost:9000",
 			ClientSecret: "test-client-secret",
 			Timeout:      30,
 		}
@@ -44,10 +44,10 @@ func TestNewFeatureCheckClient(t *testing.T) {
 	})
 
 	t.Run("missing client-secret returns error", func(t *testing.T) {
-		config := &Config{
-			BaseURL:  "http://localhost:9000",
-			ClientID: "test-client-id",
-			Timeout:  30,
+		config := &ResolvedConfig{
+			LeaderURL: "http://localhost:9000",
+			ClientID:  "test-client-id",
+			Timeout:   30,
 		}
 
 		client, err := NewFeatureCheckClient(config)
@@ -57,8 +57,8 @@ func TestNewFeatureCheckClient(t *testing.T) {
 		assert.Contains(t, err.Error(), "client credentials required")
 	})
 
-	t.Run("missing base URL returns error", func(t *testing.T) {
-		config := &Config{
+	t.Run("missing URL returns error", func(t *testing.T) {
+		config := &ResolvedConfig{
 			ClientID:     "test-client-id",
 			ClientSecret: "test-client-secret",
 			Timeout:      30,
@@ -68,28 +68,28 @@ func TestNewFeatureCheckClient(t *testing.T) {
 
 		assert.Error(t, err)
 		assert.Nil(t, client)
-		assert.Contains(t, err.Error(), "base URL")
+		assert.Contains(t, err.Error(), "URL is required")
 	})
 
-	t.Run("uses ClientBaseURL when set", func(t *testing.T) {
+	t.Run("uses WorkerURL when set", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(FeatureCheckResult{Active: true, Name: "feature1"})
 		}))
 		defer server.Close()
 
-		config := &Config{
-			BaseURL:       "http://admin-server:9000",
-			ClientBaseURL: server.URL, // Client operations should use this
-			ClientID:      "test-client-id",
-			ClientSecret:  "test-client-secret",
-			Timeout:       30,
+		config := &ResolvedConfig{
+			LeaderURL:    "http://admin-server:9000",
+			WorkerURL:    server.URL, // Client operations should use this
+			ClientID:     "test-client-id",
+			ClientSecret: "test-client-secret",
+			Timeout:      30,
 		}
 
 		client, err := NewFeatureCheckClient(config)
 		require.NoError(t, err)
 
-		// The client should use ClientBaseURL for feature checks
+		// The client should use WorkerURL for feature checks
 		ctx := context.Background()
 		result, err := CheckFeature(client, ctx, "feature1", "", "", "", ParseFeatureCheckResult)
 
@@ -97,15 +97,15 @@ func TestNewFeatureCheckClient(t *testing.T) {
 		assert.Equal(t, true, result.Active)
 	})
 
-	t.Run("falls back to BaseURL when ClientBaseURL not set", func(t *testing.T) {
+	t.Run("falls back to LeaderURL when WorkerURL not set", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(FeatureCheckResult{Active: true, Name: "feature1"})
 		}))
 		defer server.Close()
 
-		config := &Config{
-			BaseURL:      server.URL,
+		config := &ResolvedConfig{
+			LeaderURL:    server.URL,
 			ClientID:     "test-client-id",
 			ClientSecret: "test-client-secret",
 			Timeout:      30,
@@ -139,8 +139,8 @@ func TestCheckFeature(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := &Config{
-			BaseURL:      server.URL,
+		config := &ResolvedConfig{
+			LeaderURL:    server.URL,
 			ClientID:     "test-client-id",
 			ClientSecret: "test-client-secret",
 			Timeout:      30,
@@ -173,8 +173,8 @@ func TestCheckFeature(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := &Config{
-			BaseURL:      server.URL,
+		config := &ResolvedConfig{
+			LeaderURL:    server.URL,
 			ClientID:     "test-client-id",
 			ClientSecret: "test-client-secret",
 			Timeout:      30,
@@ -200,8 +200,8 @@ func TestCheckFeature(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := &Config{
-			BaseURL:      server.URL,
+		config := &ResolvedConfig{
+			LeaderURL:    server.URL,
 			ClientID:     "test-client-id",
 			ClientSecret: "test-client-secret",
 			Timeout:      30,
@@ -226,8 +226,8 @@ func TestCheckFeature(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := &Config{
-			BaseURL:      server.URL,
+		config := &ResolvedConfig{
+			LeaderURL:    server.URL,
 			ClientID:     "test-client-id",
 			ClientSecret: "test-client-secret",
 			Timeout:      30,
@@ -250,8 +250,8 @@ func TestCheckFeature(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := &Config{
-			BaseURL:      server.URL,
+		config := &ResolvedConfig{
+			LeaderURL:    server.URL,
 			ClientID:     "test-client-id",
 			ClientSecret: "test-client-secret",
 			Timeout:      30,
@@ -274,8 +274,8 @@ func TestCheckFeature(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := &Config{
-			BaseURL:      server.URL,
+		config := &ResolvedConfig{
+			LeaderURL:    server.URL,
 			ClientID:     "test-client-id",
 			ClientSecret: "test-client-secret",
 			Timeout:      30,
@@ -303,8 +303,8 @@ func TestCheckFeatures(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := &Config{
-			BaseURL:      server.URL,
+		config := &ResolvedConfig{
+			LeaderURL:    server.URL,
 			ClientID:     "test-client-id",
 			ClientSecret: "test-client-secret",
 			Timeout:      30,
@@ -330,8 +330,8 @@ func TestCheckFeatures(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := &Config{
-			BaseURL:      server.URL,
+		config := &ResolvedConfig{
+			LeaderURL:    server.URL,
 			ClientID:     "test-client-id",
 			ClientSecret: "test-client-secret",
 			Timeout:      30,
@@ -357,8 +357,8 @@ func TestCheckFeatures(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := &Config{
-			BaseURL:      server.URL,
+		config := &ResolvedConfig{
+			LeaderURL:    server.URL,
 			ClientID:     "test-client-id",
 			ClientSecret: "test-client-secret",
 			Timeout:      30,
@@ -384,8 +384,8 @@ func TestCheckFeatures(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := &Config{
-			BaseURL:      server.URL,
+		config := &ResolvedConfig{
+			LeaderURL:    server.URL,
 			ClientID:     "test-client-id",
 			ClientSecret: "test-client-secret",
 			Timeout:      30,
@@ -413,8 +413,8 @@ func TestCheckFeatures(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := &Config{
-			BaseURL:      server.URL,
+		config := &ResolvedConfig{
+			LeaderURL:    server.URL,
 			ClientID:     "test-client-id",
 			ClientSecret: "test-client-secret",
 			Timeout:      30,
@@ -442,8 +442,8 @@ func TestCheckFeatures(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := &Config{
-			BaseURL:      server.URL,
+		config := &ResolvedConfig{
+			LeaderURL:    server.URL,
 			ClientID:     "test-client-id",
 			ClientSecret: "test-client-secret",
 			Timeout:      30,
@@ -469,8 +469,8 @@ func TestCheckFeatures(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := &Config{
-			BaseURL:      server.URL,
+		config := &ResolvedConfig{
+			LeaderURL:    server.URL,
 			ClientID:     "test-client-id",
 			ClientSecret: "test-client-secret",
 			Timeout:      30,
@@ -497,8 +497,8 @@ func TestCheckFeatures(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := &Config{
-			BaseURL:      server.URL,
+		config := &ResolvedConfig{
+			LeaderURL:    server.URL,
 			ClientID:     "test-client-id",
 			ClientSecret: "test-client-secret",
 			Timeout:      30,
@@ -524,8 +524,8 @@ func TestCheckFeatures(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := &Config{
-			BaseURL:      server.URL,
+		config := &ResolvedConfig{
+			LeaderURL:    server.URL,
 			ClientID:     "wrong-id",
 			ClientSecret: "wrong-secret",
 			Timeout:      30,
@@ -544,8 +544,8 @@ func TestCheckFeatures(t *testing.T) {
 
 func TestLogSSERequest(t *testing.T) {
 	t.Run("does nothing when verbose is false", func(t *testing.T) {
-		config := &Config{
-			BaseURL:      "http://localhost:9000",
+		config := &ResolvedConfig{
+			LeaderURL:    "http://localhost:9000",
 			ClientID:     "test-client-id",
 			ClientSecret: "test-client-secret",
 			Timeout:      30,
@@ -560,8 +560,8 @@ func TestLogSSERequest(t *testing.T) {
 	})
 
 	t.Run("logs when verbose is true", func(t *testing.T) {
-		config := &Config{
-			BaseURL:      "http://localhost:9000",
+		config := &ResolvedConfig{
+			LeaderURL:    "http://localhost:9000",
 			ClientID:     "test-client-id",
 			ClientSecret: "test-client-secret",
 			Timeout:      30,
@@ -581,8 +581,8 @@ func TestLogSSERequest(t *testing.T) {
 
 func TestLogSSEResponse(t *testing.T) {
 	t.Run("does nothing when verbose is false", func(t *testing.T) {
-		config := &Config{
-			BaseURL:      "http://localhost:9000",
+		config := &ResolvedConfig{
+			LeaderURL:    "http://localhost:9000",
 			ClientID:     "test-client-id",
 			ClientSecret: "test-client-secret",
 			Timeout:      30,
@@ -597,8 +597,8 @@ func TestLogSSEResponse(t *testing.T) {
 	})
 
 	t.Run("logs when verbose is true", func(t *testing.T) {
-		config := &Config{
-			BaseURL:      "http://localhost:9000",
+		config := &ResolvedConfig{
+			LeaderURL:    "http://localhost:9000",
 			ClientID:     "test-client-id",
 			ClientSecret: "test-client-secret",
 			Timeout:      30,
@@ -621,8 +621,8 @@ func TestWatchEvents(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := &Config{
-			BaseURL:      server.URL,
+		config := &ResolvedConfig{
+			LeaderURL:    server.URL,
 			ClientID:     "test-client-id",
 			ClientSecret: "test-client-secret",
 			Timeout:      30,
@@ -668,8 +668,8 @@ func TestWatchEvents(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := &Config{
-			BaseURL:      server.URL,
+		config := &ResolvedConfig{
+			LeaderURL:    server.URL,
 			ClientID:     "test-client-id",
 			ClientSecret: "test-client-secret",
 			Timeout:      30,
@@ -707,8 +707,8 @@ func TestWatchEvents(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := &Config{
-			BaseURL:      server.URL,
+		config := &ResolvedConfig{
+			LeaderURL:    server.URL,
 			ClientID:     "test-client-id",
 			ClientSecret: "test-client-secret",
 			Timeout:      30,
@@ -743,8 +743,8 @@ func TestFeatureCheckClient_handleError(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := &Config{
-			BaseURL:      server.URL,
+		config := &ResolvedConfig{
+			LeaderURL:    server.URL,
 			ClientID:     "test-client-id",
 			ClientSecret: "test-client-secret",
 			Timeout:      30,
@@ -771,8 +771,8 @@ func TestFeatureCheckClient_handleError(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := &Config{
-			BaseURL:      server.URL,
+		config := &ResolvedConfig{
+			LeaderURL:    server.URL,
 			ClientID:     "test-client-id",
 			ClientSecret: "test-client-secret",
 			Timeout:      30,

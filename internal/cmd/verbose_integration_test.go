@@ -28,9 +28,9 @@ func TestIntegration_VerboseConfig_TimeoutFromFile(t *testing.T) {
 	defer func() { profileName = origProfileName }()
 	profileName = ""
 
-	testCfg := &izanami.Config{
-		BaseURL: env.BaseURL,
-		Timeout: 60,
+	testCfg := &izanami.ResolvedConfig{
+		LeaderURL: env.LeaderURL,
+		Timeout:   60,
 	}
 
 	var buf bytes.Buffer
@@ -59,9 +59,9 @@ func TestIntegration_VerboseConfig_TimeoutDefault(t *testing.T) {
 	defer func() { profileName = origProfileName }()
 	profileName = ""
 
-	testCfg := &izanami.Config{
-		BaseURL: env.BaseURL,
-		Timeout: 30,
+	testCfg := &izanami.ResolvedConfig{
+		LeaderURL: env.LeaderURL,
+		Timeout:   30,
 	}
 
 	var buf bytes.Buffer
@@ -88,9 +88,9 @@ func TestIntegration_VerboseConfig_ProfileSource(t *testing.T) {
 	profileName = ""
 
 	// Build config that reflects what the profile provides
-	testCfg := &izanami.Config{
-		BaseURL: env.BaseURL,
-		Timeout: 30,
+	testCfg := &izanami.ResolvedConfig{
+		LeaderURL: env.LeaderURL,
+		Timeout:   30,
 	}
 
 	var buf bytes.Buffer
@@ -101,7 +101,7 @@ func TestIntegration_VerboseConfig_ProfileSource(t *testing.T) {
 
 	output := buf.String()
 	// After login, base-url comes from the session (referenced by the profile)
-	assert.Contains(t, output, "base-url=", "should show base-url")
+	assert.Contains(t, output, "leader-url=", "should show leader-url")
 	assert.Contains(t, output, "timeout=", "should show timeout")
 	t.Logf("Verbose output (after login):\n%s", output)
 }
@@ -113,15 +113,15 @@ func TestIntegration_VerboseConfig_EnvVarSource(t *testing.T) {
 
 	require.NoError(t, izanami.InitConfigFile())
 
-	t.Setenv("IZ_BASE_URL", "http://env-override.example.com")
+	t.Setenv("IZ_LEADER_URL", "http://env-override.example.com")
 
 	origProfileName := profileName
 	defer func() { profileName = origProfileName }()
 	profileName = ""
 
-	testCfg := &izanami.Config{
-		BaseURL: "http://env-override.example.com",
-		Timeout: 30,
+	testCfg := &izanami.ResolvedConfig{
+		LeaderURL: "http://env-override.example.com",
+		Timeout:   30,
 	}
 
 	var buf bytes.Buffer
@@ -133,8 +133,8 @@ func TestIntegration_VerboseConfig_EnvVarSource(t *testing.T) {
 	logEffectiveConfig(cmd, testCfg)
 
 	output := buf.String()
-	assert.Contains(t, output, "base-url=http://env-override.example.com (source: env)",
-		"base-url from env var should show source 'env'")
+	assert.Contains(t, output, "leader-url=http://env-override.example.com (source: env)",
+		"leader-url from env var should show source 'env'")
 	t.Logf("Verbose output (env):\n%s", output)
 }
 
@@ -149,10 +149,10 @@ func TestIntegration_VerboseConfig_FlagSource(t *testing.T) {
 	defer func() { profileName = origProfileName }()
 	profileName = ""
 
-	testCfg := &izanami.Config{
-		BaseURL: "http://flag-override.example.com",
-		Tenant:  "flag-tenant",
-		Timeout: 30,
+	testCfg := &izanami.ResolvedConfig{
+		LeaderURL: "http://flag-override.example.com",
+		Tenant:    "flag-tenant",
+		Timeout:   30,
 	}
 
 	var buf bytes.Buffer
@@ -167,8 +167,8 @@ func TestIntegration_VerboseConfig_FlagSource(t *testing.T) {
 	logEffectiveConfig(cmd, testCfg)
 
 	output := buf.String()
-	assert.Contains(t, output, "base-url=http://flag-override.example.com (source: flag)",
-		"base-url from flag should show source 'flag'")
+	assert.Contains(t, output, "leader-url=http://flag-override.example.com (source: flag)",
+		"leader-url from flag should show source 'flag'")
 	assert.Contains(t, output, "tenant=flag-tenant (source: flag)",
 		"tenant from flag should show source 'flag'")
 	t.Logf("Verbose output (flag):\n%s", output)
@@ -187,9 +187,9 @@ func TestIntegration_VerboseConfig_SessionSource(t *testing.T) {
 	profileName = ""
 
 	// Config with the session URL (login sets this via the profile's session)
-	testCfg := &izanami.Config{
-		BaseURL: env.BaseURL,
-		Timeout: 30,
+	testCfg := &izanami.ResolvedConfig{
+		LeaderURL: env.LeaderURL,
+		Timeout:   30,
 	}
 
 	var buf bytes.Buffer
@@ -202,7 +202,7 @@ func TestIntegration_VerboseConfig_SessionSource(t *testing.T) {
 
 	output := buf.String()
 	// After login, base-url should come from "session" (profile references session)
-	assert.Contains(t, output, "base-url="+env.BaseURL, "should show base-url from session")
+	assert.Contains(t, output, "leader-url="+env.LeaderURL, "should show leader-url from session")
 	t.Logf("Verbose output (session):\n%s", output)
 }
 
@@ -217,8 +217,8 @@ func TestIntegration_VerboseConfig_InsecureSkipped(t *testing.T) {
 	defer func() { profileName = origProfileName }()
 	profileName = ""
 
-	testCfg := &izanami.Config{
-		BaseURL:            env.BaseURL,
+	testCfg := &izanami.ResolvedConfig{
+		LeaderURL:          env.LeaderURL,
 		Timeout:            30,
 		InsecureSkipVerify: false,
 	}
@@ -242,7 +242,7 @@ func TestIntegration_VerboseConfig_SensitiveRedacted(t *testing.T) {
 	// Create config with profile containing client-secret
 	profiles := map[string]*izanami.Profile{
 		"test": {
-			BaseURL:      env.BaseURL,
+			LeaderURL:    env.LeaderURL,
 			ClientID:     "test-client-id",
 			ClientSecret: "super-secret-key-12345",
 		},
@@ -253,8 +253,8 @@ func TestIntegration_VerboseConfig_SensitiveRedacted(t *testing.T) {
 	defer func() { profileName = origProfileName }()
 	profileName = ""
 
-	testCfg := &izanami.Config{
-		BaseURL:      env.BaseURL,
+	testCfg := &izanami.ResolvedConfig{
+		LeaderURL:    env.LeaderURL,
 		ClientID:     "test-client-id",
 		ClientSecret: "super-secret-key-12345",
 		Timeout:      30,
@@ -280,9 +280,9 @@ func TestIntegration_VerboseConfig_MultipleSourcesEndToEnd(t *testing.T) {
 	// Create config with profile
 	profiles := map[string]*izanami.Profile{
 		"sandbox": {
-			BaseURL: env.BaseURL,
-			Tenant:  "sandbox-tenant",
-			Project: "sandbox-project",
+			LeaderURL: env.LeaderURL,
+			Tenant:    "sandbox-tenant",
+			Project:   "sandbox-project",
 		},
 	}
 	createConfigTestFile(t, env.ConfigPath, profiles, "sandbox")
@@ -296,12 +296,12 @@ func TestIntegration_VerboseConfig_MultipleSourcesEndToEnd(t *testing.T) {
 	defer func() { profileName = origProfileName }()
 	profileName = ""
 
-	testCfg := &izanami.Config{
-		BaseURL: env.BaseURL,
-		Tenant:  "sandbox-tenant",
-		Project: "sandbox-project",
-		Context: "staging/eu-west",
-		Timeout: 45,
+	testCfg := &izanami.ResolvedConfig{
+		LeaderURL: env.LeaderURL,
+		Tenant:    "sandbox-tenant",
+		Project:   "sandbox-project",
+		Context:   "staging/eu-west",
+		Timeout:   45,
 	}
 
 	var buf bytes.Buffer
@@ -319,7 +319,7 @@ func TestIntegration_VerboseConfig_MultipleSourcesEndToEnd(t *testing.T) {
 	output := buf.String()
 
 	// Profile-sourced fields
-	assert.Contains(t, output, "base-url="+env.BaseURL+" (source: profile)", "base-url should come from profile")
+	assert.Contains(t, output, "leader-url="+env.LeaderURL+" (source: profile)", "base-url should come from profile")
 	assert.Contains(t, output, "tenant=sandbox-tenant (source: profile)", "tenant should come from profile")
 	assert.Contains(t, output, "project=sandbox-project (source: profile)", "project should come from profile")
 
@@ -353,10 +353,10 @@ func TestIntegration_VerboseHealthCheck(t *testing.T) {
 
 	// Build config matching what LoadConfigWithProfile would produce
 	token := env.GetJwtToken(t)
-	testCfg := &izanami.Config{
-		BaseURL:  env.BaseURL,
-		JwtToken: token,
-		Timeout:  30,
+	testCfg := &izanami.ResolvedConfig{
+		LeaderURL: env.LeaderURL,
+		JwtToken:  token,
+		Timeout:   30,
 	}
 
 	var buf bytes.Buffer
@@ -374,7 +374,7 @@ func TestIntegration_VerboseHealthCheck(t *testing.T) {
 	assert.Contains(t, output, "[verbose] Config:", "verbose should show config lines")
 	assert.Contains(t, output, "[verbose] Authentication", "verbose should show auth mode")
 	assert.Contains(t, output, "timeout=", "verbose should show timeout")
-	assert.Contains(t, output, "base-url=", "verbose should show base-url")
+	assert.Contains(t, output, "leader-url=", "verbose should show leader-url")
 	assert.Contains(t, output, "JWT Cookie (session)", "auth mode should show JWT after login")
 
 	t.Logf("Full verbose output:\n%s", output)
@@ -395,9 +395,9 @@ func TestIntegration_VerboseHealthCheckWithConfigTimeout(t *testing.T) {
 	defer func() { profileName = origProfileName }()
 	profileName = ""
 
-	testCfg := &izanami.Config{
-		BaseURL: env.BaseURL,
-		Timeout: 90,
+	testCfg := &izanami.ResolvedConfig{
+		LeaderURL: env.LeaderURL,
+		Timeout:   90,
 	}
 
 	var buf bytes.Buffer
@@ -475,10 +475,10 @@ func TestIntegration_VerboseConfig_AuthModeAfterLogin(t *testing.T) {
 	token := env.Login(t)
 	require.NotEmpty(t, token, "login should return a JWT token")
 
-	testCfg := &izanami.Config{
-		BaseURL:  env.BaseURL,
-		JwtToken: token,
-		Timeout:  30,
+	testCfg := &izanami.ResolvedConfig{
+		LeaderURL: env.LeaderURL,
+		JwtToken:  token,
+		Timeout:   30,
 	}
 
 	var buf bytes.Buffer

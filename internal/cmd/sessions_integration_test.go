@@ -143,7 +143,7 @@ func TestIntegration_SessionsListAfterLogin(t *testing.T) {
 	t.Logf("Sessions list output:\n%s", output)
 
 	// Should show the session we created during login
-	assert.Contains(t, output, env.BaseURL, "Should show session URL")
+	assert.Contains(t, output, env.LeaderURL, "Should show session URL")
 	assert.Contains(t, output, env.Username, "Should show username")
 }
 
@@ -167,7 +167,7 @@ func TestIntegration_SessionsListJSONOutput(t *testing.T) {
 	assert.Contains(t, output, `"username"`, "JSON should have username field")
 	assert.Contains(t, output, `"created_at"`, "JSON should have created_at field")
 	assert.Contains(t, output, `"age"`, "JSON should have age field")
-	assert.Contains(t, output, env.BaseURL, "Should contain the session URL")
+	assert.Contains(t, output, env.LeaderURL, "Should contain the session URL")
 }
 
 // TestIntegration_SessionsListEmpty tests sessions list when no sessions exist
@@ -208,7 +208,7 @@ func TestIntegration_SessionsListMultiple(t *testing.T) {
 	t.Logf("Sessions list (multiple) output:\n%s", output)
 
 	// Should show both sessions
-	assert.Contains(t, output, env.BaseURL, "Should show original session URL")
+	assert.Contains(t, output, env.LeaderURL, "Should show original session URL")
 	assert.Contains(t, output, "http://other.example.com", "Should show added session URL")
 	assert.Contains(t, output, "other-user", "Should show added session username")
 }
@@ -436,7 +436,7 @@ func TestIntegration_LogoutClearsToken(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, session := range sessions.Sessions {
-		if session.URL == env.BaseURL {
+		if session.URL == env.LeaderURL {
 			assert.Empty(t, session.JwtToken, "JWT token should be cleared after logout")
 			break
 		}
@@ -470,7 +470,7 @@ func TestIntegration_LogoutShowsReloginHint(t *testing.T) {
 
 	// Should show how to login again
 	assert.Contains(t, output, "iz login", "Should show login command hint")
-	assert.Contains(t, output, env.BaseURL, "Should show the URL to login to")
+	assert.Contains(t, output, env.LeaderURL, "Should show the URL to login to")
 }
 
 // TestIntegration_LogoutNoActiveProfile tests logout when there's no active profile
@@ -626,6 +626,6 @@ func TestIntegration_SessionsListTableFormat(t *testing.T) {
 
 	// Table format should have column headers or structured output
 	// Check for presence of key data
-	assert.Contains(t, output, env.BaseURL)
+	assert.Contains(t, output, env.LeaderURL)
 	assert.Contains(t, output, env.Username)
 }

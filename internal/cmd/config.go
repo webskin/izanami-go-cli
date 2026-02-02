@@ -24,14 +24,15 @@ var globalConfigKeys = map[string]string{
 
 // Profile-specific configuration keys and their descriptions (settable via 'iz profiles set')
 var profileConfigKeys = map[string]string{
-	"base-url":                       "Izanami server URL",
+	"leader-url":                     "Izanami leader URL (admin API)",
 	"tenant":                         "Default tenant name",
 	"project":                        "Default project name",
 	"context":                        "Default context path",
 	"personal-access-token-username": "Username for PAT authentication",
 	"personal-access-token":          "Personal access token",
-	"client-id":                      "Client ID for API authentication",
-	"client-secret":                  "Client secret for API authentication",
+	"client-id":                      "Client ID for feature/event API",
+	"client-secret":                  "Client secret for feature/event API",
+	"default-worker":                 "Default worker name",
 }
 
 // printValidConfigKeys prints all valid configuration keys categorized
@@ -89,7 +90,7 @@ func buildConfigSetLongHelp() string {
 	var sb strings.Builder
 	sb.WriteString("Set a global configuration value and persist it to the config file.\n\n")
 	sb.WriteString("This command only accepts global keys that apply to all profiles.\n")
-	sb.WriteString("For profile-specific settings (base-url, tenant, etc.), use 'iz profiles set'.\n\n")
+	sb.WriteString("For profile-specific settings (leader-url, tenant, etc.), use 'iz profiles set'.\n\n")
 
 	// Sort and print global keys
 	globalKeys := make([]string, 0, len(globalConfigKeys))
@@ -173,7 +174,7 @@ The source indicates where the value comes from:
   - not set : No value configured
 
 Example:
-  iz config get base-url`,
+  iz config get leader-url`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		key := args[0]
@@ -231,7 +232,7 @@ var configListCmd = &cobra.Command{
 
 The output shows two sections:
   1. Global Settings - Apply to all profiles (timeout, verbose, output-format, color)
-  2. Active Profile Settings - Profile-specific values (base-url, client-keys, tenant, etc.)
+  2. Active Profile Settings - Profile-specific values (leader-url, client-keys, tenant, etc.)
 
 Use --show-secrets to display sensitive values.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -315,18 +316,24 @@ Use --show-secrets to display sensitive values.`,
 		profileTable.SetTablePadding("\t")
 		profileTable.SetNoWhiteSpace(true)
 
-		// Resolve base-url from session if profile has Session but no BaseURL
-		baseURL := profile.BaseURL
-		baseURLSource := "profile"
-		if baseURL == "" && profile.Session != "" {
+		// Resolve leader-url from session if profile has Session but no LeaderURL
+		leaderURLValue := profile.LeaderURL
+		leaderURLSource := "profile"
+		if leaderURLValue == "" && profile.Session != "" {
 			sessions, err := izanami.LoadSessions()
 			if err == nil {
 				sessionData, err := sessions.GetSession(profile.Session)
 				if err == nil && sessionData.URL != "" {
-					baseURL = sessionData.URL
-					baseURLSource = "session"
+					leaderURLValue = sessionData.URL
+					leaderURLSource = "session"
 				}
 			}
+		}
+
+		// Workers summary
+		workersValue := ""
+		if len(profile.Workers) > 0 {
+			workersValue = fmt.Sprintf("%d worker(s) configured", len(profile.Workers))
 		}
 
 		// Define profile settings to display (in order)
@@ -339,8 +346,9 @@ Use --show-secrets to display sensitive values.`,
 		}
 
 		settings := []profileSetting{
-			{"base-url", baseURL, baseURLSource, false},
-			{"client-base-url", profile.ClientBaseURL, "", false},
+			{"leader-url", leaderURLValue, leaderURLSource, false},
+			{"default-worker", profile.DefaultWorker, "", false},
+			{"workers", workersValue, "", false},
 			{"session", profile.Session, "", false},
 			{"client-keys", formatClientKeysCount(profile.ClientKeys), "", false},
 			{"tenant", profile.Tenant, "", false},
@@ -379,6 +387,7 @@ Use --show-secrets to display sensitive values.`,
 		fmt.Fprintln(cmd.OutOrStdout(), "To change global settings:     iz config set <key> <value>")
 		fmt.Fprintln(cmd.OutOrStdout(), "To change profile settings:    iz profiles set <key> <value>")
 		fmt.Fprintln(cmd.OutOrStdout(), "To manage client keys:         iz profiles client-keys list|add")
+		fmt.Fprintln(cmd.OutOrStdout(), "To manage workers:             iz profiles workers list|add")
 		fmt.Fprintf(cmd.OutOrStdout(), "To view full profile details:  iz profiles show %s\n", profileName)
 
 		return nil
@@ -456,7 +465,7 @@ Use --defaults to create a config file with only default values (non-interactive
 		fmt.Fprintf(cmd.OutOrStdout(), "✓ Configuration file created at: %s\n", configPath)
 		fmt.Fprintln(cmd.OutOrStdout(), "\nNext steps:")
 		fmt.Fprintln(cmd.OutOrStdout(), "  1. Edit the config file and uncomment/set your values")
-		fmt.Fprintln(cmd.OutOrStdout(), "  2. Or use environment variables (IZ_BASE_URL, IZ_CLIENT_ID, etc.)")
+		fmt.Fprintln(cmd.OutOrStdout(), "  2. Or use environment variables (IZ_LEADER_URL, IZ_CLIENT_ID, etc.)")
 		fmt.Fprintln(cmd.OutOrStdout(), "  3. Or use command-line flags (--url, --client-id, etc.)")
 
 		fmt.Fprintln(cmd.OutOrStdout(), "\n⚠️  SECURITY NOTICE:")
@@ -478,7 +487,7 @@ This command checks:
   - Configuration file syntax
   - Valid values for global settings (timeout, output-format, color, verbose)
 
-Note: Profile-specific settings (base-url, auth, tenant, etc.) are validated
+Note: Profile-specific settings (leader-url, auth, tenant, etc.) are validated
 when using profiles. Use 'iz profiles show' to view profile settings.
 
 Exit codes:

@@ -17,16 +17,16 @@ import (
 // profileSettableKeys defines keys that can be set via 'iz profiles set'
 // Maps key name to description
 var profileSettableKeys = map[string]string{
-	"base-url":                       "Izanami server URL",
-	"client-base-url":                "Base URL for client operations (features/events)",
+	"leader-url":                     "Izanami leader URL (admin API)",
 	"tenant":                         "Default tenant name",
 	"project":                        "Default project name",
 	"context":                        "Default context path",
-	"session":                        "Session name to reference (clears base-url)",
+	"session":                        "Session name to reference (clears leader-url)",
 	"personal-access-token":          "Personal access token",
 	"personal-access-token-username": "Username for PAT authentication",
-	"client-id":                      "Client ID for API authentication",
-	"client-secret":                  "Client secret for API authentication",
+	"client-id":                      "Client ID for feature/event API",
+	"client-secret":                  "Client secret for feature/event API",
+	"default-worker":                 "Default worker name for feature checks",
 }
 
 var (
@@ -112,8 +112,8 @@ Example:
 				session = "-"
 			}
 
-			// Resolve URL: try profile.BaseURL first, then session.URL
-			url := profile.BaseURL
+			// Resolve URL: try profile.LeaderURL first, then session.URL
+			url := profile.LeaderURL
 			if url == "" && profile.Session != "" {
 				// Profile references a session - get URL from session
 				sessions, err := izanami.LoadSessions()
@@ -240,8 +240,8 @@ Example:
 			if profile.Session != "" {
 				fmt.Fprintf(cmd.OutOrStdout(), "  Session: %s\n", profile.Session)
 			}
-			if profile.BaseURL != "" {
-				fmt.Fprintf(cmd.OutOrStdout(), "  URL:     %s\n", profile.BaseURL)
+			if profile.LeaderURL != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "  URL:     %s\n", profile.LeaderURL)
 			}
 			if profile.Tenant != "" {
 				fmt.Fprintf(cmd.OutOrStdout(), "  Tenant:  %s\n", profile.Tenant)
@@ -274,8 +274,7 @@ Examples:
     --project test-project \
     --context PROD \
     --client-id my-client-id \
-    --client-secret my-secret \
-    --client-base-url http://worker.localhost:9000
+    --client-secret my-secret
 `,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -288,13 +287,12 @@ Examples:
 		context, _ := cmd.Flags().GetString("context")
 		clientID, _ := cmd.Flags().GetString("client-id")
 		clientSecret, _ := cmd.Flags().GetString("client-secret")
-		clientBaseURL, _ := cmd.Flags().GetString("client-base-url")
 		interactive, _ := cmd.Flags().GetBool("interactive")
 
 		profile := &izanami.Profile{}
 
 		// Interactive prompts if --interactive or no flags provided
-		if interactive || (url == "" && tenant == "" && project == "" && context == "" && clientID == "" && clientSecret == "" && clientBaseURL == "") {
+		if interactive || (url == "" && tenant == "" && project == "" && context == "" && clientID == "" && clientSecret == "") {
 			fmt.Fprintf(cmd.OutOrStdout(), "Creating profile '%s'\n\n", profileName)
 			reader := bufio.NewReader(cmd.InOrStdin())
 
@@ -333,10 +331,6 @@ Examples:
 					return fmt.Errorf("failed to read client secret: %w", err)
 				}
 				clientSecret = strings.TrimSpace(string(secretBytes))
-
-				fmt.Fprint(cmd.OutOrStdout(), "Client Base URL (optional, for separate client endpoint): ")
-				clientBaseURL, _ = reader.ReadString('\n')
-				clientBaseURL = strings.TrimSpace(clientBaseURL)
 			}
 		}
 
@@ -346,13 +340,12 @@ Examples:
 		}
 
 		// Build profile
-		profile.BaseURL = url
+		profile.LeaderURL = url
 		profile.Tenant = tenant
 		profile.Project = project
 		profile.Context = context
 		profile.ClientID = clientID
 		profile.ClientSecret = clientSecret
-		profile.ClientBaseURL = clientBaseURL
 
 		// Save profile
 		if err := izanami.AddProfile(profileName, profile); err != nil {
@@ -369,6 +362,8 @@ Examples:
 
 		fmt.Fprintf(cmd.OutOrStdout(), "\nSwitch to this profile with:\n")
 		fmt.Fprintf(cmd.OutOrStdout(), "  iz profiles use %s\n", profileName)
+		fmt.Fprintf(cmd.OutOrStdout(), "\nTo add workers for split deployments:\n")
+		fmt.Fprintf(cmd.OutOrStdout(), "  iz profiles workers add <name> --url <worker-url>\n")
 
 		if clientSecret != "" {
 			fmt.Fprintln(cmd.OutOrStdout(), "\n⚠️  SECURITY WARNING:")
@@ -405,10 +400,10 @@ func buildProfileSetLongHelp() string {
 	sb.WriteString("  iz profiles use sandbox\n\n")
 	sb.WriteString("  # Then set values on the active profile\n")
 	sb.WriteString("  iz profiles set tenant new-tenant\n")
-	sb.WriteString("  iz profiles set base-url https://izanami.example.com\n")
+	sb.WriteString("  iz profiles set leader-url https://izanami.example.com\n")
 	sb.WriteString("  iz profiles set session sandbox-session\n")
 	sb.WriteString("  iz profiles set client-id my-client-id\n")
-	sb.WriteString("  iz profiles set client-base-url https://worker.example.com\n")
+	sb.WriteString("  iz profiles set default-worker eu-west\n")
 	sb.WriteString("  iz profiles set personal-access-token my-pat-token\n")
 
 	return sb.String()
@@ -488,12 +483,12 @@ var profileSetCmd = &cobra.Command{
 		switch key {
 		case "session":
 			profile.Session = value
-			profile.BaseURL = "" // Clear URL when setting session
-		case "base-url":
-			profile.BaseURL = value
+			profile.LeaderURL = "" // Clear URL when setting session
+		case "leader-url":
+			profile.LeaderURL = value
 			profile.Session = "" // Clear session when setting URL
-		case "client-base-url":
-			profile.ClientBaseURL = value
+		case "default-worker":
+			profile.DefaultWorker = value
 		case "tenant":
 			profile.Tenant = value
 		case "project":
@@ -545,15 +540,16 @@ var profileUnsetCmd = &cobra.Command{
 This clears the specified key in the active profile.
 
 Valid keys:
-  base-url                       Izanami server URL
+  leader-url                     Izanami leader URL (admin API)
   tenant                         Default tenant name
   project                        Default project name
   context                        Default context path
   session                        Session name reference
   personal-access-token          Personal access token
   personal-access-token-username Username for PAT authentication
-  client-id                      Client ID for API authentication
-  client-secret                  Client secret for API authentication
+  client-id                      Client ID for feature/event API
+  client-secret                  Client secret for feature/event API
+  default-worker                 Default worker name
 
 Examples:
   iz profiles unset project
@@ -592,10 +588,10 @@ Examples:
 		switch key {
 		case "session":
 			profile.Session = ""
-		case "base-url":
-			profile.BaseURL = ""
-		case "client-base-url":
-			profile.ClientBaseURL = ""
+		case "leader-url":
+			profile.LeaderURL = ""
+		case "default-worker":
+			profile.DefaultWorker = ""
 		case "tenant":
 			profile.Tenant = ""
 		case "project":
@@ -698,11 +694,12 @@ the following precedence:
   2. IZ_CLIENT_ID/IZ_CLIENT_SECRET environment variables
   3. Stored credentials from active profile (this command)
 
-Note: If you need a separate base URL for client operations (features/events),
-set it at the profile level using one of:
-  - Flag: --client-base-url (on features check / events watch commands)
-  - Environment variable: IZ_CLIENT_BASE_URL
-  - Profile setting: iz profiles set client-base-url <url>
+Note: If you use a separate server for client operations (features/events),
+configure named workers using:
+  - iz profiles workers add <name> --url <url>
+  - iz profiles workers use <name>
+  - Flag: --worker <name> (on features check / events watch commands)
+  - Environment variable: IZ_WORKER or IZ_WORKER_URL
 
 Examples:
   # First, switch to the profile you want to configure
@@ -1027,9 +1024,8 @@ func init() {
 	profileAddCmd.Flags().String("tenant", "", "Default tenant")
 	profileAddCmd.Flags().String("project", "", "Default project")
 	profileAddCmd.Flags().String("context", "", "Default context")
-	profileAddCmd.Flags().String("client-id", "", "Client ID for feature checks")
-	profileAddCmd.Flags().String("client-secret", "", "Client secret for feature checks")
-	profileAddCmd.Flags().String("client-base-url", "", "Base URL for client operations (features/events)")
+	profileAddCmd.Flags().String("client-id", "", "Client ID for feature/event API")
+	profileAddCmd.Flags().String("client-secret", "", "Client secret for feature/event API")
 	profileAddCmd.Flags().BoolP("interactive", "i", false, "Force interactive mode")
 
 	// Flags for profile show
@@ -1055,8 +1051,8 @@ func printProfile(w io.Writer, profile *izanami.Profile, showSecrets bool) {
 		fmt.Fprintf(w, "  Session:        %s\n", profile.Session)
 	}
 
-	// Resolve URL: try profile.BaseURL first, then session.URL
-	url := profile.BaseURL
+	// Resolve URL: try profile.LeaderURL first, then session.URL
+	url := profile.LeaderURL
 	if url == "" && profile.Session != "" {
 		// Profile references a session - get URL from session
 		sessions, err := izanami.LoadSessions()
@@ -1068,10 +1064,7 @@ func printProfile(w io.Writer, profile *izanami.Profile, showSecrets bool) {
 		}
 	}
 	if url != "" {
-		fmt.Fprintf(w, "  URL:            %s\n", url)
-	}
-	if profile.ClientBaseURL != "" {
-		fmt.Fprintf(w, "  Client URL:     %s\n", profile.ClientBaseURL)
+		fmt.Fprintf(w, "  Leader URL:     %s\n", url)
 	}
 	if profile.Tenant != "" {
 		fmt.Fprintf(w, "  Tenant:         %s\n", profile.Tenant)
@@ -1091,5 +1084,11 @@ func printProfile(w io.Writer, profile *izanami.Profile, showSecrets bool) {
 		} else {
 			fmt.Fprintf(w, "  Client Secret:  <redacted>\n")
 		}
+	}
+	if profile.DefaultWorker != "" {
+		fmt.Fprintf(w, "  Default Worker: %s\n", profile.DefaultWorker)
+	}
+	if len(profile.Workers) > 0 {
+		fmt.Fprintf(w, "  Workers:        %d configured\n", len(profile.Workers))
 	}
 }

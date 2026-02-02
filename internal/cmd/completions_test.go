@@ -102,8 +102,8 @@ func TestCompleter_CompleteTenantNames(t *testing.T) {
 		name          string
 		args          []string
 		toComplete    string
-		loadConfig    func() *izanami.Config
-		listTenants   func(cfg *izanami.Config, ctx context.Context) ([]izanami.Tenant, error)
+		loadConfig    func() *izanami.ResolvedConfig
+		listTenants   func(cfg *izanami.ResolvedConfig, ctx context.Context) ([]izanami.Tenant, error)
 		wantResults   []string
 		wantDirective cobra.ShellCompDirective
 	}{
@@ -111,14 +111,14 @@ func TestCompleter_CompleteTenantNames(t *testing.T) {
 			name:       "returns tenants on success",
 			args:       []string{},
 			toComplete: "",
-			loadConfig: func() *izanami.Config {
-				return &izanami.Config{
+			loadConfig: func() *izanami.ResolvedConfig {
+				return &izanami.ResolvedConfig{
 					PersonalAccessToken:         "test-token",
 					PersonalAccessTokenUsername: "test-user",
-					BaseURL:                     "http://localhost",
+					LeaderURL:                   "http://localhost",
 				}
 			},
-			listTenants: func(cfg *izanami.Config, ctx context.Context) ([]izanami.Tenant, error) {
+			listTenants: func(cfg *izanami.ResolvedConfig, ctx context.Context) ([]izanami.Tenant, error) {
 				return []izanami.Tenant{
 					{Name: "tenant-1", Description: "First tenant"},
 					{Name: "tenant-2", Description: ""},
@@ -131,14 +131,14 @@ func TestCompleter_CompleteTenantNames(t *testing.T) {
 			name:       "filters by prefix",
 			args:       []string{},
 			toComplete: "tenant-1",
-			loadConfig: func() *izanami.Config {
-				return &izanami.Config{
+			loadConfig: func() *izanami.ResolvedConfig {
+				return &izanami.ResolvedConfig{
 					PersonalAccessToken:         "test-token",
 					PersonalAccessTokenUsername: "test-user",
-					BaseURL:                     "http://localhost",
+					LeaderURL:                   "http://localhost",
 				}
 			},
-			listTenants: func(cfg *izanami.Config, ctx context.Context) ([]izanami.Tenant, error) {
+			listTenants: func(cfg *izanami.ResolvedConfig, ctx context.Context) ([]izanami.Tenant, error) {
 				return []izanami.Tenant{
 					{Name: "tenant-1", Description: "First"},
 					{Name: "tenant-2", Description: "Second"},
@@ -151,10 +151,10 @@ func TestCompleter_CompleteTenantNames(t *testing.T) {
 			name:       "returns nil when args not empty",
 			args:       []string{"existing-arg"},
 			toComplete: "",
-			loadConfig: func() *izanami.Config {
-				return &izanami.Config{PersonalAccessToken: "token"}
+			loadConfig: func() *izanami.ResolvedConfig {
+				return &izanami.ResolvedConfig{PersonalAccessToken: "token"}
 			},
-			listTenants: func(cfg *izanami.Config, ctx context.Context) ([]izanami.Tenant, error) {
+			listTenants: func(cfg *izanami.ResolvedConfig, ctx context.Context) ([]izanami.Tenant, error) {
 				t.Error("listTenants should not be called when args not empty")
 				return nil, nil
 			},
@@ -165,10 +165,10 @@ func TestCompleter_CompleteTenantNames(t *testing.T) {
 			name:       "returns nil when config is nil",
 			args:       []string{},
 			toComplete: "",
-			loadConfig: func() *izanami.Config {
+			loadConfig: func() *izanami.ResolvedConfig {
 				return nil
 			},
-			listTenants: func(cfg *izanami.Config, ctx context.Context) ([]izanami.Tenant, error) {
+			listTenants: func(cfg *izanami.ResolvedConfig, ctx context.Context) ([]izanami.Tenant, error) {
 				t.Error("listTenants should not be called when config is nil")
 				return nil, nil
 			},
@@ -179,13 +179,13 @@ func TestCompleter_CompleteTenantNames(t *testing.T) {
 			name:       "returns nil when no admin auth",
 			args:       []string{},
 			toComplete: "",
-			loadConfig: func() *izanami.Config {
-				return &izanami.Config{
+			loadConfig: func() *izanami.ResolvedConfig {
+				return &izanami.ResolvedConfig{
 					// No PersonalAccessToken or JwtToken
-					BaseURL: "http://localhost",
+					LeaderURL: "http://localhost",
 				}
 			},
-			listTenants: func(cfg *izanami.Config, ctx context.Context) ([]izanami.Tenant, error) {
+			listTenants: func(cfg *izanami.ResolvedConfig, ctx context.Context) ([]izanami.Tenant, error) {
 				t.Error("listTenants should not be called when no admin auth")
 				return nil, nil
 			},
@@ -196,14 +196,14 @@ func TestCompleter_CompleteTenantNames(t *testing.T) {
 			name:       "returns nil on API error",
 			args:       []string{},
 			toComplete: "",
-			loadConfig: func() *izanami.Config {
-				return &izanami.Config{
+			loadConfig: func() *izanami.ResolvedConfig {
+				return &izanami.ResolvedConfig{
 					PersonalAccessToken:         "test-token",
 					PersonalAccessTokenUsername: "test-user",
-					BaseURL:                     "http://localhost",
+					LeaderURL:                   "http://localhost",
 				}
 			},
-			listTenants: func(cfg *izanami.Config, ctx context.Context) ([]izanami.Tenant, error) {
+			listTenants: func(cfg *izanami.ResolvedConfig, ctx context.Context) ([]izanami.Tenant, error) {
 				return nil, errors.New("API error")
 			},
 			wantResults:   nil,
@@ -244,8 +244,8 @@ func TestCompleter_CompleteProjectNames(t *testing.T) {
 		name          string
 		args          []string
 		toComplete    string
-		loadConfig    func() *izanami.Config
-		listProjects  func(cfg *izanami.Config, ctx context.Context, tenant string) ([]izanami.Project, error)
+		loadConfig    func() *izanami.ResolvedConfig
+		listProjects  func(cfg *izanami.ResolvedConfig, ctx context.Context, tenant string) ([]izanami.Project, error)
 		wantResults   []string
 		wantDirective cobra.ShellCompDirective
 	}{
@@ -253,15 +253,15 @@ func TestCompleter_CompleteProjectNames(t *testing.T) {
 			name:       "returns projects on success",
 			args:       []string{},
 			toComplete: "",
-			loadConfig: func() *izanami.Config {
-				return &izanami.Config{
+			loadConfig: func() *izanami.ResolvedConfig {
+				return &izanami.ResolvedConfig{
 					PersonalAccessToken:         "test-token",
 					PersonalAccessTokenUsername: "test-user",
-					BaseURL:                     "http://localhost",
+					LeaderURL:                   "http://localhost",
 					Tenant:                      "my-tenant",
 				}
 			},
-			listProjects: func(cfg *izanami.Config, ctx context.Context, tenant string) ([]izanami.Project, error) {
+			listProjects: func(cfg *izanami.ResolvedConfig, ctx context.Context, tenant string) ([]izanami.Project, error) {
 				if tenant != "my-tenant" {
 					t.Errorf("listProjects called with tenant %q, want %q", tenant, "my-tenant")
 				}
@@ -277,15 +277,15 @@ func TestCompleter_CompleteProjectNames(t *testing.T) {
 			name:       "returns nil when tenant not set",
 			args:       []string{},
 			toComplete: "",
-			loadConfig: func() *izanami.Config {
-				return &izanami.Config{
+			loadConfig: func() *izanami.ResolvedConfig {
+				return &izanami.ResolvedConfig{
 					PersonalAccessToken:         "test-token",
 					PersonalAccessTokenUsername: "test-user",
-					BaseURL:                     "http://localhost",
+					LeaderURL:                   "http://localhost",
 					Tenant:                      "", // No tenant
 				}
 			},
-			listProjects: func(cfg *izanami.Config, ctx context.Context, tenant string) ([]izanami.Project, error) {
+			listProjects: func(cfg *izanami.ResolvedConfig, ctx context.Context, tenant string) ([]izanami.Project, error) {
 				t.Error("listProjects should not be called when tenant is empty")
 				return nil, nil
 			},
@@ -296,13 +296,13 @@ func TestCompleter_CompleteProjectNames(t *testing.T) {
 			name:       "returns nil when args not empty",
 			args:       []string{"existing-arg"},
 			toComplete: "",
-			loadConfig: func() *izanami.Config {
-				return &izanami.Config{
+			loadConfig: func() *izanami.ResolvedConfig {
+				return &izanami.ResolvedConfig{
 					PersonalAccessToken: "token",
 					Tenant:              "tenant",
 				}
 			},
-			listProjects: func(cfg *izanami.Config, ctx context.Context, tenant string) ([]izanami.Project, error) {
+			listProjects: func(cfg *izanami.ResolvedConfig, ctx context.Context, tenant string) ([]izanami.Project, error) {
 				t.Error("listProjects should not be called when args not empty")
 				return nil, nil
 			},
@@ -313,10 +313,10 @@ func TestCompleter_CompleteProjectNames(t *testing.T) {
 			name:       "returns nil when config is nil",
 			args:       []string{},
 			toComplete: "",
-			loadConfig: func() *izanami.Config {
+			loadConfig: func() *izanami.ResolvedConfig {
 				return nil
 			},
-			listProjects: func(cfg *izanami.Config, ctx context.Context, tenant string) ([]izanami.Project, error) {
+			listProjects: func(cfg *izanami.ResolvedConfig, ctx context.Context, tenant string) ([]izanami.Project, error) {
 				t.Error("listProjects should not be called when config is nil")
 				return nil, nil
 			},
@@ -327,14 +327,14 @@ func TestCompleter_CompleteProjectNames(t *testing.T) {
 			name:       "returns nil when no admin auth",
 			args:       []string{},
 			toComplete: "",
-			loadConfig: func() *izanami.Config {
-				return &izanami.Config{
-					BaseURL: "http://localhost",
-					Tenant:  "my-tenant",
+			loadConfig: func() *izanami.ResolvedConfig {
+				return &izanami.ResolvedConfig{
+					LeaderURL: "http://localhost",
+					Tenant:    "my-tenant",
 					// No PersonalAccessToken or JwtToken
 				}
 			},
-			listProjects: func(cfg *izanami.Config, ctx context.Context, tenant string) ([]izanami.Project, error) {
+			listProjects: func(cfg *izanami.ResolvedConfig, ctx context.Context, tenant string) ([]izanami.Project, error) {
 				t.Error("listProjects should not be called when no admin auth")
 				return nil, nil
 			},
@@ -345,15 +345,15 @@ func TestCompleter_CompleteProjectNames(t *testing.T) {
 			name:       "returns nil on API error",
 			args:       []string{},
 			toComplete: "",
-			loadConfig: func() *izanami.Config {
-				return &izanami.Config{
+			loadConfig: func() *izanami.ResolvedConfig {
+				return &izanami.ResolvedConfig{
 					PersonalAccessToken:         "test-token",
 					PersonalAccessTokenUsername: "test-user",
-					BaseURL:                     "http://localhost",
+					LeaderURL:                   "http://localhost",
 					Tenant:                      "my-tenant",
 				}
 			},
-			listProjects: func(cfg *izanami.Config, ctx context.Context, tenant string) ([]izanami.Project, error) {
+			listProjects: func(cfg *izanami.ResolvedConfig, ctx context.Context, tenant string) ([]izanami.Project, error) {
 				return nil, errors.New("API error")
 			},
 			wantResults:   nil,
@@ -363,15 +363,15 @@ func TestCompleter_CompleteProjectNames(t *testing.T) {
 			name:       "filters by prefix",
 			args:       []string{},
 			toComplete: "project-1",
-			loadConfig: func() *izanami.Config {
-				return &izanami.Config{
+			loadConfig: func() *izanami.ResolvedConfig {
+				return &izanami.ResolvedConfig{
 					PersonalAccessToken:         "test-token",
 					PersonalAccessTokenUsername: "test-user",
-					BaseURL:                     "http://localhost",
+					LeaderURL:                   "http://localhost",
 					Tenant:                      "my-tenant",
 				}
 			},
-			listProjects: func(cfg *izanami.Config, ctx context.Context, tenant string) ([]izanami.Project, error) {
+			listProjects: func(cfg *izanami.ResolvedConfig, ctx context.Context, tenant string) ([]izanami.Project, error) {
 				return []izanami.Project{
 					{Name: "project-1", Description: "First"},
 					{Name: "project-2", Description: "Second"},
@@ -415,8 +415,8 @@ func TestCompleter_CompleteTagNames(t *testing.T) {
 		name          string
 		args          []string
 		toComplete    string
-		loadConfig    func() *izanami.Config
-		listTags      func(cfg *izanami.Config, ctx context.Context, tenant string) ([]izanami.Tag, error)
+		loadConfig    func() *izanami.ResolvedConfig
+		listTags      func(cfg *izanami.ResolvedConfig, ctx context.Context, tenant string) ([]izanami.Tag, error)
 		wantResults   []string
 		wantDirective cobra.ShellCompDirective
 	}{
@@ -424,15 +424,15 @@ func TestCompleter_CompleteTagNames(t *testing.T) {
 			name:       "returns tags on success",
 			args:       []string{},
 			toComplete: "",
-			loadConfig: func() *izanami.Config {
-				return &izanami.Config{
+			loadConfig: func() *izanami.ResolvedConfig {
+				return &izanami.ResolvedConfig{
 					PersonalAccessToken:         "test-token",
 					PersonalAccessTokenUsername: "test-user",
-					BaseURL:                     "http://localhost",
+					LeaderURL:                   "http://localhost",
 					Tenant:                      "my-tenant",
 				}
 			},
-			listTags: func(cfg *izanami.Config, ctx context.Context, tenant string) ([]izanami.Tag, error) {
+			listTags: func(cfg *izanami.ResolvedConfig, ctx context.Context, tenant string) ([]izanami.Tag, error) {
 				if tenant != "my-tenant" {
 					t.Errorf("listTags called with tenant %q, want %q", tenant, "my-tenant")
 				}
@@ -448,15 +448,15 @@ func TestCompleter_CompleteTagNames(t *testing.T) {
 			name:       "returns nil when tenant not set",
 			args:       []string{},
 			toComplete: "",
-			loadConfig: func() *izanami.Config {
-				return &izanami.Config{
+			loadConfig: func() *izanami.ResolvedConfig {
+				return &izanami.ResolvedConfig{
 					PersonalAccessToken:         "test-token",
 					PersonalAccessTokenUsername: "test-user",
-					BaseURL:                     "http://localhost",
+					LeaderURL:                   "http://localhost",
 					Tenant:                      "", // No tenant
 				}
 			},
-			listTags: func(cfg *izanami.Config, ctx context.Context, tenant string) ([]izanami.Tag, error) {
+			listTags: func(cfg *izanami.ResolvedConfig, ctx context.Context, tenant string) ([]izanami.Tag, error) {
 				t.Error("listTags should not be called when tenant is empty")
 				return nil, nil
 			},
@@ -467,13 +467,13 @@ func TestCompleter_CompleteTagNames(t *testing.T) {
 			name:       "returns nil when args not empty",
 			args:       []string{"existing-arg"},
 			toComplete: "",
-			loadConfig: func() *izanami.Config {
-				return &izanami.Config{
+			loadConfig: func() *izanami.ResolvedConfig {
+				return &izanami.ResolvedConfig{
 					PersonalAccessToken: "token",
 					Tenant:              "tenant",
 				}
 			},
-			listTags: func(cfg *izanami.Config, ctx context.Context, tenant string) ([]izanami.Tag, error) {
+			listTags: func(cfg *izanami.ResolvedConfig, ctx context.Context, tenant string) ([]izanami.Tag, error) {
 				t.Error("listTags should not be called when args not empty")
 				return nil, nil
 			},
@@ -484,10 +484,10 @@ func TestCompleter_CompleteTagNames(t *testing.T) {
 			name:       "returns nil when config is nil",
 			args:       []string{},
 			toComplete: "",
-			loadConfig: func() *izanami.Config {
+			loadConfig: func() *izanami.ResolvedConfig {
 				return nil
 			},
-			listTags: func(cfg *izanami.Config, ctx context.Context, tenant string) ([]izanami.Tag, error) {
+			listTags: func(cfg *izanami.ResolvedConfig, ctx context.Context, tenant string) ([]izanami.Tag, error) {
 				t.Error("listTags should not be called when config is nil")
 				return nil, nil
 			},
@@ -498,14 +498,14 @@ func TestCompleter_CompleteTagNames(t *testing.T) {
 			name:       "returns nil when no admin auth",
 			args:       []string{},
 			toComplete: "",
-			loadConfig: func() *izanami.Config {
-				return &izanami.Config{
-					BaseURL: "http://localhost",
-					Tenant:  "my-tenant",
+			loadConfig: func() *izanami.ResolvedConfig {
+				return &izanami.ResolvedConfig{
+					LeaderURL: "http://localhost",
+					Tenant:    "my-tenant",
 					// No PersonalAccessToken or JwtToken
 				}
 			},
-			listTags: func(cfg *izanami.Config, ctx context.Context, tenant string) ([]izanami.Tag, error) {
+			listTags: func(cfg *izanami.ResolvedConfig, ctx context.Context, tenant string) ([]izanami.Tag, error) {
 				t.Error("listTags should not be called when no admin auth")
 				return nil, nil
 			},
@@ -516,15 +516,15 @@ func TestCompleter_CompleteTagNames(t *testing.T) {
 			name:       "returns nil on API error",
 			args:       []string{},
 			toComplete: "",
-			loadConfig: func() *izanami.Config {
-				return &izanami.Config{
+			loadConfig: func() *izanami.ResolvedConfig {
+				return &izanami.ResolvedConfig{
 					PersonalAccessToken:         "test-token",
 					PersonalAccessTokenUsername: "test-user",
-					BaseURL:                     "http://localhost",
+					LeaderURL:                   "http://localhost",
 					Tenant:                      "my-tenant",
 				}
 			},
-			listTags: func(cfg *izanami.Config, ctx context.Context, tenant string) ([]izanami.Tag, error) {
+			listTags: func(cfg *izanami.ResolvedConfig, ctx context.Context, tenant string) ([]izanami.Tag, error) {
 				return nil, errors.New("API error")
 			},
 			wantResults:   nil,
@@ -534,15 +534,15 @@ func TestCompleter_CompleteTagNames(t *testing.T) {
 			name:       "filters by prefix",
 			args:       []string{},
 			toComplete: "tag-1",
-			loadConfig: func() *izanami.Config {
-				return &izanami.Config{
+			loadConfig: func() *izanami.ResolvedConfig {
+				return &izanami.ResolvedConfig{
 					PersonalAccessToken:         "test-token",
 					PersonalAccessTokenUsername: "test-user",
-					BaseURL:                     "http://localhost",
+					LeaderURL:                   "http://localhost",
 					Tenant:                      "my-tenant",
 				}
 			},
-			listTags: func(cfg *izanami.Config, ctx context.Context, tenant string) ([]izanami.Tag, error) {
+			listTags: func(cfg *izanami.ResolvedConfig, ctx context.Context, tenant string) ([]izanami.Tag, error) {
 				return []izanami.Tag{
 					{Name: "tag-1", Description: "First"},
 					{Name: "tag-2", Description: "Second"},
@@ -586,8 +586,8 @@ func TestCompleter_CompleteContextNames(t *testing.T) {
 		name          string
 		args          []string
 		toComplete    string
-		loadConfig    func() *izanami.Config
-		listContexts  func(cfg *izanami.Config, ctx context.Context, tenant, project string) ([]izanami.Context, error)
+		loadConfig    func() *izanami.ResolvedConfig
+		listContexts  func(cfg *izanami.ResolvedConfig, ctx context.Context, tenant, project string) ([]izanami.Context, error)
 		wantResults   []string
 		wantDirective cobra.ShellCompDirective
 	}{
@@ -595,15 +595,15 @@ func TestCompleter_CompleteContextNames(t *testing.T) {
 			name:       "returns contexts on success",
 			args:       []string{},
 			toComplete: "",
-			loadConfig: func() *izanami.Config {
-				return &izanami.Config{
+			loadConfig: func() *izanami.ResolvedConfig {
+				return &izanami.ResolvedConfig{
 					PersonalAccessToken:         "test-token",
 					PersonalAccessTokenUsername: "test-user",
-					BaseURL:                     "http://localhost",
+					LeaderURL:                   "http://localhost",
 					Tenant:                      "my-tenant",
 				}
 			},
-			listContexts: func(cfg *izanami.Config, ctx context.Context, tenant, project string) ([]izanami.Context, error) {
+			listContexts: func(cfg *izanami.ResolvedConfig, ctx context.Context, tenant, project string) ([]izanami.Context, error) {
 				if tenant != "my-tenant" {
 					t.Errorf("listContexts called with tenant %q, want %q", tenant, "my-tenant")
 				}
@@ -620,15 +620,15 @@ func TestCompleter_CompleteContextNames(t *testing.T) {
 			name:       "returns nested contexts",
 			args:       []string{},
 			toComplete: "",
-			loadConfig: func() *izanami.Config {
-				return &izanami.Config{
+			loadConfig: func() *izanami.ResolvedConfig {
+				return &izanami.ResolvedConfig{
 					PersonalAccessToken:         "test-token",
 					PersonalAccessTokenUsername: "test-user",
-					BaseURL:                     "http://localhost",
+					LeaderURL:                   "http://localhost",
 					Tenant:                      "my-tenant",
 				}
 			},
-			listContexts: func(cfg *izanami.Config, ctx context.Context, tenant, project string) ([]izanami.Context, error) {
+			listContexts: func(cfg *izanami.ResolvedConfig, ctx context.Context, tenant, project string) ([]izanami.Context, error) {
 				return []izanami.Context{
 					{
 						Name: "prod",
@@ -647,15 +647,15 @@ func TestCompleter_CompleteContextNames(t *testing.T) {
 			name:       "returns nil when tenant not set",
 			args:       []string{},
 			toComplete: "",
-			loadConfig: func() *izanami.Config {
-				return &izanami.Config{
+			loadConfig: func() *izanami.ResolvedConfig {
+				return &izanami.ResolvedConfig{
 					PersonalAccessToken:         "test-token",
 					PersonalAccessTokenUsername: "test-user",
-					BaseURL:                     "http://localhost",
+					LeaderURL:                   "http://localhost",
 					Tenant:                      "", // No tenant
 				}
 			},
-			listContexts: func(cfg *izanami.Config, ctx context.Context, tenant, project string) ([]izanami.Context, error) {
+			listContexts: func(cfg *izanami.ResolvedConfig, ctx context.Context, tenant, project string) ([]izanami.Context, error) {
 				t.Error("listContexts should not be called when tenant is empty")
 				return nil, nil
 			},
@@ -666,13 +666,13 @@ func TestCompleter_CompleteContextNames(t *testing.T) {
 			name:       "returns nil when args not empty",
 			args:       []string{"existing-arg"},
 			toComplete: "",
-			loadConfig: func() *izanami.Config {
-				return &izanami.Config{
+			loadConfig: func() *izanami.ResolvedConfig {
+				return &izanami.ResolvedConfig{
 					PersonalAccessToken: "token",
 					Tenant:              "tenant",
 				}
 			},
-			listContexts: func(cfg *izanami.Config, ctx context.Context, tenant, project string) ([]izanami.Context, error) {
+			listContexts: func(cfg *izanami.ResolvedConfig, ctx context.Context, tenant, project string) ([]izanami.Context, error) {
 				t.Error("listContexts should not be called when args not empty")
 				return nil, nil
 			},
@@ -683,15 +683,15 @@ func TestCompleter_CompleteContextNames(t *testing.T) {
 			name:       "returns nil on API error",
 			args:       []string{},
 			toComplete: "",
-			loadConfig: func() *izanami.Config {
-				return &izanami.Config{
+			loadConfig: func() *izanami.ResolvedConfig {
+				return &izanami.ResolvedConfig{
 					PersonalAccessToken:         "test-token",
 					PersonalAccessTokenUsername: "test-user",
-					BaseURL:                     "http://localhost",
+					LeaderURL:                   "http://localhost",
 					Tenant:                      "my-tenant",
 				}
 			},
-			listContexts: func(cfg *izanami.Config, ctx context.Context, tenant, project string) ([]izanami.Context, error) {
+			listContexts: func(cfg *izanami.ResolvedConfig, ctx context.Context, tenant, project string) ([]izanami.Context, error) {
 				return nil, errors.New("API error")
 			},
 			wantResults:   nil,
@@ -701,15 +701,15 @@ func TestCompleter_CompleteContextNames(t *testing.T) {
 			name:       "filters by prefix",
 			args:       []string{},
 			toComplete: "prod",
-			loadConfig: func() *izanami.Config {
-				return &izanami.Config{
+			loadConfig: func() *izanami.ResolvedConfig {
+				return &izanami.ResolvedConfig{
 					PersonalAccessToken:         "test-token",
 					PersonalAccessTokenUsername: "test-user",
-					BaseURL:                     "http://localhost",
+					LeaderURL:                   "http://localhost",
 					Tenant:                      "my-tenant",
 				}
 			},
-			listContexts: func(cfg *izanami.Config, ctx context.Context, tenant, project string) ([]izanami.Context, error) {
+			listContexts: func(cfg *izanami.ResolvedConfig, ctx context.Context, tenant, project string) ([]izanami.Context, error) {
 				return []izanami.Context{
 					{Name: "prod", Path: "/prod"},
 					{Name: "dev", Path: "/dev"},
@@ -838,7 +838,7 @@ func TestCompleteProfileKeys(t *testing.T) {
 			name:          "returns all keys when empty",
 			args:          []string{},
 			toComplete:    "",
-			wantCount:     9,
+			wantCount:     10,
 			wantContains:  "tenant",
 			wantDirective: cobra.ShellCompDirectiveNoFileComp,
 		},
@@ -914,8 +914,8 @@ func TestCompleteProfileNames(t *testing.T) {
 		{
 			name: "returns all profile names when empty",
 			profiles: map[string]*izanami.Profile{
-				"sandbox": {BaseURL: "http://localhost:9000"},
-				"prod":    {BaseURL: "https://prod.example.com"},
+				"sandbox": {LeaderURL: "http://localhost:9000"},
+				"prod":    {LeaderURL: "https://prod.example.com"},
 			},
 			args:          []string{},
 			toComplete:    "",
@@ -925,9 +925,9 @@ func TestCompleteProfileNames(t *testing.T) {
 		{
 			name: "filters by prefix",
 			profiles: map[string]*izanami.Profile{
-				"sandbox": {BaseURL: "http://localhost:9000"},
-				"staging": {BaseURL: "http://staging.example.com"},
-				"prod":    {BaseURL: "https://prod.example.com"},
+				"sandbox": {LeaderURL: "http://localhost:9000"},
+				"staging": {LeaderURL: "http://staging.example.com"},
+				"prod":    {LeaderURL: "https://prod.example.com"},
 			},
 			args:          []string{},
 			toComplete:    "s",

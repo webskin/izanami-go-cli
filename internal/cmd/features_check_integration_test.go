@@ -46,11 +46,11 @@ func setupFeaturesCheckTest(t *testing.T, env *IntegrationTestEnv) func() {
 	origCheckNoTagIn := checkNoTagIn
 
 	// Set up config
-	cfg = &izanami.Config{
-		BaseURL:  env.BaseURL,
-		Username: env.Username,
-		JwtToken: token,
-		Timeout:  30,
+	cfg = &izanami.ResolvedConfig{
+		LeaderURL: env.LeaderURL,
+		Username:  env.Username,
+		JwtToken:  token,
+		Timeout:   30,
 	}
 	outputFormat = "table"
 	tenant = ""
@@ -653,8 +653,8 @@ func TestIntegration_APICheckFeature(t *testing.T) {
 	clientSecret := tempAPIKey.ClientSecret
 
 	// Create a feature check client with client credentials
-	clientConfig := &izanami.Config{
-		BaseURL:      env.BaseURL,
+	clientConfig := &izanami.ResolvedConfig{
+		LeaderURL:    env.LeaderURL,
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
 		Timeout:      30,
@@ -695,8 +695,8 @@ func TestIntegration_APICheckFeatures(t *testing.T) {
 	clientSecret := tempAPIKey.ClientSecret
 
 	// Create a feature check client with client credentials
-	clientConfig := &izanami.Config{
-		BaseURL:      env.BaseURL,
+	clientConfig := &izanami.ResolvedConfig{
+		LeaderURL:    env.LeaderURL,
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
 		Timeout:      30,
@@ -760,8 +760,8 @@ func TestIntegration_APICheckFeaturesByProject(t *testing.T) {
 	clientSecret := tempAPIKey.ClientSecret
 
 	// Create a feature check client with client credentials
-	clientConfig := &izanami.Config{
-		BaseURL:      env.BaseURL,
+	clientConfig := &izanami.ResolvedConfig{
+		LeaderURL:    env.LeaderURL,
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
 		Timeout:      30,

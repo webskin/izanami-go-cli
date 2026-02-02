@@ -12,9 +12,9 @@ import (
 
 var (
 	// Client credentials (only used by check command)
-	checkClientID      string
-	checkClientSecret  string
-	checkClientBaseURL string
+	checkClientID     string
+	checkClientSecret string
+	checkWorker       string // Named worker selection
 	// Bulk check parameters
 	checkFeatures   []string
 	checkProjects   []string
@@ -88,7 +88,19 @@ Examples:
 			projects = append(projects, cfg.Project)
 		}
 
-		resolveClientCredentials(cmd, cfg, checkClientID, checkClientSecret, checkClientBaseURL, projects)
+		// Resolve worker using profile data
+		workers, defaultWorker := resolveWorkerFromProfile(activeProfile)
+		rw, err := izanami.ResolveWorker(checkWorker, workers, defaultWorker, func(format string, a ...interface{}) {
+			fmt.Fprintf(cmd.OutOrStderr(), format, a...)
+		})
+		if err != nil {
+			return err
+		}
+		cfg.WorkerURL = rw.URL
+		cfg.WorkerName = rw.Name
+		cfg.WorkerSource = rw.Source
+
+		resolveClientCredentials(cmd, cfg, checkClientID, checkClientSecret, rw.ClientID, rw.ClientSecret, projects)
 
 		ctx := context.Background()
 		featureIDOrName := args[0]
@@ -111,7 +123,7 @@ Examples:
 				fmt.Fprintf(cmd.OutOrStderr(), "Resolving feature name '%s' in tenant '%s'...\n", featureIDOrName, cfg.Tenant)
 			}
 
-			// Create admin client for name resolution (uses BaseURL)
+			// Create admin client for name resolution (uses LeaderURL)
 			adminClient, err := izanami.NewAdminClient(cfg)
 			if err != nil {
 				return fmt.Errorf("failed to create admin client for name resolution: %w", err)
@@ -160,7 +172,7 @@ Examples:
 			}
 		}
 
-		// Create feature check client (uses ClientBaseURL if set, otherwise BaseURL)
+		// Create feature check client (uses WorkerURL if set, otherwise LeaderURL)
 		checkClient, err := izanami.NewFeatureCheckClient(cfg)
 		if err != nil {
 			return err
@@ -269,7 +281,19 @@ Examples:
 			projects = append(projects, cfg.Project)
 		}
 
-		resolveClientCredentials(cmd, cfg, checkClientID, checkClientSecret, checkClientBaseURL, projects)
+		// Resolve worker using profile data
+		workers, defaultWorker := resolveWorkerFromProfile(activeProfile)
+		rw, err := izanami.ResolveWorker(checkWorker, workers, defaultWorker, func(format string, a ...interface{}) {
+			fmt.Fprintf(cmd.OutOrStderr(), format, a...)
+		})
+		if err != nil {
+			return err
+		}
+		cfg.WorkerURL = rw.URL
+		cfg.WorkerName = rw.Name
+		cfg.WorkerSource = rw.Source
+
+		resolveClientCredentials(cmd, cfg, checkClientID, checkClientSecret, rw.ClientID, rw.ClientSecret, projects)
 
 		// Validate that at least one filter is provided
 		if len(checkFeatures) == 0 && len(checkProjects) == 0 {
@@ -466,7 +490,7 @@ Examples:
 			}
 		}
 
-		// Create feature check client (uses ClientBaseURL if set, otherwise BaseURL)
+		// Create feature check client (uses WorkerURL if set, otherwise LeaderURL)
 		checkClient, err := izanami.NewFeatureCheckClient(cfg)
 		if err != nil {
 			return err
@@ -564,24 +588,40 @@ func resolveTagNames(ctx context.Context, client *izanami.AdminClient, tenant st
 	return resolved, nil
 }
 
-// resolveClientCredentials resolves client credentials with 3-tier precedence:
-// 1. Command-specific flags (--client-id/--client-secret/--client-base-url)
-// 2. Environment variables (IZ_CLIENT_ID/IZ_CLIENT_SECRET/IZ_CLIENT_BASE_URL) - already in cfg via viper
-// 3. Config file (client-keys section) - fallback if both are empty
-// Also resolves ClientBaseURL from client-keys if not already set.
-func resolveClientCredentials(cmd *cobra.Command, cfg *izanami.Config, flagClientID, flagClientSecret, flagClientBaseURL string, projects []string) {
-	// First, apply command-specific flags if provided
+// resolveWorkerFromProfile extracts workers and defaultWorker from the active profile.
+// Returns nil map and empty string if profile is nil.
+func resolveWorkerFromProfile(profile *izanami.Profile) (map[string]*izanami.WorkerConfig, string) {
+	if profile == nil {
+		return nil, ""
+	}
+	return profile.Workers, profile.DefaultWorker
+}
+
+// resolveClientCredentials resolves client credentials with precedence:
+// 1. Command-specific flags (--client-id/--client-secret)
+// 2. Per-worker credentials (from ResolvedWorker)
+// 3. Environment variables (IZ_CLIENT_ID/IZ_CLIENT_SECRET) - already in cfg via MergeWithFlags
+// 4. Config file (client-keys section) - fallback if both are empty
+// 5. Profile-level client-id/client-secret - already in cfg via MergeWithProfile
+func resolveClientCredentials(cmd *cobra.Command, cfg *izanami.ResolvedConfig, flagClientID, flagClientSecret, workerClientID, workerClientSecret string, projects []string) {
+	// Priority 1: command-specific flags
 	if flagClientID != "" {
 		cfg.ClientID = flagClientID
 	}
 	if flagClientSecret != "" {
 		cfg.ClientSecret = flagClientSecret
 	}
-	if flagClientBaseURL != "" {
-		cfg.ClientBaseURL = flagClientBaseURL
+
+	// Priority 2: per-worker credentials (only if flags didn't set them)
+	if cfg.ClientID == "" && workerClientID != "" {
+		cfg.ClientID = workerClientID
+	}
+	if cfg.ClientSecret == "" && workerClientSecret != "" {
+		cfg.ClientSecret = workerClientSecret
 	}
 
-	// If still empty, try to resolve from client-keys in config
+	// Priorities 3-5 are already in cfg (env via MergeWithFlags, profile via MergeWithProfile).
+	// If still empty, try client-keys fallback.
 	if cfg.ClientID == "" && cfg.ClientSecret == "" {
 		tenant := cfg.Tenant
 
@@ -610,10 +650,11 @@ func init() {
 	featuresCheckCmd.Flags().StringVar(&featureUser, "user", "", "User ID for evaluation")
 	featuresCheckCmd.Flags().StringVar(&featureContextStr, "context", "", "Context path for evaluation")
 	// Project disambiguation uses global --project flag
-	featuresCheckCmd.Flags().StringVar(&checkClientID, "client-id", "", "Client ID for authentication (env: IZ_CLIENT_ID)")
-	featuresCheckCmd.Flags().StringVar(&checkClientSecret, "client-secret", "", "Client secret for authentication (env: IZ_CLIENT_SECRET)")
-	featuresCheckCmd.Flags().StringVar(&checkClientBaseURL, "client-base-url", "", "Base URL for client operations (env: IZ_CLIENT_BASE_URL)")
+	featuresCheckCmd.Flags().StringVar(&checkClientID, "client-id", "", "Client ID for feature/event API (env: IZ_CLIENT_ID)")
+	featuresCheckCmd.Flags().StringVar(&checkClientSecret, "client-secret", "", "Client secret for feature/event API (env: IZ_CLIENT_SECRET)")
+	featuresCheckCmd.Flags().StringVar(&checkWorker, "worker", "", "Named worker for feature checks (env: IZ_WORKER)")
 	featuresCheckCmd.Flags().StringVar(&featureData, "data", "", "JSON payload for script features (from file with @file.json, stdin with -, or inline)")
+	featuresCheckCmd.RegisterFlagCompletionFunc("worker", completeWorkerNames)
 
 	// Bulk check flags
 	featuresCheckBulkCmd.Flags().StringVar(&featureUser, "user", "", "User ID for evaluation")
@@ -625,8 +666,9 @@ func init() {
 	featuresCheckBulkCmd.Flags().StringSliceVar(&checkOneTagIn, "one-tag-in", []string{}, "Tag IDs or names - features must have at least one of these tags (comma-separated, names require --tenant)")
 	featuresCheckBulkCmd.Flags().StringSliceVar(&checkAllTagsIn, "all-tags-in", []string{}, "Tag IDs or names - features must have all of these tags (comma-separated, names require --tenant)")
 	featuresCheckBulkCmd.Flags().StringSliceVar(&checkNoTagIn, "no-tag-in", []string{}, "Tag IDs or names - features must not have any of these tags (comma-separated, names require --tenant)")
-	featuresCheckBulkCmd.Flags().StringVar(&checkClientID, "client-id", "", "Client ID for authentication (env: IZ_CLIENT_ID)")
-	featuresCheckBulkCmd.Flags().StringVar(&checkClientSecret, "client-secret", "", "Client secret for authentication (env: IZ_CLIENT_SECRET)")
-	featuresCheckBulkCmd.Flags().StringVar(&checkClientBaseURL, "client-base-url", "", "Base URL for client operations (env: IZ_CLIENT_BASE_URL)")
+	featuresCheckBulkCmd.Flags().StringVar(&checkClientID, "client-id", "", "Client ID for feature/event API (env: IZ_CLIENT_ID)")
+	featuresCheckBulkCmd.Flags().StringVar(&checkClientSecret, "client-secret", "", "Client secret for feature/event API (env: IZ_CLIENT_SECRET)")
+	featuresCheckBulkCmd.Flags().StringVar(&checkWorker, "worker", "", "Named worker for feature checks (env: IZ_WORKER)")
 	featuresCheckBulkCmd.Flags().StringVar(&featureData, "data", "", "JSON payload for script features (from file with @file.json, stdin with -, or inline)")
+	featuresCheckBulkCmd.RegisterFlagCompletionFunc("worker", completeWorkerNames)
 }

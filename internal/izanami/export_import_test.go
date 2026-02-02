@@ -42,11 +42,11 @@ func TestClient_Export(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -70,11 +70,11 @@ func TestClient_Export_EmptyResult(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -95,11 +95,11 @@ func TestClient_Export_NotFound(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -120,11 +120,11 @@ func TestClient_Export_Unauthorized(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "invalid-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "invalid-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -145,11 +145,11 @@ func TestClient_Export_ServerError(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -202,11 +202,11 @@ func TestClient_ImportV2(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -250,11 +250,11 @@ func TestClient_ImportV1_WithAllOptions(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -300,11 +300,11 @@ func TestClient_ImportV2_WithConflict(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -335,11 +335,11 @@ func TestClient_ImportV2_NotFound(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -366,11 +366,11 @@ func TestClient_ImportV2_Unauthorized(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "invalid-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "invalid-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -397,11 +397,11 @@ func TestClient_ImportV2_BadRequest(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -428,11 +428,11 @@ func TestClient_ImportV2_ServerError(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -465,11 +465,11 @@ func TestClient_ImportV2_Conflict(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -507,11 +507,11 @@ func TestClient_ImportV2_ConflictOptions(t *testing.T) {
 			})
 			defer server.Close()
 
-			config := &Config{
-				BaseURL:  server.URL,
-				Username: "test-user",
-				JwtToken: "test-jwt-token",
-				Timeout:  30,
+			config := &ResolvedConfig{
+				LeaderURL: server.URL,
+				Username:  "test-user",
+				JwtToken:  "test-jwt-token",
+				Timeout:   30,
 			}
 
 			client, err := NewAdminClient(config)
@@ -547,11 +547,11 @@ func TestClient_GetImportStatus(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)

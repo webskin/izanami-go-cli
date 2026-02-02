@@ -179,7 +179,7 @@ type IntegrationTestEnv struct {
 	ConfigDir    string
 	ConfigPath   string
 	SessionsPath string
-	BaseURL      string
+	LeaderURL    string
 	Username     string
 	Password     string
 	ClientID     string
@@ -229,7 +229,7 @@ func setupIntegrationTest(t *testing.T) *IntegrationTestEnv {
 		ConfigDir:    configDir,
 		ConfigPath:   configPath,
 		SessionsPath: sessionsPath,
-		BaseURL:      baseURL,
+		LeaderURL:    baseURL,
 		Username:     os.Getenv("IZ_TEST_USERNAME"),
 		Password:     os.Getenv("IZ_TEST_PASSWORD"),
 		ClientID:     os.Getenv("IZ_TEST_CLIENT_ID"),
@@ -290,7 +290,7 @@ func (env *IntegrationTestEnv) Login(t *testing.T) string {
 	loginCmd.SetErr(&buf)
 	loginCmd.SetIn(input)
 
-	cmd.SetArgs([]string{"login", env.BaseURL, env.Username, "--password", env.Password})
+	cmd.SetArgs([]string{"login", env.LeaderURL, env.Username, "--password", env.Password})
 	err := cmd.Execute()
 
 	// Cleanup command state
@@ -312,12 +312,12 @@ func (env *IntegrationTestEnv) GetJwtToken(t *testing.T) string {
 	require.NoError(t, err, "Should load sessions")
 
 	for _, session := range sessions.Sessions {
-		if session.URL == env.BaseURL && session.Username == env.Username {
+		if session.URL == env.LeaderURL && session.Username == env.Username {
 			return session.JwtToken
 		}
 	}
 
-	t.Fatalf("No session found for %s@%s", env.Username, env.BaseURL)
+	t.Fatalf("No session found for %s@%s", env.Username, env.LeaderURL)
 	return ""
 }
 
@@ -327,11 +327,11 @@ func (env *IntegrationTestEnv) NewAuthenticatedClient(t *testing.T) *izanami.Adm
 
 	token := env.GetJwtToken(t)
 
-	config := &izanami.Config{
-		BaseURL:  env.BaseURL,
-		Username: env.Username,
-		JwtToken: token,
-		Timeout:  30,
+	config := &izanami.ResolvedConfig{
+		LeaderURL: env.LeaderURL,
+		Username:  env.Username,
+		JwtToken:  token,
+		Timeout:   30,
 	}
 
 	client, err := izanami.NewAdminClient(config)

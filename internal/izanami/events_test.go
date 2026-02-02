@@ -42,8 +42,8 @@ data: {"name":"feature-2","active":false}
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:      server.URL,
+	config := &ResolvedConfig{
+		LeaderURL:    server.URL,
 		ClientID:     "test-client",
 		ClientSecret: "test-secret",
 		Timeout:      30,
@@ -102,8 +102,8 @@ data: {"result":true}
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:      server.URL,
+	config := &ResolvedConfig{
+		LeaderURL:    server.URL,
 		ClientID:     "test-client",
 		ClientSecret: "test-secret",
 		Timeout:      30,

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -13,7 +14,7 @@ import (
 
 // Config key constants
 const (
-	ConfigKeyBaseURL                     = "base-url"
+	ConfigKeyLeaderURL                   = "leader-url"
 	ConfigKeyClientID                    = "client-id"
 	ConfigKeyClientSecret                = "client-secret"
 	ConfigKeyPersonalAccessTokenUsername = "personal-access-token-username"
@@ -28,6 +29,7 @@ const (
 	ConfigKeyColor                       = "color"
 	ConfigKeyClientKeys                  = "client-keys"
 	ConfigKeyProfiles                    = "profiles"
+	ConfigKeyDefaultWorker               = "default-worker"
 )
 
 // Display constants
@@ -35,34 +37,74 @@ const (
 	RedactedValue = "<redacted>"
 )
 
-// Config holds the runtime configuration for the Izanami client
-// Profile-specific fields are populated from the active profile
+// WorkerConfig holds configuration for a named worker instance
+type WorkerConfig struct {
+	URL          string `yaml:"url" mapstructure:"url"`
+	ClientID     string `yaml:"client-id,omitempty" mapstructure:"client-id"`         // Optional per-worker override
+	ClientSecret string `yaml:"client-secret,omitempty" mapstructure:"client-secret"` // Optional per-worker override
+}
+
+// Config represents the on-disk config.yaml file structure.
+// This is what gets serialized/deserialized from the YAML config file.
+// For the resolved runtime state used by commands, see ResolvedConfig.
 type Config struct {
-	// Runtime fields (populated from active profile, not stored in top-level YAML)
-	BaseURL                     string                            `yaml:"-" mapstructure:"-"` // Comes from active profile
-	ClientBaseURL               string                            `yaml:"-" mapstructure:"-"` // Optional: separate URL for client operations (features/events)
-	ClientID                    string                            `yaml:"-" mapstructure:"-"` // Comes from active profile
-	ClientSecret                string                            `yaml:"-" mapstructure:"-"` // Comes from active profile
-	Username                    string                            `yaml:"-" mapstructure:"-"` // Display username from session (not used for auth)
-	PersonalAccessTokenUsername string                            `yaml:"-" mapstructure:"-"` // Username for PAT authentication (Basic Auth)
-	JwtToken                    string                            `yaml:"-" mapstructure:"-"` // Comes from session
-	PersonalAccessToken         string                            `yaml:"-" mapstructure:"-"` // Comes from profile (PAT auth)
-	Tenant                      string                            `yaml:"-" mapstructure:"-"` // Comes from active profile
-	Project                     string                            `yaml:"-" mapstructure:"-"` // Comes from active profile
-	Context                     string                            `yaml:"-" mapstructure:"-"` // Comes from active profile
-	ClientKeys                  map[string]TenantClientKeysConfig `yaml:"-" mapstructure:"-"` // Comes from active profile
-	AuthMethod                  string                            `yaml:"-" mapstructure:"-"` // From session: "password" or "oidc"
-	InsecureSkipVerify          bool                              `yaml:"-" mapstructure:"-"` // Skip TLS certificate verification
+	Timeout       int                 `yaml:"timeout" mapstructure:"timeout"`
+	Verbose       bool                `yaml:"verbose" mapstructure:"verbose"`
+	OutputFormat  string              `yaml:"output-format" mapstructure:"output-format"`
+	Color         string              `yaml:"color" mapstructure:"color"`
+	ActiveProfile string              `yaml:"active_profile,omitempty" mapstructure:"active_profile"`
+	Profiles      map[string]*Profile `yaml:"profiles,omitempty" mapstructure:"profiles"`
+}
 
-	// Global settings (stored in top-level YAML)
-	Timeout      int    `yaml:"timeout" mapstructure:"timeout"`
-	Verbose      bool   `yaml:"verbose" mapstructure:"verbose"`
-	OutputFormat string `yaml:"output-format" mapstructure:"output-format"` // Default output format (table/json)
-	Color        string `yaml:"color" mapstructure:"color"`                 // Color output (auto/always/never)
+// ResolvedConfig holds the fully resolved configuration for a CLI invocation.
+// It is built from the on-disk Config, merged with profile/session/env/flag values.
+// Commands should use this type, not Config.
+type ResolvedConfig struct {
+	// Global settings (from Config file)
+	Timeout      int
+	Verbose      bool
+	OutputFormat string
+	Color        string
 
-	// Profile management
-	ActiveProfile string              `yaml:"active_profile,omitempty" mapstructure:"active_profile"` // Currently active profile
-	Profiles      map[string]*Profile `yaml:"profiles,omitempty" mapstructure:"profiles"`             // Named environment profiles
+	// Resolved from profile/session/flags/env
+	LeaderURL                   string
+	ClientID                    string
+	ClientSecret                string
+	Username                    string
+	PersonalAccessTokenUsername string
+	JwtToken                    string
+	PersonalAccessToken         string
+	Tenant                      string
+	Project                     string
+	Context                     string
+	ClientKeys                  map[string]TenantClientKeysConfig
+	AuthMethod                  string
+	InsecureSkipVerify          bool
+
+	// Worker resolution (set by cmd layer after ResolveWorker)
+	WorkerURL    string
+	WorkerName   string
+	WorkerSource string // "flag", "env-name", "env-url", "default", "standalone"
+}
+
+// ResolvedWorker holds the result of worker resolution.
+type ResolvedWorker struct {
+	URL          string
+	Name         string
+	Source       string // "flag", "env-name", "env-url", "default", "standalone"
+	ClientID     string // Per-worker creds (empty if none)
+	ClientSecret string
+}
+
+// NewResolvedConfig creates a ResolvedConfig from an on-disk Config,
+// copying global settings.
+func NewResolvedConfig(fileConfig *Config) *ResolvedConfig {
+	return &ResolvedConfig{
+		Timeout:      fileConfig.Timeout,
+		Verbose:      fileConfig.Verbose,
+		OutputFormat: fileConfig.OutputFormat,
+		Color:        fileConfig.Color,
+	}
 }
 
 // TenantClientKeysConfig holds client credentials for a specific tenant
@@ -81,23 +123,23 @@ type ProjectClientKeysConfig struct {
 // Profile holds configuration for a specific environment (e.g., local, sandbox, build, prod)
 type Profile struct {
 	Session                     string                            `yaml:"session,omitempty" mapstructure:"session"`                                               // Reference to session name in ~/.izsessions
-	BaseURL                     string                            `yaml:"base-url,omitempty" mapstructure:"base-url"`                                             // Alternative to session
-	ClientBaseURL               string                            `yaml:"client-base-url,omitempty" mapstructure:"client-base-url"`                               // Optional URL for client operations (features/events)
+	LeaderURL                   string                            `yaml:"leader-url,omitempty" mapstructure:"leader-url"`                                         // Admin API URL (was base-url)
 	PersonalAccessTokenUsername string                            `yaml:"personal-access-token-username,omitempty" mapstructure:"personal-access-token-username"` // Username for PAT authentication (required with personal-access-token)
 	PersonalAccessToken         string                            `yaml:"personal-access-token,omitempty" mapstructure:"personal-access-token"`                   // Personal Access Token (long-lived)
 	Tenant                      string                            `yaml:"tenant,omitempty" mapstructure:"tenant"`                                                 // Default tenant for this profile
 	Project                     string                            `yaml:"project,omitempty" mapstructure:"project"`                                               // Default project for this profile
 	Context                     string                            `yaml:"context,omitempty" mapstructure:"context"`                                               // Default context for this profile
-	ClientID                    string                            `yaml:"client-id,omitempty" mapstructure:"client-id"`                                           // Client ID for this profile
-	ClientSecret                string                            `yaml:"client-secret,omitempty" mapstructure:"client-secret"`                                   // Client secret for this profile
+	ClientID                    string                            `yaml:"client-id,omitempty" mapstructure:"client-id"`                                           // Client ID for feature/event API
+	ClientSecret                string                            `yaml:"client-secret,omitempty" mapstructure:"client-secret"`                                   // Client secret for feature/event API
 	ClientKeys                  map[string]TenantClientKeysConfig `yaml:"client-keys,omitempty" mapstructure:"client-keys"`                                       // Profile-specific hierarchical client keys
 	InsecureSkipVerify          bool                              `yaml:"insecure-skip-verify,omitempty" mapstructure:"insecure-skip-verify"`                     // Skip TLS certificate verification
+	DefaultWorker               string                            `yaml:"default-worker,omitempty" mapstructure:"default-worker"`                                 // Default worker name
+	Workers                     map[string]*WorkerConfig          `yaml:"workers,omitempty" mapstructure:"workers"`                                               // Named worker instances
 }
 
 // FlagValues holds command-line flag values for merging with config
 type FlagValues struct {
-	BaseURL                     string
-	ClientBaseURL               string
+	LeaderURL                   string
 	ClientID                    string
 	ClientSecret                string
 	PersonalAccessTokenUsername string
@@ -157,12 +199,9 @@ func LoadConfig() (*Config, error) {
 }
 
 // MergeWithFlags merges configuration with command-line flags
-func (c *Config) MergeWithFlags(flags FlagValues) {
-	if flags.BaseURL != "" {
-		c.BaseURL = flags.BaseURL
-	}
-	if flags.ClientBaseURL != "" {
-		c.ClientBaseURL = flags.ClientBaseURL
+func (c *ResolvedConfig) MergeWithFlags(flags FlagValues) {
+	if flags.LeaderURL != "" {
+		c.LeaderURL = flags.LeaderURL
 	}
 	if flags.ClientID != "" {
 		c.ClientID = flags.ClientID
@@ -206,9 +245,9 @@ func (c *Config) MergeWithFlags(flags FlagValues) {
 }
 
 // Validate checks if required configuration is present
-func (c *Config) Validate() error {
-	if c.BaseURL == "" {
-		return fmt.Errorf("base URL is required (set IZ_BASE_URL or --url)")
+func (c *ResolvedConfig) Validate() error {
+	if c.LeaderURL == "" {
+		return fmt.Errorf("leader URL is required (set IZ_LEADER_URL or --url)")
 	}
 
 	// Personal access token requires username
@@ -228,9 +267,9 @@ func (c *Config) Validate() error {
 }
 
 // ValidateAdminAuth checks if admin authentication is configured
-func (c *Config) ValidateAdminAuth() error {
-	if c.BaseURL == "" {
-		return fmt.Errorf("base URL is required (set IZ_BASE_URL or --url)")
+func (c *ResolvedConfig) ValidateAdminAuth() error {
+	if c.LeaderURL == "" {
+		return fmt.Errorf("leader URL is required (set IZ_LEADER_URL or --url)")
 	}
 
 	// Check authentication: PAT token OR JWT token (username not required for JWT)
@@ -250,7 +289,7 @@ func (c *Config) ValidateAdminAuth() error {
 }
 
 // ValidateTenant checks if a tenant is configured (required for most operations)
-func (c *Config) ValidateTenant() error {
+func (c *ResolvedConfig) ValidateTenant() error {
 	if c.Tenant == "" {
 		return fmt.Errorf(errors.MsgTenantRequired)
 	}
@@ -259,10 +298,13 @@ func (c *Config) ValidateTenant() error {
 
 // ValidateClientAuth checks if client authentication (client-id/secret) is configured.
 // This is required for client operations (feature checks, events).
-func (c *Config) ValidateClientAuth() error {
-	baseURL := c.GetClientBaseURL()
+// Uses WorkerURL if resolved, otherwise falls back to LeaderURL.
+// The caller is responsible for applying credential precedence (flags > worker > env > client-keys > profile)
+// before calling this method.
+func (c *ResolvedConfig) ValidateClientAuth() error {
+	baseURL := c.GetWorkerURL()
 	if baseURL == "" {
-		return fmt.Errorf("base URL is required (set IZ_BASE_URL or IZ_CLIENT_BASE_URL)")
+		return fmt.Errorf("URL is required: set IZ_LEADER_URL, IZ_WORKER_URL, or configure a worker")
 	}
 
 	if c.ClientID == "" || c.ClientSecret == "" {
@@ -332,7 +374,7 @@ color: auto
 #   active: sandbox
 #   profiles:
 #     sandbox:
-#       base-url: "http://localhost:9000"
+#       leader-url: "http://localhost:9000"
 #       tenant: "sandbox-tenant"
 #       project: "test"
 #       context: "dev"
@@ -344,7 +386,7 @@ color: auto
 #       # Option 1: Reference an existing login session (for JWT auth)
 #       session: "prod-session"
 #       # Option 2: Specify URL directly with Personal Access Token (long-lived)
-#       # base-url: "https://izanami.example.com"
+#       # leader-url: "https://izanami.example.com"
 #       # username: "your-username"
 #       # personal-access-token: "your-pat-token"
 #       tenant: "production"
@@ -388,7 +430,7 @@ var GlobalConfigKeys = map[string]bool{
 // ProfileConfigKeys defines keys that are profile-specific
 // These should be set via 'iz profiles set' or 'iz profiles add'
 var ProfileConfigKeys = map[string]bool{
-	ConfigKeyBaseURL:                     true,
+	ConfigKeyLeaderURL:                   true,
 	ConfigKeyClientID:                    true,
 	ConfigKeyClientSecret:                true,
 	ConfigKeyPersonalAccessTokenUsername: true,
@@ -398,11 +440,12 @@ var ProfileConfigKeys = map[string]bool{
 	ConfigKeyProject:                     true,
 	ConfigKeyContext:                     true,
 	ConfigKeyClientKeys:                  true,
+	ConfigKeyDefaultWorker:               true,
 }
 
 // ValidConfigKeys defines all valid configuration keys (for reading/listing)
 var ValidConfigKeys = map[string]bool{
-	ConfigKeyBaseURL:                     true,
+	ConfigKeyLeaderURL:                   true,
 	ConfigKeyClientID:                    true,
 	ConfigKeyClientSecret:                true,
 	ConfigKeyPersonalAccessTokenUsername: true,
@@ -417,6 +460,7 @@ var ValidConfigKeys = map[string]bool{
 	ConfigKeyColor:                       true,
 	ConfigKeyClientKeys:                  true,
 	ConfigKeyProfiles:                    true,
+	ConfigKeyDefaultWorker:               true,
 }
 
 // SensitiveKeys defines which keys contain sensitive information
@@ -668,13 +712,13 @@ type ValidationError struct {
 }
 
 // ValidateConfigFile validates the global configuration file settings.
-// Note: Profile-specific settings (base-url, auth, tenant, etc.) are not validated here
+// Note: Profile-specific settings (leader-url, auth, tenant, etc.) are not validated here
 // as they are stored in profiles, not the global config file.
 // Use ValidateProfile to validate profile settings.
 func ValidateConfigFile() []ValidationError {
 	var errs []ValidationError
 
-	config, err := LoadConfig()
+	fileConfig, err := LoadConfig()
 	if err != nil {
 		errs = append(errs, ValidationError{
 			Field:   "general",
@@ -684,7 +728,7 @@ func ValidateConfigFile() []ValidationError {
 	}
 
 	// Validate timeout (must be positive if set)
-	if config.Timeout < 0 {
+	if fileConfig.Timeout < 0 {
 		errs = append(errs, ValidationError{
 			Field:   "timeout",
 			Message: "Timeout must be a positive number",
@@ -692,7 +736,7 @@ func ValidateConfigFile() []ValidationError {
 	}
 
 	// Validate output format
-	if config.OutputFormat != "" && config.OutputFormat != "table" && config.OutputFormat != "json" {
+	if fileConfig.OutputFormat != "" && fileConfig.OutputFormat != "table" && fileConfig.OutputFormat != "json" {
 		errs = append(errs, ValidationError{
 			Field:   "output-format",
 			Message: "Output format must be 'table' or 'json'",
@@ -700,7 +744,7 @@ func ValidateConfigFile() []ValidationError {
 	}
 
 	// Validate color
-	if config.Color != "" && config.Color != "auto" && config.Color != "always" && config.Color != "never" {
+	if fileConfig.Color != "" && fileConfig.Color != "auto" && fileConfig.Color != "always" && fileConfig.Color != "never" {
 		errs = append(errs, ValidationError{
 			Field:   "color",
 			Message: "Color must be 'auto', 'always', or 'never'",
@@ -716,7 +760,7 @@ func ValidateConfigFile() []ValidationError {
 // 2. Tenant-wide credentials
 // Returns empty strings if no credentials are found for the given tenant/projects.
 // Also returns the client base URL if configured at the tenant level.
-func (c *Config) ResolveClientCredentials(tenant string, projects []string) (clientID, clientSecret string) {
+func (c *ResolvedConfig) ResolveClientCredentials(tenant string, projects []string) (clientID, clientSecret string) {
 	if c.ClientKeys == nil || tenant == "" {
 		return "", ""
 	}
@@ -746,19 +790,115 @@ func (c *Config) ResolveClientCredentials(tenant string, projects []string) (cli
 	return "", ""
 }
 
-// GetClientBaseURL returns the URL for client operations (features/events).
-// Returns ClientBaseURL if set, otherwise falls back to BaseURL.
-func (c *Config) GetClientBaseURL() string {
-	if c.ClientBaseURL != "" {
-		return c.ClientBaseURL
+// GetWorkerURL returns the URL for client operations (features/events).
+// Returns WorkerURL if resolved, otherwise falls back to LeaderURL (standalone mode).
+func (c *ResolvedConfig) GetWorkerURL() string {
+	if c.WorkerURL != "" {
+		return c.WorkerURL
 	}
-	return c.BaseURL
+	return c.LeaderURL
+}
+
+// ResolveWorker resolves the worker URL and credentials based on priority:
+// 1. --worker <name> flag (workerFlag)
+// 2. IZ_WORKER env var
+// 3. IZ_WORKER_URL env var
+// 4. Profile default-worker
+// 5. (none) -> standalone mode (use leader-url)
+//
+// Returns an error if a named worker (from flag or IZ_WORKER) is not found.
+// A dangling default-worker emits a warning via stderr and falls back to standalone.
+// This is a standalone function that takes the workers map and defaultWorker from the profile.
+func ResolveWorker(workerFlag string, workers map[string]*WorkerConfig, defaultWorker string, stderr func(format string, a ...interface{})) (*ResolvedWorker, error) {
+	// Priority 1: --worker flag
+	if workerFlag != "" {
+		return resolveNamedWorker(workerFlag, "flag", workers)
+	}
+
+	// Priority 2: IZ_WORKER env var
+	if envWorker := os.Getenv("IZ_WORKER"); envWorker != "" {
+		return resolveNamedWorker(envWorker, "env-name", workers)
+	}
+
+	// Priority 3: IZ_WORKER_URL env var (direct URL, no name lookup)
+	if envURL := os.Getenv("IZ_WORKER_URL"); envURL != "" {
+		return &ResolvedWorker{
+			URL:    envURL,
+			Source: "env-url",
+		}, nil
+	}
+
+	// Priority 4: Profile default-worker
+	if defaultWorker != "" {
+		worker, ok := workers[defaultWorker]
+		if !ok {
+			// Default worker references missing worker - warn and fall through to standalone
+			if stderr != nil {
+				availableNames := WorkerNames(workers)
+				if len(availableNames) > 0 {
+					stderr("[warning] default-worker '%s' not found in current profile; available: %s; falling back to standalone mode\n",
+						defaultWorker, strings.Join(availableNames, ", "))
+				} else {
+					stderr("[warning] default-worker '%s' not found in current profile; falling back to standalone mode\n",
+						defaultWorker)
+				}
+			}
+		} else {
+			return &ResolvedWorker{
+				URL:          worker.URL,
+				Name:         defaultWorker,
+				Source:       "default",
+				ClientID:     worker.ClientID,
+				ClientSecret: worker.ClientSecret,
+			}, nil
+		}
+	}
+
+	// Priority 5: standalone mode (use leader-url)
+	return &ResolvedWorker{
+		Source: "standalone",
+	}, nil
+}
+
+// resolveNamedWorker looks up a named worker in the workers map.
+// Returns an error if the worker is not found.
+func resolveNamedWorker(name, source string, workers map[string]*WorkerConfig) (*ResolvedWorker, error) {
+	if workers == nil || len(workers) == 0 {
+		return nil, fmt.Errorf("worker '%s' not found: no workers configured. Add workers with: iz profiles workers add <name> --url <url>", name)
+	}
+
+	worker, ok := workers[name]
+	if !ok {
+		availableNames := WorkerNames(workers)
+		return nil, fmt.Errorf("worker '%s' not found; available workers: %s", name, strings.Join(availableNames, ", "))
+	}
+
+	return &ResolvedWorker{
+		URL:          worker.URL,
+		Name:         name,
+		Source:       source,
+		ClientID:     worker.ClientID,
+		ClientSecret: worker.ClientSecret,
+	}, nil
+}
+
+// WorkerNames returns sorted worker names from a workers map.
+func WorkerNames(workers map[string]*WorkerConfig) []string {
+	if workers == nil {
+		return nil
+	}
+	names := make([]string, 0, len(workers))
+	for name := range workers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // AddClientKeys adds or updates client credentials in the active profile.
 // If projects is empty, credentials are stored at the tenant level.
 // If projects are specified, credentials are stored for each project.
-// If clientBaseURL is provided, it is stored at the tenant level for client operations.
+// Credentials are stored at the tenant or project level for client operations.
 func AddClientKeys(tenant string, projects []string, clientID, clientSecret string) error {
 	if tenant == "" {
 		return fmt.Errorf("tenant is required")
@@ -821,30 +961,30 @@ func AddClientKeys(tenant string, projects []string, clientID, clientSecret stri
 
 // GetActiveProfileName returns the name of the currently active profile from the config file
 func GetActiveProfileName() (string, error) {
-	config, err := LoadConfig()
+	fileConfig, err := LoadConfig()
 	if err != nil {
 		return "", err
 	}
 
-	if config.ActiveProfile == "" {
+	if fileConfig.ActiveProfile == "" {
 		return "", nil // No active profile
 	}
 
-	return config.ActiveProfile, nil
+	return fileConfig.ActiveProfile, nil
 }
 
 // GetProfile retrieves a specific profile from the config by name
 func GetProfile(name string) (*Profile, error) {
-	config, err := LoadConfig()
+	fileConfig, err := LoadConfig()
 	if err != nil {
 		return nil, err
 	}
 
-	if config.Profiles == nil {
+	if fileConfig.Profiles == nil {
 		return nil, fmt.Errorf("no profiles defined")
 	}
 
-	profile, exists := config.Profiles[name]
+	profile, exists := fileConfig.Profiles[name]
 	if !exists {
 		return nil, fmt.Errorf("profile '%s' not found", name)
 	}
@@ -852,10 +992,10 @@ func GetProfile(name string) (*Profile, error) {
 	return profile, nil
 }
 
-// MergeWithProfile merges profile settings into the config
-// Profile settings override top-level config but are overridden by env vars and flags
+// MergeWithProfile merges profile settings into the resolved config.
+// Profile settings override top-level config but are overridden by env vars and flags.
 // Priority: Direct profile fields > Session data > Config defaults
-func (c *Config) MergeWithProfile(profile *Profile) {
+func (c *ResolvedConfig) MergeWithProfile(profile *Profile) {
 	if profile == nil {
 		return
 	}
@@ -874,16 +1014,11 @@ func (c *Config) MergeWithProfile(profile *Profile) {
 	}
 
 	// Merge authentication fields with priority: profile > session > config
-	// BaseURL: prefer profile.BaseURL, fallback to session.URL
-	if profile.BaseURL != "" && c.BaseURL == "" {
-		c.BaseURL = profile.BaseURL
-	} else if sessionData != nil && sessionData.URL != "" && c.BaseURL == "" {
-		c.BaseURL = sessionData.URL
-	}
-
-	// ClientBaseURL: prefer profile.ClientBaseURL if set
-	if profile.ClientBaseURL != "" && c.ClientBaseURL == "" {
-		c.ClientBaseURL = profile.ClientBaseURL
+	// LeaderURL: prefer profile.LeaderURL, fallback to session.URL
+	if profile.LeaderURL != "" && c.LeaderURL == "" {
+		c.LeaderURL = profile.LeaderURL
+	} else if sessionData != nil && sessionData.URL != "" && c.LeaderURL == "" {
+		c.LeaderURL = sessionData.URL
 	}
 
 	// Username (display): from session only (for showing who's logged in)
@@ -946,35 +1081,40 @@ func (c *Config) MergeWithProfile(profile *Profile) {
 	}
 }
 
-// LoadConfigWithProfile loads the config and merges with the specified profile
+// LoadConfigWithProfile loads the config and merges with the specified profile.
+// Returns the resolved config, the active profile (if any), and any error.
 // Priority order:
 // 1. Command-line flags (handled by caller via MergeWithFlags)
 // 2. Environment variables (handled by viper)
 // 3. Profile settings
 // 4. Session settings (for auth)
 // 5. Top-level config (fallback)
-func LoadConfigWithProfile(profileName string) (*Config, error) {
+func LoadConfigWithProfile(profileName string) (*ResolvedConfig, *Profile, error) {
 	// Load base config first
-	config, err := LoadConfig()
+	fileConfig, err := LoadConfig()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+
+	// Build ResolvedConfig from file config
+	resolved := NewResolvedConfig(fileConfig)
 
 	// If no profile name specified, try to use active profile
 	if profileName == "" {
-		profileName = config.ActiveProfile
+		profileName = fileConfig.ActiveProfile
 	}
 
 	// If we have a profile name, merge it
+	var activeProfile *Profile
 	if profileName != "" {
-		profile, err := GetProfile(profileName)
+		activeProfile, err = GetProfile(profileName)
 		if err != nil {
-			return nil, fmt.Errorf("failed to load profile '%s': %w", profileName, err)
+			return nil, nil, fmt.Errorf("failed to load profile '%s': %w", profileName, err)
 		}
-		config.MergeWithProfile(profile)
+		resolved.MergeWithProfile(activeProfile)
 	}
 
-	return config, nil
+	return resolved, activeProfile, nil
 }
 
 // SetActiveProfile sets the active profile in the config file
@@ -1090,11 +1230,8 @@ func AddProfile(name string, profile *Profile) error {
 	if profile.Session != "" {
 		profileMap["session"] = profile.Session
 	}
-	if profile.BaseURL != "" {
-		profileMap["base-url"] = profile.BaseURL
-	}
-	if profile.ClientBaseURL != "" {
-		profileMap["client-base-url"] = profile.ClientBaseURL
+	if profile.LeaderURL != "" {
+		profileMap["leader-url"] = profile.LeaderURL
 	}
 	if profile.PersonalAccessTokenUsername != "" {
 		profileMap["personal-access-token-username"] = profile.PersonalAccessTokenUsername
@@ -1122,6 +1259,12 @@ func AddProfile(name string, profile *Profile) error {
 	}
 	if profile.InsecureSkipVerify {
 		profileMap["insecure-skip-verify"] = profile.InsecureSkipVerify
+	}
+	if profile.DefaultWorker != "" {
+		profileMap["default-worker"] = profile.DefaultWorker
+	}
+	if profile.Workers != nil && len(profile.Workers) > 0 {
+		profileMap["workers"] = profile.Workers
 	}
 
 	profilesMap[name] = profileMap
@@ -1256,16 +1399,16 @@ func DeleteProfile(name string) error {
 
 // ListProfiles returns all defined profiles
 func ListProfiles() (map[string]*Profile, string, error) {
-	config, err := LoadConfig()
+	fileConfig, err := LoadConfig()
 	if err != nil {
 		return nil, "", err
 	}
 
-	if config.Profiles == nil {
+	if fileConfig.Profiles == nil {
 		return make(map[string]*Profile), "", nil
 	}
 
-	return config.Profiles, config.ActiveProfile, nil
+	return fileConfig.Profiles, fileConfig.ActiveProfile, nil
 }
 
 // NormalizeURL removes protocol and trailing slashes for URL comparison
@@ -1276,20 +1419,20 @@ func NormalizeURL(url string) string {
 	return strings.ToLower(url)
 }
 
-// FindProfileByBaseURL finds a profile that matches the given base URL
+// FindProfileByLeaderURL finds a profile that matches the given leader URL
 // Returns (profileName, profile, nil) if found, ("", nil, nil) if not found
-func FindProfileByBaseURL(baseURL string) (string, *Profile, error) {
+func FindProfileByLeaderURL(leaderURL string) (string, *Profile, error) {
 	profiles, _, err := ListProfiles()
 	if err != nil {
 		return "", nil, err
 	}
 
 	// Normalize the search URL
-	normalizedSearchURL := NormalizeURL(baseURL)
+	normalizedSearchURL := NormalizeURL(leaderURL)
 
 	// Search through all profiles
 	for name, profile := range profiles {
-		profileURL := profile.BaseURL
+		profileURL := profile.LeaderURL
 
 		// If profile uses session reference, load session to get URL
 		if profileURL == "" && profile.Session != "" {
@@ -1308,4 +1451,114 @@ func FindProfileByBaseURL(baseURL string) (string, *Profile, error) {
 	}
 
 	return "", nil, nil
+}
+
+// AddWorker adds a named worker to the active profile.
+// If the profile has no workers yet, the first worker becomes the default.
+func AddWorker(name string, worker *WorkerConfig, force bool) error {
+	if name == "" {
+		return fmt.Errorf("worker name is required")
+	}
+	if worker == nil || worker.URL == "" {
+		return fmt.Errorf("worker URL is required")
+	}
+
+	profileName, err := GetActiveProfileName()
+	if err != nil {
+		return err
+	}
+	if profileName == "" {
+		return fmt.Errorf(errors.MsgNoActiveProfileForWorker)
+	}
+
+	profile, err := GetProfile(profileName)
+	if err != nil {
+		return fmt.Errorf("failed to load active profile: %w", err)
+	}
+
+	if profile.Workers == nil {
+		profile.Workers = make(map[string]*WorkerConfig)
+	}
+
+	if _, exists := profile.Workers[name]; exists && !force {
+		return fmt.Errorf(errors.MsgWorkerAlreadyExists, name, profileName)
+	}
+
+	profile.Workers[name] = worker
+
+	// First worker auto-becomes default
+	if profile.DefaultWorker == "" {
+		profile.DefaultWorker = name
+	}
+
+	return AddProfile(profileName, profile)
+}
+
+// DeleteWorker removes a named worker from the active profile.
+// If the deleted worker was the default, the default is cleared.
+func DeleteWorker(name string) error {
+	if name == "" {
+		return fmt.Errorf("worker name is required")
+	}
+
+	profileName, err := GetActiveProfileName()
+	if err != nil {
+		return err
+	}
+	if profileName == "" {
+		return fmt.Errorf(errors.MsgNoActiveProfileForWorker)
+	}
+
+	profile, err := GetProfile(profileName)
+	if err != nil {
+		return fmt.Errorf("failed to load active profile: %w", err)
+	}
+
+	if profile.Workers == nil {
+		return fmt.Errorf(errors.MsgWorkerNotFound, name, profileName)
+	}
+
+	if _, exists := profile.Workers[name]; !exists {
+		return fmt.Errorf(errors.MsgWorkerNotFound, name, profileName)
+	}
+
+	delete(profile.Workers, name)
+
+	// Clear default if it was the deleted worker
+	if profile.DefaultWorker == name {
+		profile.DefaultWorker = ""
+	}
+
+	return AddProfile(profileName, profile)
+}
+
+// SetDefaultWorker sets the default worker for the active profile.
+func SetDefaultWorker(name string) error {
+	if name == "" {
+		return fmt.Errorf("worker name is required")
+	}
+
+	profileName, err := GetActiveProfileName()
+	if err != nil {
+		return err
+	}
+	if profileName == "" {
+		return fmt.Errorf(errors.MsgNoActiveProfileForWorker)
+	}
+
+	profile, err := GetProfile(profileName)
+	if err != nil {
+		return fmt.Errorf("failed to load active profile: %w", err)
+	}
+
+	if profile.Workers == nil || len(profile.Workers) == 0 {
+		return fmt.Errorf(errors.MsgNoWorkersConfigured, profileName)
+	}
+
+	if _, exists := profile.Workers[name]; !exists {
+		return fmt.Errorf(errors.MsgWorkerNotFound, name, profileName)
+	}
+
+	profile.DefaultWorker = name
+	return AddProfile(profileName, profile)
 }

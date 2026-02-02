@@ -31,11 +31,11 @@ func TestClient_ListTenants(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -68,11 +68,11 @@ func TestClient_ListTenants_WithRightFilter(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -102,11 +102,11 @@ func TestClient_GetTenant(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -149,11 +149,11 @@ func TestClient_CreateTenant(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -186,11 +186,11 @@ func TestClient_UpdateTenant(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -211,11 +211,11 @@ func TestClient_DeleteTenant(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -236,11 +236,11 @@ func TestClient_DeleteTenant_NoContent(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -266,11 +266,11 @@ func TestClient_UpdateTenant_NoContent(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -311,11 +311,11 @@ func TestClient_ListTenantLogs(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -352,11 +352,11 @@ func TestClient_ListTenantLogs_WithFilters(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -391,11 +391,11 @@ func TestClient_ListTenants_Identity(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -418,11 +418,11 @@ func TestClient_GetTenant_Identity(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -443,11 +443,11 @@ func TestClient_ListTenants_Error(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -468,11 +468,11 @@ func TestClient_GetTenant_NotFound(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -494,11 +494,11 @@ func TestClient_CreateTenant_Error(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -519,11 +519,11 @@ func TestClient_UpdateTenant_NotFound(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -544,11 +544,11 @@ func TestClient_DeleteTenant_NotFound(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -581,11 +581,11 @@ func TestClient_CreateTenant_WithTenantStruct(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)

@@ -16,19 +16,19 @@ const completionTimeout = 5 * time.Second
 type Completer struct {
 	// LoadConfig loads the completion configuration.
 	// Returns nil if config cannot be loaded.
-	LoadConfig func() *izanami.Config
+	LoadConfig func() *izanami.ResolvedConfig
 
 	// ListTenants fetches tenants from the API.
-	ListTenants func(cfg *izanami.Config, ctx context.Context) ([]izanami.Tenant, error)
+	ListTenants func(cfg *izanami.ResolvedConfig, ctx context.Context) ([]izanami.Tenant, error)
 
 	// ListProjects fetches projects from the API for a given tenant.
-	ListProjects func(cfg *izanami.Config, ctx context.Context, tenant string) ([]izanami.Project, error)
+	ListProjects func(cfg *izanami.ResolvedConfig, ctx context.Context, tenant string) ([]izanami.Project, error)
 
 	// ListTags fetches tags from the API for a given tenant.
-	ListTags func(cfg *izanami.Config, ctx context.Context, tenant string) ([]izanami.Tag, error)
+	ListTags func(cfg *izanami.ResolvedConfig, ctx context.Context, tenant string) ([]izanami.Tag, error)
 
 	// ListContexts fetches contexts from the API for a given tenant and optional project.
-	ListContexts func(cfg *izanami.Config, ctx context.Context, tenant, project string) ([]izanami.Context, error)
+	ListContexts func(cfg *izanami.ResolvedConfig, ctx context.Context, tenant, project string) ([]izanami.Context, error)
 
 	// Timeout for API calls. Defaults to completionTimeout if zero.
 	Timeout time.Duration
@@ -45,7 +45,7 @@ var defaultCompleter = &Completer{
 }
 
 // listTenantsAPI is the production implementation for listing tenants.
-func listTenantsAPI(cfg *izanami.Config, ctx context.Context) ([]izanami.Tenant, error) {
+func listTenantsAPI(cfg *izanami.ResolvedConfig, ctx context.Context) ([]izanami.Tenant, error) {
 	client, err := izanami.NewAdminClient(cfg)
 	if err != nil {
 		return nil, err
@@ -54,7 +54,7 @@ func listTenantsAPI(cfg *izanami.Config, ctx context.Context) ([]izanami.Tenant,
 }
 
 // listProjectsAPI is the production implementation for listing projects.
-func listProjectsAPI(cfg *izanami.Config, ctx context.Context, tenant string) ([]izanami.Project, error) {
+func listProjectsAPI(cfg *izanami.ResolvedConfig, ctx context.Context, tenant string) ([]izanami.Project, error) {
 	client, err := izanami.NewAdminClient(cfg)
 	if err != nil {
 		return nil, err
@@ -63,7 +63,7 @@ func listProjectsAPI(cfg *izanami.Config, ctx context.Context, tenant string) ([
 }
 
 // listTagsAPI is the production implementation for listing tags.
-func listTagsAPI(cfg *izanami.Config, ctx context.Context, tenant string) ([]izanami.Tag, error) {
+func listTagsAPI(cfg *izanami.ResolvedConfig, ctx context.Context, tenant string) ([]izanami.Tag, error) {
 	client, err := izanami.NewAdminClient(cfg)
 	if err != nil {
 		return nil, err
@@ -72,7 +72,7 @@ func listTagsAPI(cfg *izanami.Config, ctx context.Context, tenant string) ([]iza
 }
 
 // listContextsAPI is the production implementation for listing contexts.
-func listContextsAPI(cfg *izanami.Config, ctx context.Context, tenant, project string) ([]izanami.Context, error) {
+func listContextsAPI(cfg *izanami.ResolvedConfig, ctx context.Context, tenant, project string) ([]izanami.Context, error) {
 	client, err := izanami.NewAdminClient(cfg)
 	if err != nil {
 		return nil, err
@@ -375,21 +375,57 @@ func completeProfileKeys(cmd *cobra.Command, args []string, toComplete string) (
 	}
 
 	keys := []struct{ Name, Desc string }{
-		{"base-url", "Izanami server URL"},
+		{"leader-url", "Izanami leader URL"},
 		{"tenant", "Default tenant name"},
 		{"project", "Default project name"},
 		{"context", "Default context path"},
 		{"session", "Session name to reference"},
 		{"personal-access-token", "Personal access token"},
 		{"personal-access-token-username", "Username for PAT auth"},
-		{"client-id", "Client ID for API auth"},
-		{"client-secret", "Client secret for API auth"},
+		{"client-id", "Client ID for feature/event API"},
+		{"client-secret", "Client secret for feature/event API"},
+		{"default-worker", "Default worker name"},
 	}
 
 	return buildCompletions(keys, toComplete,
 		func(k struct{ Name, Desc string }) string { return k.Name },
 		func(k struct{ Name, Desc string }) string { return k.Desc },
 	), cobra.ShellCompDirectiveNoFileComp
+}
+
+// completeWorkerNames provides completion for worker names from the active profile.
+func completeWorkerNames(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	if len(args) != 0 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	cfg := loadCompletionConfig()
+	if cfg == nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	// Get active profile to find workers
+	profileName, err := izanami.GetActiveProfileName()
+	if err != nil || profileName == "" {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	profile, err := izanami.GetProfile(profileName)
+	if err != nil || profile.Workers == nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	var completions []string
+	for name, worker := range profile.Workers {
+		if toComplete == "" || strings.HasPrefix(name, toComplete) {
+			desc := worker.URL
+			if profile.DefaultWorker == name {
+				desc += " [default]"
+			}
+			completions = append(completions, name+"\t"+desc)
+		}
+	}
+	return completions, cobra.ShellCompDirectiveNoFileComp
 }
 
 // RegisterFlagCompletions registers dynamic completions for global flags.
@@ -411,16 +447,16 @@ func RegisterFlagCompletions() {
 // loadCompletionConfig loads configuration for completion functions.
 // Returns nil if config cannot be loaded (completions will be empty).
 // This function silently fails to avoid breaking shell completion.
-func loadCompletionConfig() *izanami.Config {
-	var cfg *izanami.Config
+func loadCompletionConfig() *izanami.ResolvedConfig {
+	var cfg *izanami.ResolvedConfig
 	var err error
 
 	// Try to load with specific profile if --profile flag was used
 	if profileName != "" {
-		cfg, err = izanami.LoadConfigWithProfile(profileName)
+		cfg, _, err = izanami.LoadConfigWithProfile(profileName)
 	} else {
 		// Load with active profile (if any)
-		cfg, err = izanami.LoadConfigWithProfile("")
+		cfg, _, err = izanami.LoadConfigWithProfile("")
 	}
 
 	if err != nil {
@@ -429,12 +465,12 @@ func loadCompletionConfig() *izanami.Config {
 
 	// Apply command-line flag overrides
 	cfg.MergeWithFlags(izanami.FlagValues{
-		BaseURL: baseURL,
-		Tenant:  tenant,
-		Project: project,
-		Context: contextPath,
-		Timeout: timeout,
-		Verbose: false, // Never verbose during completion
+		LeaderURL: leaderURL,
+		Tenant:    tenant,
+		Project:   project,
+		Context:   contextPath,
+		Timeout:   timeout,
+		Verbose:   false, // Never verbose during completion
 	})
 
 	return cfg

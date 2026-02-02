@@ -120,9 +120,9 @@ The missing value is resolved from the active session.`,
 				username = args[0]
 				resolved, source, _, _, _ := resolveLoginDefaults(cmd)
 				if resolved == "" {
-					return fmt.Errorf("no base URL available for login\n\n"+
+					return fmt.Errorf("no leader URL available for login\n\n"+
 						"Provide URL explicitly:  iz login <url> %s\n"+
-						"Or set env variable:     IZ_BASE_URL=<url> iz login %s\n"+
+						"Or set env variable:     IZ_LEADER_URL=<url> iz login %s\n"+
 						"Or use --url flag:       iz login --url <url> %s",
 						args[0], args[0], args[0])
 				}
@@ -142,7 +142,7 @@ The missing value is resolved from the active session.`,
 					"  iz login                     reuse URL and username from session")
 			}
 			if resolvedURL == "" {
-				return fmt.Errorf("no base URL available (username '%s' found in session)\n\n"+
+				return fmt.Errorf("no leader URL available (username '%s' found in session)\n\n"+
 					"Provide URL: iz login <url> %s", resolvedUser, resolvedUser)
 			}
 			if resolvedUser == "" {
@@ -238,21 +238,21 @@ The missing value is resolved from the active session.`,
 // authMethod is the auth method from the previous session (if any).
 func resolveLoginDefaults(cmd *cobra.Command) (resolvedURL, urlSource, resolvedUser, userSource, authMethod string) {
 	// 1. --url flag (global persistent flag)
-	if baseURL != "" {
-		resolvedURL = baseURL
+	if leaderURL != "" {
+		resolvedURL = leaderURL
 		urlSource = "--url flag"
 	}
 
-	// 2. IZ_BASE_URL env var
+	// 2. IZ_LEADER_URL env var
 	if resolvedURL == "" {
-		if envURL := os.Getenv("IZ_BASE_URL"); envURL != "" {
+		if envURL := os.Getenv("IZ_LEADER_URL"); envURL != "" {
 			resolvedURL = envURL
-			urlSource = "IZ_BASE_URL env"
+			urlSource = "IZ_LEADER_URL env"
 		}
 	}
 
 	// 3. Load config best-effort for profile/session data
-	loadedCfg, err := izanami.LoadConfigWithProfile(profileName)
+	loadedCfg, _, err := izanami.LoadConfigWithProfile(profileName)
 	if err != nil {
 		if verbose {
 			fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Could not load config for defaults: %v\n", err)
@@ -260,8 +260,8 @@ func resolveLoginDefaults(cmd *cobra.Command) (resolvedURL, urlSource, resolvedU
 		return
 	}
 
-	if resolvedURL == "" && loadedCfg.BaseURL != "" {
-		resolvedURL = loadedCfg.BaseURL
+	if resolvedURL == "" && loadedCfg.LeaderURL != "" {
+		resolvedURL = loadedCfg.LeaderURL
 		urlSource = "active profile/session"
 	}
 	if loadedCfg.Username != "" {
@@ -276,9 +276,9 @@ func resolveLoginDefaults(cmd *cobra.Command) (resolvedURL, urlSource, resolvedU
 
 // performLogin performs the actual login to Izanami
 func performLogin(baseURL, username, password string) (string, error) {
-	config := &izanami.Config{
-		BaseURL: baseURL,
-		Timeout: 30,
+	config := &izanami.ResolvedConfig{
+		LeaderURL: baseURL,
+		Timeout:   30,
 	}
 
 	client, err := izanami.NewAdminClientNoAuth(config)
@@ -366,7 +366,7 @@ func determineProfileName(r io.Reader, w io.Writer, baseURL, username string) (s
 		activeProfileName, _ := izanami.GetActiveProfileName()
 		if activeProfileName != "" {
 			if activeProfile, ok := profiles[activeProfileName]; ok {
-				activeURL := activeProfile.BaseURL
+				activeURL := activeProfile.LeaderURL
 				if activeURL == "" && activeProfile.Session != "" {
 					if sessions, err := izanami.LoadSessions(); err == nil {
 						if s, err := sessions.GetSession(activeProfile.Session); err == nil {
@@ -383,7 +383,7 @@ func determineProfileName(r io.Reader, w io.Writer, baseURL, username string) (s
 
 		if profileName == "" {
 			// Active profile didn't match - check other profiles by URL
-			existingProfileName, _, err := izanami.FindProfileByBaseURL(baseURL)
+			existingProfileName, _, err := izanami.FindProfileByLeaderURL(baseURL)
 			if err != nil {
 				fmt.Fprintf(w, "\n   Warning: could not check for existing profiles: %v\n", err)
 				return extractSessionName(baseURL, username), false, false
@@ -412,7 +412,7 @@ func updateProfileWithSession(profileName, sessionName string) error {
 	existingProfile, err := izanami.GetProfile(profileName)
 	if err != nil {
 		// Profile doesn't exist - create new one
-		// Note: BaseURL is intentionally empty - it will be resolved from the session
+		// Note: LeaderURL is intentionally empty - it will be resolved from the session
 		profile := &izanami.Profile{
 			Session: sessionName,
 		}
@@ -573,7 +573,7 @@ func runOIDCLogin(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(cmd.OutOrStderr(), "[verbose] OIDC login flow initiated\n")
 	}
 
-	// Get base URL from args, flags, env, or active profile/session
+	// Get leader URL from args, flags, env, or active profile/session
 	var oidcBaseURL string
 	if len(args) > 0 {
 		oidcBaseURL = args[0]
@@ -591,7 +591,7 @@ func runOIDCLogin(cmd *cobra.Command, args []string) error {
 	}
 
 	if oidcBaseURL == "" {
-		return fmt.Errorf("base URL is required (provide as argument, use --url flag, or set IZ_BASE_URL)")
+		return fmt.Errorf("leader URL is required (provide as argument, use --url flag, or set IZ_LEADER_URL)")
 	}
 
 	// Normalize URL - remove trailing slash for consistent URL building

@@ -42,7 +42,7 @@ func TestLogEffectiveConfig_TimeoutAlwaysShown(t *testing.T) {
 	defer func() { profileName = origProfileName }()
 	profileName = ""
 
-	testCfg := &izanami.Config{Timeout: 30}
+	testCfg := &izanami.ResolvedConfig{Timeout: 30}
 
 	var buf bytes.Buffer
 	cmd := &cobra.Command{Use: "test"}
@@ -63,7 +63,7 @@ func TestLogEffectiveConfig_TimeoutZeroShown(t *testing.T) {
 	profileName = ""
 
 	// timeout=0: previously hidden by the "0" skip, now shown.
-	testCfg := &izanami.Config{Timeout: 0}
+	testCfg := &izanami.ResolvedConfig{Timeout: 0}
 
 	var buf bytes.Buffer
 	cmd := &cobra.Command{Use: "test"}
@@ -83,7 +83,7 @@ func TestLogEffectiveConfig_InsecureFalseSkipped(t *testing.T) {
 	defer func() { profileName = origProfileName }()
 	profileName = ""
 
-	testCfg := &izanami.Config{
+	testCfg := &izanami.ResolvedConfig{
 		Timeout:            30,
 		InsecureSkipVerify: false,
 	}
@@ -106,7 +106,7 @@ func TestLogEffectiveConfig_InsecureTrueShown(t *testing.T) {
 	defer func() { profileName = origProfileName }()
 	profileName = ""
 
-	testCfg := &izanami.Config{
+	testCfg := &izanami.ResolvedConfig{
 		Timeout:            30,
 		InsecureSkipVerify: true,
 	}
@@ -130,7 +130,7 @@ func TestLogEffectiveConfig_EmptyFieldsSkipped(t *testing.T) {
 	profileName = ""
 
 	// Only timeout has a value; string fields are empty
-	testCfg := &izanami.Config{Timeout: 30}
+	testCfg := &izanami.ResolvedConfig{Timeout: 30}
 
 	var buf bytes.Buffer
 	cmd := &cobra.Command{Use: "test"}
@@ -139,13 +139,13 @@ func TestLogEffectiveConfig_EmptyFieldsSkipped(t *testing.T) {
 	logEffectiveConfig(cmd, testCfg)
 
 	output := buf.String()
-	assert.NotContains(t, output, "base-url=", "empty base-url should be skipped")
+	assert.NotContains(t, output, "leader-url=", "empty base-url should be skipped")
 	assert.NotContains(t, output, "tenant=", "empty tenant should be skipped")
 	assert.NotContains(t, output, "project=", "empty project should be skipped")
 	assert.NotContains(t, output, "context=", "empty context should be skipped")
 	assert.NotContains(t, output, "client-id=", "empty client-id should be skipped")
 	assert.NotContains(t, output, "client-secret=", "empty client-secret should be skipped")
-	assert.NotContains(t, output, "client-base-url=", "empty client-base-url should be skipped")
+	assert.NotContains(t, output, "leader-url=", "empty leader-url should be skipped")
 }
 
 func TestLogEffectiveConfig_SensitiveFieldsRedacted(t *testing.T) {
@@ -156,7 +156,7 @@ func TestLogEffectiveConfig_SensitiveFieldsRedacted(t *testing.T) {
 	defer func() { profileName = origProfileName }()
 	profileName = ""
 
-	testCfg := &izanami.Config{
+	testCfg := &izanami.ResolvedConfig{
 		Timeout:      30,
 		ClientSecret: "my-super-secret",
 	}
@@ -180,9 +180,9 @@ func TestLogEffectiveConfig_OutputFormat(t *testing.T) {
 	defer func() { profileName = origProfileName }()
 	profileName = ""
 
-	testCfg := &izanami.Config{
-		BaseURL: "http://localhost:9000",
-		Timeout: 30,
+	testCfg := &izanami.ResolvedConfig{
+		LeaderURL: "http://localhost:9000",
+		Timeout:   30,
 	}
 
 	var buf bytes.Buffer
@@ -193,7 +193,7 @@ func TestLogEffectiveConfig_OutputFormat(t *testing.T) {
 
 	output := buf.String()
 	// Every config line must follow the format: [verbose] Config: key=value (source: ...)
-	assert.Contains(t, output, "[verbose] Config: base-url=http://localhost:9000 (source: ", "output should follow [verbose] Config format")
+	assert.Contains(t, output, "[verbose] Config: leader-url=http://localhost:9000 (source: ", "output should follow [verbose] Config format")
 	assert.Contains(t, output, "[verbose] Config: timeout=30 (source: ", "timeout line should follow format")
 }
 
@@ -204,8 +204,8 @@ func TestLogEffectiveConfig_WithProfile(t *testing.T) {
 	// Create config file with a profile
 	profiles := map[string]*izanami.Profile{
 		"sandbox": {
-			BaseURL: "http://sandbox.example.com",
-			Tenant:  "sandbox-tenant",
+			LeaderURL: "http://sandbox.example.com",
+			Tenant:    "sandbox-tenant",
 		},
 	}
 	createConfigTestFile(t, paths.configPath, profiles, "sandbox")
@@ -214,10 +214,10 @@ func TestLogEffectiveConfig_WithProfile(t *testing.T) {
 	defer func() { profileName = origProfileName }()
 	profileName = ""
 
-	testCfg := &izanami.Config{
-		BaseURL: "http://sandbox.example.com",
-		Tenant:  "sandbox-tenant",
-		Timeout: 30,
+	testCfg := &izanami.ResolvedConfig{
+		LeaderURL: "http://sandbox.example.com",
+		Tenant:    "sandbox-tenant",
+		Timeout:   30,
 	}
 
 	var buf bytes.Buffer
@@ -227,7 +227,7 @@ func TestLogEffectiveConfig_WithProfile(t *testing.T) {
 	logEffectiveConfig(cmd, testCfg)
 
 	output := buf.String()
-	assert.Contains(t, output, "base-url=http://sandbox.example.com (source: profile)", "base-url should come from profile")
+	assert.Contains(t, output, "leader-url=http://sandbox.example.com (source: profile)", "base-url should come from profile")
 	assert.Contains(t, output, "tenant=sandbox-tenant (source: profile)", "tenant should come from profile")
 }
 
@@ -240,7 +240,7 @@ func TestDetermineConfigSource_Flag(t *testing.T) {
 	// Mark the "url" flag as changed
 	require.NoError(t, cmd.Flags().Set("url", "http://flag.example.com"))
 
-	field := configFieldInfo{key: "base-url", flagName: "url"}
+	field := configFieldInfo{key: "leader-url", flagName: "url"}
 
 	source := determineConfigSource(cmd, field, nil, nil)
 	assert.Equal(t, "flag", source, "should return 'flag' when flag is explicitly set")
@@ -249,9 +249,9 @@ func TestDetermineConfigSource_Flag(t *testing.T) {
 func TestDetermineConfigSource_EnvVar(t *testing.T) {
 	cmd := setupVerboseTestCommand()
 
-	t.Setenv("IZ_BASE_URL", "http://env.example.com")
+	t.Setenv("IZ_LEADER_URL", "http://env.example.com")
 
-	field := configFieldInfo{key: "base-url", flagName: "url", envVar: "IZ_BASE_URL"}
+	field := configFieldInfo{key: "leader-url", flagName: "url", envVar: "IZ_LEADER_URL"}
 
 	source := determineConfigSource(cmd, field, nil, nil)
 	assert.Equal(t, "env", source, "should return 'env' when env var is set")
@@ -261,9 +261,9 @@ func TestDetermineConfigSource_FlagOverridesEnv(t *testing.T) {
 	cmd := setupVerboseTestCommand()
 	require.NoError(t, cmd.Flags().Set("url", "http://flag.example.com"))
 
-	t.Setenv("IZ_BASE_URL", "http://env.example.com")
+	t.Setenv("IZ_LEADER_URL", "http://env.example.com")
 
-	field := configFieldInfo{key: "base-url", flagName: "url", envVar: "IZ_BASE_URL"}
+	field := configFieldInfo{key: "leader-url", flagName: "url", envVar: "IZ_LEADER_URL"}
 
 	source := determineConfigSource(cmd, field, nil, nil)
 	assert.Equal(t, "flag", source, "flag should take priority over env var")
@@ -276,7 +276,7 @@ func TestDetermineConfigSource_Session(t *testing.T) {
 		URL: "http://session.example.com",
 	}
 
-	field := configFieldInfo{key: "base-url", flagName: "url", envVar: "IZ_BASE_URL"}
+	field := configFieldInfo{key: "leader-url", flagName: "url", envVar: "IZ_LEADER_URL"}
 
 	// Session URL used when profile has no base-url
 	source := determineConfigSource(cmd, field, nil, session)
@@ -290,10 +290,10 @@ func TestDetermineConfigSource_SessionNotUsedWhenProfileHasURL(t *testing.T) {
 		URL: "http://session.example.com",
 	}
 	profile := &izanami.Profile{
-		BaseURL: "http://profile.example.com",
+		LeaderURL: "http://profile.example.com",
 	}
 
-	field := configFieldInfo{key: "base-url", flagName: "url", envVar: "IZ_BASE_URL"}
+	field := configFieldInfo{key: "leader-url", flagName: "url", envVar: "IZ_LEADER_URL"}
 
 	source := determineConfigSource(cmd, field, profile, session)
 	assert.Equal(t, "profile", source, "should return 'profile' when profile has base-url (not session)")
@@ -386,7 +386,7 @@ func TestDetermineConfigSource_FallbackDefault(t *testing.T) {
 
 	// A field that is not a GlobalConfigKey and has no flag/env/profile/session
 	// should fall through to "default".
-	field := configFieldInfo{key: "client-base-url", envVar: "IZ_CLIENT_BASE_URL"}
+	field := configFieldInfo{key: "leader-url", envVar: "IZ_CLIENT_BASE_URL"}
 
 	source := determineConfigSource(cmd, field, nil, nil)
 	assert.Equal(t, "default", source, "non-global key with no other source should return 'default'")
@@ -398,8 +398,8 @@ func TestDetermineConfigSource_FallbackDefault(t *testing.T) {
 
 func TestGetProfileFieldValue_AllFields(t *testing.T) {
 	profile := &izanami.Profile{
-		BaseURL:            "http://example.com",
-		ClientBaseURL:      "http://client.example.com",
+		LeaderURL:          "http://example.com",
+		DefaultWorker:      "eu-west",
 		ClientID:           "cid",
 		ClientSecret:       "csecret",
 		Tenant:             "my-tenant",
@@ -412,8 +412,8 @@ func TestGetProfileFieldValue_AllFields(t *testing.T) {
 		key      string
 		expected string
 	}{
-		{"base-url", "http://example.com"},
-		{"client-base-url", "http://client.example.com"},
+		{"leader-url", "http://example.com"},
+		{"default-worker", "eu-west"},
 		{"client-id", "cid"},
 		{"client-secret", "csecret"},
 		{"tenant", "my-tenant"},
@@ -431,7 +431,7 @@ func TestGetProfileFieldValue_AllFields(t *testing.T) {
 }
 
 func TestGetProfileFieldValue_UnknownKey(t *testing.T) {
-	profile := &izanami.Profile{BaseURL: "http://example.com"}
+	profile := &izanami.Profile{LeaderURL: "http://example.com"}
 
 	result := getProfileFieldValue(profile, "unknown-key")
 	assert.Equal(t, "", result, "unknown key should return empty string")
@@ -471,7 +471,7 @@ func TestLogEnvironmentVariables_NoVars(t *testing.T) {
 }
 
 func TestLogEnvironmentVariables_WithVars(t *testing.T) {
-	t.Setenv("IZ_BASE_URL", "http://test.example.com")
+	t.Setenv("IZ_LEADER_URL", "http://test.example.com")
 	t.Setenv("IZ_TENANT", "test-tenant")
 
 	var buf bytes.Buffer
@@ -481,7 +481,7 @@ func TestLogEnvironmentVariables_WithVars(t *testing.T) {
 	logEnvironmentVariables(cmd)
 
 	output := buf.String()
-	assert.Contains(t, output, "IZ_BASE_URL=http://test.example.com")
+	assert.Contains(t, output, "IZ_LEADER_URL=http://test.example.com")
 	assert.Contains(t, output, "IZ_TENANT=test-tenant")
 }
 
@@ -504,7 +504,7 @@ func TestLogEnvironmentVariables_SensitiveRedacted(t *testing.T) {
 // ============================================================================
 
 func TestLogAuthenticationMode_NoAuth(t *testing.T) {
-	testCfg := &izanami.Config{}
+	testCfg := &izanami.ResolvedConfig{}
 
 	var buf bytes.Buffer
 	cmd := &cobra.Command{Use: "test"}
@@ -518,7 +518,7 @@ func TestLogAuthenticationMode_NoAuth(t *testing.T) {
 }
 
 func TestLogAuthenticationMode_PAT(t *testing.T) {
-	testCfg := &izanami.Config{
+	testCfg := &izanami.ResolvedConfig{
 		PersonalAccessToken: "pat-123",
 	}
 
@@ -533,7 +533,7 @@ func TestLogAuthenticationMode_PAT(t *testing.T) {
 }
 
 func TestLogAuthenticationMode_JWT(t *testing.T) {
-	testCfg := &izanami.Config{
+	testCfg := &izanami.ResolvedConfig{
 		JwtToken: "jwt-token-here",
 	}
 
@@ -548,7 +548,7 @@ func TestLogAuthenticationMode_JWT(t *testing.T) {
 }
 
 func TestLogAuthenticationMode_ClientKey(t *testing.T) {
-	testCfg := &izanami.Config{
+	testCfg := &izanami.ResolvedConfig{
 		ClientID:     "cid",
 		ClientSecret: "csecret",
 	}

@@ -41,11 +41,11 @@ func TestClient_ListFeatures(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -78,11 +78,11 @@ func TestClient_GetFeature(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -130,11 +130,11 @@ func TestClient_CreateFeature(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -170,11 +170,11 @@ func TestClient_UpdateFeature(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -195,11 +195,11 @@ func TestClient_DeleteFeature(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -233,8 +233,8 @@ func TestClient_CheckFeature(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:      server.URL,
+	config := &ResolvedConfig{
+		LeaderURL:    server.URL,
 		ClientID:     "test-client",
 		ClientSecret: "test-secret",
 		Timeout:      30,
@@ -275,8 +275,8 @@ func TestClient_CheckFeatures(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:      server.URL,
+	config := &ResolvedConfig{
+		LeaderURL:    server.URL,
 		ClientID:     "test-client",
 		ClientSecret: "test-secret",
 		Timeout:      30,
@@ -323,11 +323,11 @@ func TestClient_PatchFeatures(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -361,11 +361,11 @@ func TestClient_TestFeature(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -397,11 +397,11 @@ func TestClient_TestFeatureWithContext(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -457,11 +457,11 @@ func TestClient_TestFeatureDefinition(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -505,11 +505,11 @@ func TestClient_TestFeaturesBulk(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)

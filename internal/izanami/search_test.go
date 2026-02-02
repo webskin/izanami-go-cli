@@ -46,11 +46,11 @@ func TestClient_Search(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -90,11 +90,11 @@ func TestClient_Search_Global(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)

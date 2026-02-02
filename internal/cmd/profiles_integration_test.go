@@ -34,7 +34,7 @@ func TestIntegration_LoginCreatesProfile(t *testing.T) {
 	require.NoError(t, err)
 	session, err := sessions.GetSession(profile.Session)
 	require.NoError(t, err)
-	assert.Equal(t, env.BaseURL, session.URL, "Session should have correct URL")
+	assert.Equal(t, env.LeaderURL, session.URL, "Session should have correct URL")
 
 	t.Logf("Login created profile '%s' with session '%s'", activeProfile, profile.Session)
 }
@@ -107,7 +107,7 @@ func TestIntegration_ProfileListShowsSessionURL(t *testing.T) {
 	output := buf.String()
 
 	// Should show URL resolved from session
-	assert.Contains(t, output, env.BaseURL, "Profile list should show URL from session")
+	assert.Contains(t, output, env.LeaderURL, "Profile list should show URL from session")
 	assert.Contains(t, output, "Active profile:", "Should indicate active profile")
 
 	t.Logf("Profile list output:\n%s", output)
@@ -145,7 +145,7 @@ func TestIntegration_ProfileCurrentAfterLogin(t *testing.T) {
 	// Should show profile details
 	assert.Contains(t, output, "Active Profile:", "Should show active profile header")
 	assert.Contains(t, output, "Session:", "Should show session reference")
-	assert.Contains(t, output, env.BaseURL, "Should show URL resolved from session")
+	assert.Contains(t, output, env.LeaderURL, "Should show URL resolved from session")
 
 	t.Logf("Profile current output:\n%s", output)
 }

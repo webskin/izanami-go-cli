@@ -29,9 +29,9 @@ var (
 	eventsKeepAlive       int
 	eventsData            string
 	// Client credentials for events
-	eventsClientID      string
-	eventsClientSecret  string
-	eventsClientBaseURL string
+	eventsClientID     string
+	eventsClientSecret string
+	eventsWorker       string // Named worker selection
 )
 
 // eventsCmd represents the events command
@@ -95,12 +95,22 @@ and displays events as they occur.
 The connection will automatically reconnect if interrupted.
 Press Ctrl+C to stop watching.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Resolve client credentials using same logic as features check
+		// Resolve worker and client credentials using same logic as features check
 		var projects []string
 		if cfg.Project != "" {
 			projects = append(projects, cfg.Project)
 		}
-		resolveClientCredentials(cmd, cfg, eventsClientID, eventsClientSecret, eventsClientBaseURL, projects)
+		workers, defaultWorker := resolveWorkerFromProfile(activeProfile)
+		rw, err := izanami.ResolveWorker(eventsWorker, workers, defaultWorker, func(format string, a ...interface{}) {
+			fmt.Fprintf(cmd.OutOrStderr(), format, a...)
+		})
+		if err != nil {
+			return err
+		}
+		cfg.WorkerURL = rw.URL
+		cfg.WorkerName = rw.Name
+		cfg.WorkerSource = rw.Source
+		resolveClientCredentials(cmd, cfg, eventsClientID, eventsClientSecret, rw.ClientID, rw.ClientSecret, projects)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -210,7 +220,7 @@ Press Ctrl+C to stop watching.`,
 			return err
 		}
 
-		// Create feature check client for event streaming (uses ClientBaseURL if set)
+		// Create feature check client for event streaming (uses WorkerURL if set)
 		checkClient, err := izanami.NewFeatureCheckClient(cfg)
 		if err != nil {
 			return err
@@ -317,7 +327,8 @@ func init() {
 	eventsWatchCmd.Flags().StringVar(&eventsData, "data", "", "JSON payload for script features (from file with @file.json, stdin with -, or inline)")
 
 	// Client credentials
-	eventsWatchCmd.Flags().StringVar(&eventsClientID, "client-id", "", "Client ID for authentication (env: IZ_CLIENT_ID)")
-	eventsWatchCmd.Flags().StringVar(&eventsClientSecret, "client-secret", "", "Client secret for authentication (env: IZ_CLIENT_SECRET)")
-	eventsWatchCmd.Flags().StringVar(&eventsClientBaseURL, "client-base-url", "", "Base URL for client operations (env: IZ_CLIENT_BASE_URL)")
+	eventsWatchCmd.Flags().StringVar(&eventsClientID, "client-id", "", "Client ID for feature/event API (env: IZ_CLIENT_ID)")
+	eventsWatchCmd.Flags().StringVar(&eventsClientSecret, "client-secret", "", "Client secret for feature/event API (env: IZ_CLIENT_SECRET)")
+	eventsWatchCmd.Flags().StringVar(&eventsWorker, "worker", "", "Named worker for event streaming (env: IZ_WORKER)")
+	eventsWatchCmd.RegisterFlagCompletionFunc("worker", completeWorkerNames)
 }

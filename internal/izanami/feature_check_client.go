@@ -22,22 +22,23 @@ import (
 // For admin operations (feature management, projects, etc.), use AdminClient instead.
 type FeatureCheckClient struct {
 	http   *resty.Client
-	config *Config
+	config *ResolvedConfig
 }
 
 // NewFeatureCheckClient creates a new Izanami feature check client with the given configuration.
 // This validates that client authentication (client-id/secret) is configured.
-// The client uses ClientBaseURL if set, otherwise falls back to BaseURL.
+// The client uses WorkerURL if resolved, otherwise falls back to LeaderURL.
+// The caller is responsible for applying credential precedence before calling this.
 // For admin operations, use NewAdminClient instead.
-func NewFeatureCheckClient(config *Config) (*FeatureCheckClient, error) {
+func NewFeatureCheckClient(config *ResolvedConfig) (*FeatureCheckClient, error) {
 	if err := config.ValidateClientAuth(); err != nil {
 		return nil, err
 	}
 
 	configCopy := copyConfig(config)
 
-	// Use ClientBaseURL if set, otherwise use BaseURL
-	baseURL := configCopy.GetClientBaseURL()
+	// Use WorkerURL if set, otherwise use LeaderURL
+	baseURL := configCopy.GetWorkerURL()
 
 	httpClient := newHTTPClient(baseURL, configCopy.Timeout, configCopy.InsecureSkipVerify)
 
@@ -154,7 +155,7 @@ func (c *FeatureCheckClient) LogSSERequest(method, path string, queryParams map[
 	}
 
 	fmt.Fprintf(os.Stderr, "%s  %s\n", method, url)
-	fmt.Fprintf(os.Stderr, "HOST   : %s\n", c.config.GetClientBaseURL())
+	fmt.Fprintf(os.Stderr, "HOST   : %s\n", c.config.GetWorkerURL())
 	fmt.Fprintf(os.Stderr, "HEADERS:\n")
 	for key, value := range headers {
 		keyLower := strings.ToLower(key)

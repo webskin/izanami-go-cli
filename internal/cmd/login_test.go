@@ -14,7 +14,7 @@ import (
 
 // setupLoginCommand sets up loginCmd with proper I/O streams for testing.
 // Returns the root command and a cleanup function that resets streams and
-// the verbose/baseURL global flags.
+// the verbose/leaderURL global flags.
 func setupLoginCommand(buf *bytes.Buffer, input *bytes.Buffer, args []string) (*cobra.Command, func()) {
 	cmd := &cobra.Command{Use: "iz"}
 	cmd.AddCommand(loginCmd)
@@ -34,7 +34,7 @@ func setupLoginCommand(buf *bytes.Buffer, input *bytes.Buffer, args []string) (*
 		loginCmd.SetErr(nil)
 		// Reset global flags that tests may modify
 		verbose = false
-		baseURL = ""
+		leaderURL = ""
 		profileName = ""
 		loginPassword = ""
 		loginOIDC = false
@@ -107,7 +107,7 @@ func TestLogin_OneArg_Username_NoURLAvailable(t *testing.T) {
 
 	err := cmd.Execute()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no base URL available for login")
+	assert.Contains(t, err.Error(), "no leader URL available for login")
 	assert.Contains(t, err.Error(), "iz login <url> testuser")
 }
 
@@ -211,9 +211,9 @@ func TestLogin_ZeroArgs_URLOnly_NoUsername(t *testing.T) {
 	createTestSessions(t, paths.sessionsPath, map[string]*izanami.Session{
 		"my-session": {URL: "http://localhost:9999", Username: ""},
 	})
-	// Profile with BaseURL set directly (no session username)
+	// Profile with LeaderURL set directly (no session username)
 	createTestConfig(t, paths.configPath, map[string]*izanami.Profile{
-		"test": {BaseURL: "http://localhost:9999"},
+		"test": {LeaderURL: "http://localhost:9999"},
 	}, "test")
 
 	var buf bytes.Buffer
@@ -233,7 +233,7 @@ func TestLogin_ZeroArgs_UsernameOnly_NoURL(t *testing.T) {
 	paths := setupTestPaths(t)
 	overridePathFunctions(t, paths)
 
-	// Session has username but URL is empty (no BaseURL in profile either)
+	// Session has username but URL is empty (no LeaderURL in profile either)
 	createTestSessions(t, paths.sessionsPath, map[string]*izanami.Session{
 		"my-session": {URL: "", Username: "testuser"},
 	})
@@ -249,7 +249,7 @@ func TestLogin_ZeroArgs_UsernameOnly_NoURL(t *testing.T) {
 
 	err := cmd.Execute()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no base URL available")
+	assert.Contains(t, err.Error(), "no leader URL available")
 }
 
 // TestLogin_ResolveDefaults_VerboseConfigError verifies that when verbose is enabled
@@ -290,8 +290,8 @@ func TestLogin_ResolveDefaults_FlagURL(t *testing.T) {
 		"test": {Session: "my-session"},
 	}, "test")
 
-	// Set the global baseURL variable to simulate --url flag
-	baseURL = "http://flag-url.com:9999"
+	// Set the global leaderURL variable to simulate --url flag
+	leaderURL = "http://flag-url.com:9999"
 
 	var buf bytes.Buffer
 	cmd, cleanup := setupLoginCommand(&buf, nil, []string{
@@ -308,14 +308,14 @@ func TestLogin_ResolveDefaults_FlagURL(t *testing.T) {
 	assert.NotContains(t, output, "http://session-url.com:9000")
 }
 
-// TestLogin_ResolveDefaults_EnvURL verifies that IZ_BASE_URL env var is used
+// TestLogin_ResolveDefaults_EnvURL verifies that IZ_LEADER_URL env var is used
 // when no --url flag is set.
 func TestLogin_ResolveDefaults_EnvURL(t *testing.T) {
 	paths := setupTestPaths(t)
 	overridePathFunctions(t, paths)
 
 	// Set env var
-	t.Setenv("IZ_BASE_URL", "http://env-url.com:9999")
+	t.Setenv("IZ_LEADER_URL", "http://env-url.com:9999")
 
 	var buf bytes.Buffer
 	cmd, cleanup := setupLoginCommand(&buf, nil, []string{
@@ -490,8 +490,8 @@ func TestDetermineProfileName_PrefersActiveProfile(t *testing.T) {
 
 	// Create two profiles with the same URL, "other" is active
 	createTestConfig(t, paths.configPath, map[string]*izanami.Profile{
-		"first":  {BaseURL: "http://localhost:9000", Tenant: "t1"},
-		"second": {BaseURL: "http://localhost:9000", Tenant: "t2"},
+		"first":  {LeaderURL: "http://localhost:9000", Tenant: "t1"},
+		"second": {LeaderURL: "http://localhost:9000", Tenant: "t2"},
 	}, "second")
 
 	var buf bytes.Buffer
@@ -509,8 +509,8 @@ func TestDetermineProfileName_FallsBackToURLMatch(t *testing.T) {
 	overridePathFunctions(t, paths)
 
 	createTestConfig(t, paths.configPath, map[string]*izanami.Profile{
-		"dev":  {BaseURL: "http://localhost:9000"},
-		"prod": {BaseURL: "https://prod.example.com"},
+		"dev":  {LeaderURL: "http://localhost:9000"},
+		"prod": {LeaderURL: "https://prod.example.com"},
 	}, "dev")
 
 	var buf bytes.Buffer
@@ -532,7 +532,7 @@ func TestDetermineProfileName_ActiveProfileViaSession(t *testing.T) {
 	})
 	createTestConfig(t, paths.configPath, map[string]*izanami.Profile{
 		"via-session": {Session: "my-session"},
-		"via-url":     {BaseURL: "http://localhost:9000"},
+		"via-url":     {LeaderURL: "http://localhost:9000"},
 	}, "via-session")
 
 	var buf bytes.Buffer
@@ -587,8 +587,8 @@ func TestUpdateProfileWithSession_DoesNotOverrideActiveProfile(t *testing.T) {
 	overridePathFunctions(t, paths)
 
 	createTestConfig(t, paths.configPath, map[string]*izanami.Profile{
-		"active-one": {BaseURL: "http://localhost:9000"},
-		"other":      {BaseURL: "http://other:9000"},
+		"active-one": {LeaderURL: "http://localhost:9000"},
+		"other":      {LeaderURL: "http://other:9000"},
 	}, "active-one")
 
 	err := updateProfileWithSession("other", "other-session")
@@ -614,7 +614,7 @@ func TestUpdateProfileWithSession_SetsActiveWhenNoneSet(t *testing.T) {
 	overridePathFunctions(t, paths)
 
 	createTestConfig(t, paths.configPath, map[string]*izanami.Profile{
-		"new-profile": {BaseURL: "http://localhost:9000"},
+		"new-profile": {LeaderURL: "http://localhost:9000"},
 	}, "") // no active profile
 
 	err := updateProfileWithSession("new-profile", "new-session")
@@ -634,7 +634,7 @@ func TestUpdateProfileWithSession_NewProfileBecomesActive(t *testing.T) {
 	overridePathFunctions(t, paths)
 
 	createTestConfig(t, paths.configPath, map[string]*izanami.Profile{
-		"existing": {BaseURL: "http://localhost:9000"},
+		"existing": {LeaderURL: "http://localhost:9000"},
 	}, "existing")
 
 	// "brand-new" doesn't exist yet — updateProfileWithSession will create it

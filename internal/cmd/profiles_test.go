@@ -53,7 +53,7 @@ func setupProfileCommand(buf *bytes.Buffer, input *bytes.Buffer, args []string) 
 		profileAddCmd.Flags().Set("context", "")
 		profileAddCmd.Flags().Set("client-id", "")
 		profileAddCmd.Flags().Set("client-secret", "")
-		profileAddCmd.Flags().Set("client-base-url", "")
+		profileAddCmd.Flags().Set("leader-url", "")
 	}
 
 	return cmd, cleanup
@@ -87,8 +87,8 @@ func createTestConfig(t *testing.T, configPath string, profiles map[string]*izan
 			if profile.Session != "" {
 				profileMap["session"] = profile.Session
 			}
-			if profile.BaseURL != "" {
-				profileMap["base-url"] = profile.BaseURL
+			if profile.LeaderURL != "" {
+				profileMap["leader-url"] = profile.LeaderURL
 			}
 			if profile.Tenant != "" {
 				profileMap["tenant"] = profile.Tenant
@@ -167,8 +167,8 @@ func verifyProfileInConfig(t *testing.T, configPath string, profileName string, 
 	if expectedProfile.Session != "" {
 		assert.Equal(t, expectedProfile.Session, profile["session"], "Session mismatch")
 	}
-	if expectedProfile.BaseURL != "" {
-		assert.Equal(t, expectedProfile.BaseURL, profile["base-url"], "BaseURL mismatch")
+	if expectedProfile.LeaderURL != "" {
+		assert.Equal(t, expectedProfile.LeaderURL, profile["leader-url"], "LeaderURL mismatch")
 	}
 	if expectedProfile.Tenant != "" {
 		assert.Equal(t, expectedProfile.Tenant, profile["tenant"], "Tenant mismatch")
@@ -207,14 +207,14 @@ func TestProfileListCmd_MultipleProfiles(t *testing.T) {
 
 	profiles := map[string]*izanami.Profile{
 		"sandbox": {
-			BaseURL: "http://localhost:9000",
-			Tenant:  "dev-tenant",
-			Project: "test",
+			LeaderURL: "http://localhost:9000",
+			Tenant:    "dev-tenant",
+			Project:   "test",
 		},
 		"prod": {
-			BaseURL: "https://izanami.example.com",
-			Tenant:  "production",
-			Project: "main",
+			LeaderURL: "https://izanami.example.com",
+			Tenant:    "production",
+			Project:   "main",
 		},
 		"build": {
 			Session: "build-session",
@@ -284,7 +284,7 @@ func TestProfileCurrentCmd_NoActiveProfile(t *testing.T) {
 
 	// Create config without active profile
 	profiles := map[string]*izanami.Profile{
-		"test": {BaseURL: "http://localhost:9000"},
+		"test": {LeaderURL: "http://localhost:9000"},
 	}
 	createTestConfig(t, paths.configPath, profiles, "")
 
@@ -308,10 +308,10 @@ func TestProfileCurrentCmd_ActiveProfileExists(t *testing.T) {
 
 	profiles := map[string]*izanami.Profile{
 		"sandbox": {
-			BaseURL: "http://localhost:9000",
-			Tenant:  "dev-tenant",
-			Project: "test",
-			Context: "dev",
+			LeaderURL: "http://localhost:9000",
+			Tenant:    "dev-tenant",
+			Project:   "test",
+			Context:   "dev",
 		},
 	}
 	createTestConfig(t, paths.configPath, profiles, "sandbox")
@@ -339,7 +339,7 @@ func TestProfileShowCmd_ProfileExists(t *testing.T) {
 
 	profiles := map[string]*izanami.Profile{
 		"test": {
-			BaseURL:      "http://localhost:9000",
+			LeaderURL:    "http://localhost:9000",
 			Tenant:       "test-tenant",
 			Project:      "test-project",
 			ClientSecret: "secret123",
@@ -371,7 +371,7 @@ func TestProfileShowCmd_WithShowSecretsFlag(t *testing.T) {
 
 	profiles := map[string]*izanami.Profile{
 		"test": {
-			BaseURL:      "http://localhost:9000",
+			LeaderURL:    "http://localhost:9000",
 			ClientSecret: "secret123",
 		},
 	}
@@ -413,8 +413,8 @@ func TestProfileUseCmd_SwitchToExisting(t *testing.T) {
 	overridePathFunctions(t, paths)
 
 	profiles := map[string]*izanami.Profile{
-		"sandbox": {BaseURL: "http://localhost:9000", Tenant: "dev"},
-		"prod":    {BaseURL: "https://prod.com", Tenant: "production"},
+		"sandbox": {LeaderURL: "http://localhost:9000", Tenant: "dev"},
+		"prod":    {LeaderURL: "https://prod.com", Tenant: "production"},
 	}
 	createTestConfig(t, paths.configPath, profiles, "sandbox")
 
@@ -445,7 +445,7 @@ func TestProfileUseCmd_NonExistentProfile(t *testing.T) {
 	overridePathFunctions(t, paths)
 
 	profiles := map[string]*izanami.Profile{
-		"sandbox": {BaseURL: "http://localhost:9000"},
+		"sandbox": {LeaderURL: "http://localhost:9000"},
 	}
 	createTestConfig(t, paths.configPath, profiles, "sandbox")
 
@@ -474,7 +474,6 @@ func TestProfileAddCmd_WithAllFlags(t *testing.T) {
 		"--context", "PROD",
 		"--client-id", "my-client",
 		"--client-secret", "my-secret",
-		"--client-base-url", "http://worker.localhost:9000",
 	})
 	defer cleanup()
 
@@ -482,13 +481,12 @@ func TestProfileAddCmd_WithAllFlags(t *testing.T) {
 	require.NoError(t, err)
 
 	verifyProfileInConfig(t, paths.configPath, "test", &izanami.Profile{
-		BaseURL:       "http://localhost:9000",
-		Tenant:        "test-tenant",
-		Project:       "test-project",
-		Context:       "PROD",
-		ClientID:      "my-client",
-		ClientSecret:  "my-secret",
-		ClientBaseURL: "http://worker.localhost:9000",
+		LeaderURL:    "http://localhost:9000",
+		Tenant:       "test-tenant",
+		Project:      "test-project",
+		Context:      "PROD",
+		ClientID:     "my-client",
+		ClientSecret: "my-secret",
 	})
 }
 
@@ -513,9 +511,9 @@ func TestProfileAddCmd_WithDirectURL(t *testing.T) {
 
 	// Verify profile was created
 	verifyProfileInConfig(t, paths.configPath, "prod", &izanami.Profile{
-		BaseURL: "https://izanami.prod.com",
-		Tenant:  "production",
-		Context: "prod",
+		LeaderURL: "https://izanami.prod.com",
+		Tenant:    "production",
+		Context:   "prod",
 	})
 }
 
@@ -570,8 +568,8 @@ func TestProfileSetCmd_UpdateTenant(t *testing.T) {
 
 	profiles := map[string]*izanami.Profile{
 		"test": {
-			BaseURL: "http://localhost:9000",
-			Tenant:  "old-tenant",
+			LeaderURL: "http://localhost:9000",
+			Tenant:    "old-tenant",
 		},
 	}
 	createTestConfig(t, paths.configPath, profiles, "test")
@@ -611,7 +609,7 @@ func TestProfileSetCmd_InvalidKey(t *testing.T) {
 	overridePathFunctions(t, paths)
 
 	profiles := map[string]*izanami.Profile{
-		"test": {BaseURL: "http://localhost:9000"},
+		"test": {LeaderURL: "http://localhost:9000"},
 	}
 	createTestConfig(t, paths.configPath, profiles, "test")
 
@@ -631,9 +629,9 @@ func TestProfileUnsetCmd_ClearTenant(t *testing.T) {
 
 	profiles := map[string]*izanami.Profile{
 		"test": {
-			BaseURL: "http://localhost:9000",
-			Tenant:  "my-tenant",
-			Project: "my-project",
+			LeaderURL: "http://localhost:9000",
+			Tenant:    "my-tenant",
+			Project:   "my-project",
 		},
 	}
 	createTestConfig(t, paths.configPath, profiles, "test")
@@ -659,7 +657,7 @@ func TestProfileUnsetCmd_ClearTenant(t *testing.T) {
 	_, hasTenant := profile["tenant"]
 	assert.False(t, hasTenant, "Tenant should be cleared")
 	assert.Equal(t, "my-project", profile["project"], "Project should remain")
-	assert.Equal(t, "http://localhost:9000", profile["base-url"], "BaseURL should remain")
+	assert.Equal(t, "http://localhost:9000", profile["leader-url"], "LeaderURL should remain")
 }
 
 // TestProfileUnsetCmd_ClearSensitiveValue tests clearing personal-access-token
@@ -669,7 +667,7 @@ func TestProfileUnsetCmd_ClearSensitiveValue(t *testing.T) {
 
 	profiles := map[string]*izanami.Profile{
 		"test": {
-			BaseURL:                     "http://localhost:9000",
+			LeaderURL:                   "http://localhost:9000",
 			PersonalAccessToken:         "secret-token-123",
 			PersonalAccessTokenUsername: "admin",
 		},
@@ -753,7 +751,7 @@ func TestProfileUnsetCmd_InvalidKey(t *testing.T) {
 	overridePathFunctions(t, paths)
 
 	profiles := map[string]*izanami.Profile{
-		"test": {BaseURL: "http://localhost:9000"},
+		"test": {LeaderURL: "http://localhost:9000"},
 	}
 	createTestConfig(t, paths.configPath, profiles, "test")
 
@@ -769,7 +767,7 @@ func TestProfileUnsetCmd_InvalidKey(t *testing.T) {
 // TestProfileUnsetCmd_AllKeys tests unsetting each valid key
 func TestProfileUnsetCmd_AllKeys(t *testing.T) {
 	keys := []string{
-		"base-url",
+		"leader-url",
 		"tenant",
 		"project",
 		"context",
@@ -788,7 +786,7 @@ func TestProfileUnsetCmd_AllKeys(t *testing.T) {
 			// Create profile with all fields populated
 			profiles := map[string]*izanami.Profile{
 				"test": {
-					BaseURL:                     "http://localhost:9000",
+					LeaderURL:                   "http://localhost:9000",
 					Tenant:                      "tenant",
 					Project:                     "project",
 					Context:                     "context",
@@ -820,8 +818,8 @@ func TestProfileDeleteCmd_WithForceFlag(t *testing.T) {
 	overridePathFunctions(t, paths)
 
 	profiles := map[string]*izanami.Profile{
-		"test": {BaseURL: "http://localhost:9000"},
-		"keep": {BaseURL: "http://keep.com"},
+		"test": {LeaderURL: "http://localhost:9000"},
+		"keep": {LeaderURL: "http://keep.com"},
 	}
 	createTestConfig(t, paths.configPath, profiles, "keep")
 
@@ -848,7 +846,7 @@ func TestProfileDeleteCmd_ActiveProfile(t *testing.T) {
 	overridePathFunctions(t, paths)
 
 	profiles := map[string]*izanami.Profile{
-		"test": {BaseURL: "http://localhost:9000"},
+		"test": {LeaderURL: "http://localhost:9000"},
 	}
 	createTestConfig(t, paths.configPath, profiles, "test")
 
@@ -907,7 +905,7 @@ func TestProfileClientKeysAddCmd_MissingTenant(t *testing.T) {
 	overridePathFunctions(t, paths)
 
 	profiles := map[string]*izanami.Profile{
-		"test": {BaseURL: "http://localhost:9000"},
+		"test": {LeaderURL: "http://localhost:9000"},
 	}
 	createTestConfig(t, paths.configPath, profiles, "test")
 
@@ -927,7 +925,7 @@ func TestProfileClientKeysListCmd_NoKeys(t *testing.T) {
 	overridePathFunctions(t, paths)
 
 	profiles := map[string]*izanami.Profile{
-		"test": {BaseURL: "http://localhost:9000"},
+		"test": {LeaderURL: "http://localhost:9000"},
 	}
 	createTestConfig(t, paths.configPath, profiles, "test")
 
@@ -966,7 +964,7 @@ func TestProfileClientKeysListCmd_WithKeys(t *testing.T) {
 
 	profiles := map[string]*izanami.Profile{
 		"test": {
-			BaseURL: "http://localhost:9000",
+			LeaderURL: "http://localhost:9000",
 			ClientKeys: map[string]izanami.TenantClientKeysConfig{
 				"tenant1": {
 					ClientID:     "client-id-1",
@@ -1029,7 +1027,7 @@ func TestProfileClientKeysListCmd_ShowSecrets(t *testing.T) {
 
 	profiles := map[string]*izanami.Profile{
 		"test": {
-			BaseURL: "http://localhost:9000",
+			LeaderURL: "http://localhost:9000",
 			ClientKeys: map[string]izanami.TenantClientKeysConfig{
 				"tenant1": {
 					ClientID:     "client-id-1",
@@ -1064,7 +1062,7 @@ func TestProfileClientKeysListCmd_ProjectOnlyCredentials(t *testing.T) {
 	// Create profile with only project-level credentials (no tenant-level)
 	profiles := map[string]*izanami.Profile{
 		"test": {
-			BaseURL: "http://localhost:9000",
+			LeaderURL: "http://localhost:9000",
 			ClientKeys: map[string]izanami.TenantClientKeysConfig{
 				"my-tenant": {
 					// No ClientID/ClientSecret at tenant level
@@ -1114,7 +1112,7 @@ func TestProfileClientKeysListCmd_SortedOutput(t *testing.T) {
 
 	profiles := map[string]*izanami.Profile{
 		"test": {
-			BaseURL: "http://localhost:9000",
+			LeaderURL: "http://localhost:9000",
 			ClientKeys: map[string]izanami.TenantClientKeysConfig{
 				"zebra": {
 					ClientID:     "zebra-id",
@@ -1158,7 +1156,7 @@ func TestProfileClientKeysDeleteCmd_TenantLevel(t *testing.T) {
 
 	profiles := map[string]*izanami.Profile{
 		"test": {
-			BaseURL: "http://localhost:9000",
+			LeaderURL: "http://localhost:9000",
 			ClientKeys: map[string]izanami.TenantClientKeysConfig{
 				"my-tenant": {
 					ClientID:     "tenant-client-id",
@@ -1213,7 +1211,7 @@ func TestProfileClientKeysDeleteCmd_ProjectLevel(t *testing.T) {
 
 	profiles := map[string]*izanami.Profile{
 		"test": {
-			BaseURL: "http://localhost:9000",
+			LeaderURL: "http://localhost:9000",
 			ClientKeys: map[string]izanami.TenantClientKeysConfig{
 				"my-tenant": {
 					ClientID:     "tenant-client-id",
@@ -1273,7 +1271,7 @@ func TestProfileClientKeysDeleteCmd_TenantNotFound(t *testing.T) {
 
 	profiles := map[string]*izanami.Profile{
 		"test": {
-			BaseURL: "http://localhost:9000",
+			LeaderURL: "http://localhost:9000",
 			ClientKeys: map[string]izanami.TenantClientKeysConfig{
 				"existing-tenant": {
 					ClientID:     "client-id",
@@ -1300,7 +1298,7 @@ func TestProfileClientKeysDeleteCmd_ClientIdMismatch(t *testing.T) {
 
 	profiles := map[string]*izanami.Profile{
 		"test": {
-			BaseURL: "http://localhost:9000",
+			LeaderURL: "http://localhost:9000",
 			ClientKeys: map[string]izanami.TenantClientKeysConfig{
 				"my-tenant": {
 					ClientID:     "actual-client-id",
@@ -1344,7 +1342,7 @@ func TestProfileClientKeysDeleteCmd_CleanupEmptyTenant(t *testing.T) {
 	// Profile with only tenant-level credentials (no projects)
 	profiles := map[string]*izanami.Profile{
 		"test": {
-			BaseURL: "http://localhost:9000",
+			LeaderURL: "http://localhost:9000",
 			ClientKeys: map[string]izanami.TenantClientKeysConfig{
 				"my-tenant": {
 					ClientID:     "client-id",
@@ -1385,7 +1383,7 @@ func TestProfileClientKeysDeleteCmd_ProjectNotFound(t *testing.T) {
 
 	profiles := map[string]*izanami.Profile{
 		"test": {
-			BaseURL: "http://localhost:9000",
+			LeaderURL: "http://localhost:9000",
 			ClientKeys: map[string]izanami.TenantClientKeysConfig{
 				"my-tenant": {
 					ClientID:     "tenant-client-id",
@@ -1412,7 +1410,7 @@ func TestProfileClientKeysDeleteCmd_ProjectClientIdMismatch(t *testing.T) {
 
 	profiles := map[string]*izanami.Profile{
 		"test": {
-			BaseURL: "http://localhost:9000",
+			LeaderURL: "http://localhost:9000",
 			ClientKeys: map[string]izanami.TenantClientKeysConfig{
 				"my-tenant": {
 					Projects: map[string]izanami.ProjectClientKeysConfig{

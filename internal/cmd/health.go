@@ -24,15 +24,15 @@ Exit codes:
   0 - Server is healthy (status: UP)
   1 - Server is unhealthy or unreachable`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if cfg == nil || cfg.BaseURL == "" {
-			return fmt.Errorf("base URL is required (set IZ_BASE_URL or --url)")
+		if cfg == nil || cfg.LeaderURL == "" {
+			return fmt.Errorf("leader URL is required (set IZ_LEADER_URL or --url)")
 		}
 
 		// Create a minimal client just for health check (no auth required)
-		tempCfg := &izanami.Config{
-			BaseURL: cfg.BaseURL,
-			Timeout: cfg.Timeout,
-			Verbose: cfg.Verbose,
+		tempCfg := &izanami.ResolvedConfig{
+			LeaderURL: cfg.LeaderURL,
+			Timeout:   cfg.Timeout,
+			Verbose:   cfg.Verbose,
 		}
 
 		client, err := izanami.NewAdminClientNoAuth(tempCfg)
@@ -70,7 +70,7 @@ Exit codes:
 		if health.Version != "" {
 			fmt.Fprintf(cmd.OutOrStdout(), "Version: %s\n", health.Version)
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "URL:     %s\n", cfg.BaseURL)
+		fmt.Fprintf(cmd.OutOrStdout(), "URL:     %s\n", cfg.LeaderURL)
 
 		return nil
 	},

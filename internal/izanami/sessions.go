@@ -143,7 +143,7 @@ func (s *Session) IsTokenExpired(maxAge time.Duration) bool {
 }
 
 // LoadConfigFromSession loads config from a specific session
-func LoadConfigFromSession(sessionName string) (*Config, error) {
+func LoadConfigFromSession(sessionName string) (*ResolvedConfig, error) {
 	sessions, err := LoadSessions()
 	if err != nil {
 		return nil, err
@@ -159,17 +159,19 @@ func LoadConfigFromSession(sessionName string) (*Config, error) {
 		return nil, fmt.Errorf("session '%s' has no JWT token (session may be invalid)", sessionName)
 	}
 
-	// Load config from file first (to get client-keys and other settings)
-	config, err := LoadConfig()
+	// Load config from file first (to get global settings)
+	fileConfig, err := LoadConfig()
 	if err != nil {
 		// If config file doesn't exist, create a minimal config
-		config = &Config{Timeout: 30}
+		fileConfig = &Config{Timeout: 30}
 	}
 
-	// Override with session data (session takes precedence for auth)
-	config.BaseURL = session.URL
-	config.Username = session.Username
-	config.JwtToken = session.JwtToken
+	resolved := NewResolvedConfig(fileConfig)
 
-	return config, nil
+	// Override with session data (session takes precedence for auth)
+	resolved.LeaderURL = session.URL
+	resolved.Username = session.Username
+	resolved.JwtToken = session.JwtToken
+
+	return resolved, nil
 }

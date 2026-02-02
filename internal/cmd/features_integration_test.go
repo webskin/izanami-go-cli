@@ -163,11 +163,11 @@ func setupFeaturesTest(t *testing.T, env *IntegrationTestEnv) func() {
 	origCompactJSON := compactJSON
 
 	// Set up config
-	cfg = &izanami.Config{
-		BaseURL:  env.BaseURL,
-		Username: env.Username,
-		JwtToken: token,
-		Timeout:  30,
+	cfg = &izanami.ResolvedConfig{
+		LeaderURL: env.LeaderURL,
+		Username:  env.Username,
+		JwtToken:  token,
+		Timeout:   30,
 	}
 	outputFormat = "table"
 	tenant = ""

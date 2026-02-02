@@ -439,7 +439,7 @@ color: never
 	require.NotNil(t, config)
 
 	// Verify session data overrides
-	assert.Equal(t, "http://localhost:9000", config.BaseURL)
+	assert.Equal(t, "http://localhost:9000", config.LeaderURL)
 	assert.Equal(t, "testuser", config.Username)
 	assert.Equal(t, "test-jwt-token", config.JwtToken)
 }
@@ -501,7 +501,7 @@ func TestLoadConfigFromSession_NoConfigFile(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, config)
 	assert.Equal(t, 30, config.Timeout) // default timeout
-	assert.Equal(t, "http://localhost:9000", config.BaseURL)
+	assert.Equal(t, "http://localhost:9000", config.LeaderURL)
 }
 
 func TestSession_YAML_Marshaling(t *testing.T) {

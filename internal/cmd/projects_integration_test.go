@@ -29,12 +29,12 @@ func setupProjectsTest(t *testing.T, env *IntegrationTestEnv, tenantName string)
 	origDeleteForce := projectsDeleteForce
 
 	// Set up config
-	cfg = &izanami.Config{
-		BaseURL:  env.BaseURL,
-		Username: env.Username,
-		JwtToken: token,
-		Tenant:   tenantName,
-		Timeout:  30,
+	cfg = &izanami.ResolvedConfig{
+		LeaderURL: env.LeaderURL,
+		Username:  env.Username,
+		JwtToken:  token,
+		Tenant:    tenantName,
+		Timeout:   30,
 	}
 	// Set tenant global flag so MergeWithFlags picks it up
 	tenant = tenantName

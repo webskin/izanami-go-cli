@@ -25,7 +25,7 @@ const (
 // For client operations (feature checks, events), use FeatureCheckClient instead.
 type AdminClient struct {
 	http             *resty.Client
-	config           *Config
+	config           *ResolvedConfig
 	beforeRequest    []func(*resty.Request) error
 	afterResponse    []func(*resty.Response) error
 	structuredLogger func(level, message string, fields map[string]interface{})
@@ -46,7 +46,7 @@ func (e *APIError) Error() string {
 // NewAdminClient creates a new Izanami admin client with the given configuration.
 // This validates that admin authentication (PAT or JWT) is configured.
 // For client operations (feature checks, events), use NewFeatureCheckClient instead.
-func NewAdminClient(config *Config) (*AdminClient, error) {
+func NewAdminClient(config *ResolvedConfig) (*AdminClient, error) {
 	if err := config.ValidateAdminAuth(); err != nil {
 		return nil, err
 	}
@@ -56,19 +56,18 @@ func NewAdminClient(config *Config) (*AdminClient, error) {
 
 // NewAdminClientNoAuth creates an admin client without authentication validation.
 // Use this for operations that don't require authentication (e.g., health checks).
-func NewAdminClientNoAuth(config *Config) (*AdminClient, error) {
-	if config.BaseURL == "" {
-		return nil, fmt.Errorf(errmsg.MsgBaseURLRequired)
+func NewAdminClientNoAuth(config *ResolvedConfig) (*AdminClient, error) {
+	if config.LeaderURL == "" {
+		return nil, fmt.Errorf(errmsg.MsgLeaderURLRequired)
 	}
 
 	return newAdminClientInternal(config)
 }
 
 // copyConfig makes a defensive copy of the config to prevent external mutations
-func copyConfig(config *Config) *Config {
-	return &Config{
-		BaseURL:                     config.BaseURL,
-		ClientBaseURL:               config.ClientBaseURL,
+func copyConfig(config *ResolvedConfig) *ResolvedConfig {
+	return &ResolvedConfig{
+		LeaderURL:                   config.LeaderURL,
 		ClientID:                    config.ClientID,
 		ClientSecret:                config.ClientSecret,
 		PersonalAccessTokenUsername: config.PersonalAccessTokenUsername,
@@ -80,6 +79,9 @@ func copyConfig(config *Config) *Config {
 		Timeout:                     config.Timeout,
 		Verbose:                     config.Verbose,
 		InsecureSkipVerify:          config.InsecureSkipVerify,
+		WorkerURL:                   config.WorkerURL,
+		WorkerName:                  config.WorkerName,
+		WorkerSource:                config.WorkerSource,
 	}
 }
 
@@ -117,10 +119,10 @@ func newHTTPClient(baseURL string, timeout int, insecureSkipVerify bool) *resty.
 }
 
 // newAdminClientInternal creates the actual admin client (shared logic)
-func newAdminClientInternal(config *Config) (*AdminClient, error) {
+func newAdminClientInternal(config *ResolvedConfig) (*AdminClient, error) {
 	configCopy := copyConfig(config)
 
-	httpClient := newHTTPClient(configCopy.BaseURL, configCopy.Timeout, configCopy.InsecureSkipVerify)
+	httpClient := newHTTPClient(configCopy.LeaderURL, configCopy.Timeout, configCopy.InsecureSkipVerify)
 
 	izClient := &AdminClient{
 		http:             httpClient,

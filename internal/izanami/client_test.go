@@ -20,32 +20,32 @@ func mockServer(t *testing.T, handler http.HandlerFunc) *httptest.Server {
 func TestNewAdminClient(t *testing.T) {
 	tests := []struct {
 		name    string
-		config  *Config
+		config  *ResolvedConfig
 		wantErr bool
 	}{
 		{
 			name: "valid client auth",
-			config: &Config{
-				BaseURL:  "http://localhost:9000",
-				Username: "test-user",
-				JwtToken: "test-jwt-token",
-				Timeout:  30,
+			config: &ResolvedConfig{
+				LeaderURL: "http://localhost:9000",
+				Username:  "test-user",
+				JwtToken:  "test-jwt-token",
+				Timeout:   30,
 			},
 			wantErr: false,
 		},
 		{
 			name: "valid user auth",
-			config: &Config{
-				BaseURL:  "http://localhost:9000",
-				Username: "test-user",
-				JwtToken: "test-token",
-				Timeout:  30,
+			config: &ResolvedConfig{
+				LeaderURL: "http://localhost:9000",
+				Username:  "test-user",
+				JwtToken:  "test-token",
+				Timeout:   30,
 			},
 			wantErr: false,
 		},
 		{
 			name: "missing base URL",
-			config: &Config{
+			config: &ResolvedConfig{
 				Username: "test-user",
 				JwtToken: "test-jwt-token",
 			},
@@ -53,8 +53,8 @@ func TestNewAdminClient(t *testing.T) {
 		},
 		{
 			name: "missing auth",
-			config: &Config{
-				BaseURL: "http://localhost:9000",
+			config: &ResolvedConfig{
+				LeaderURL: "http://localhost:9000",
 			},
 			wantErr: true,
 		},
@@ -84,11 +84,11 @@ func TestClient_ErrorHandling(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -122,11 +122,11 @@ func TestClient_Login(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -220,11 +220,11 @@ func TestClient_Hooks(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
 	}
 
 	client, err := NewAdminClient(config)
@@ -258,12 +258,12 @@ func TestClient_StructuredLogger(t *testing.T) {
 	})
 	defer server.Close()
 
-	config := &Config{
-		BaseURL:  server.URL,
-		Username: "test-user",
-		JwtToken: "test-jwt-token",
-		Timeout:  30,
-		Verbose:  true,
+	config := &ResolvedConfig{
+		LeaderURL: server.URL,
+		Username:  "test-user",
+		JwtToken:  "test-jwt-token",
+		Timeout:   30,
+		Verbose:   true,
 	}
 
 	client, err := NewAdminClient(config)
@@ -285,9 +285,9 @@ func TestClient_StructuredLogger(t *testing.T) {
 
 func TestNewAdminClientNoAuth(t *testing.T) {
 	t.Run("valid config without auth", func(t *testing.T) {
-		config := &Config{
-			BaseURL: "http://localhost:9000",
-			Timeout: 30,
+		config := &ResolvedConfig{
+			LeaderURL: "http://localhost:9000",
+			Timeout:   30,
 		}
 
 		client, err := NewAdminClientNoAuth(config)
@@ -296,8 +296,8 @@ func TestNewAdminClientNoAuth(t *testing.T) {
 		assert.NotNil(t, client)
 	})
 
-	t.Run("missing base URL returns error", func(t *testing.T) {
-		config := &Config{
+	t.Run("missing leader URL returns error", func(t *testing.T) {
+		config := &ResolvedConfig{
 			Timeout: 30,
 		}
 
@@ -305,7 +305,7 @@ func TestNewAdminClientNoAuth(t *testing.T) {
 
 		assert.Error(t, err)
 		assert.Nil(t, client)
-		assert.Contains(t, err.Error(), "base URL")
+		assert.Contains(t, err.Error(), "leader URL")
 	})
 
 	t.Run("can make health check without auth", func(t *testing.T) {
@@ -323,9 +323,9 @@ func TestNewAdminClientNoAuth(t *testing.T) {
 		})
 		defer server.Close()
 
-		config := &Config{
-			BaseURL: server.URL,
-			Timeout: 30,
+		config := &ResolvedConfig{
+			LeaderURL: server.URL,
+			Timeout:   30,
 		}
 
 		client, err := NewAdminClientNoAuth(config)

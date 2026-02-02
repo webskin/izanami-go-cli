@@ -182,7 +182,7 @@ func findFeatureByName(features []izanami.Feature, name, project, tenant string)
 // Returns (uuid, resolvedName, error) - resolvedName is set when name resolution occurred.
 // If the input is already a UUID, returns (uuid, "", nil).
 // If the input is a name, requires tenant to be set. Project is optional for disambiguation.
-func resolveFeatureToUUID(ctx context.Context, client *izanami.AdminClient, cfg *izanami.Config, featureIDOrName string, cmd *cobra.Command) (string, string, error) {
+func resolveFeatureToUUID(ctx context.Context, client *izanami.AdminClient, cfg *izanami.ResolvedConfig, featureIDOrName string, cmd *cobra.Command) (string, string, error) {
 	// If it's already a UUID, return it directly
 	if IsUUID(featureIDOrName) {
 		if cfg.Verbose {

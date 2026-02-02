@@ -26,7 +26,7 @@ func TestIntegration_LoginWithInvalidCredentials(t *testing.T) {
 	env := setupIntegrationTest(t)
 
 	// Test with invalid password (use performLogin directly for invalid creds)
-	_, err := performLogin(env.BaseURL, "invalid_user", "invalid_password")
+	_, err := performLogin(env.LeaderURL, "invalid_user", "invalid_password")
 	require.Error(t, err, "Login should fail with invalid credentials")
 
 	t.Logf("Login correctly failed with error: %v", err)
@@ -49,7 +49,7 @@ func TestIntegration_LoginCommand(t *testing.T) {
 	// Find and verify the session
 	var foundSession *izanami.Session
 	for _, session := range sessions.Sessions {
-		if session.URL == env.BaseURL && session.Username == env.Username {
+		if session.URL == env.LeaderURL && session.Username == env.Username {
 			foundSession = session
 			break
 		}
@@ -93,7 +93,7 @@ func TestIntegration_LogoutAfterLogin(t *testing.T) {
 
 	// Find the session and verify token is cleared
 	for _, session := range sessions.Sessions {
-		if session.URL == env.BaseURL {
+		if session.URL == env.LeaderURL {
 			assert.Empty(t, session.JwtToken, "JWT token should be cleared after logout")
 			break
 		}
@@ -147,7 +147,7 @@ func TestIntegration_LoginCreatesSessionFile(t *testing.T) {
 
 	// Verify content
 	content := env.ReadSessionsFile(t)
-	assert.Contains(t, content, env.BaseURL, "Sessions file should contain URL")
+	assert.Contains(t, content, env.LeaderURL, "Sessions file should contain URL")
 }
 
 // TestIntegration_AuthenticatedClient tests that NewAuthenticatedClient works
@@ -221,7 +221,7 @@ func TestIntegration_LoginOneArg_URL(t *testing.T) {
 	loginCmd.SetErr(&buf)
 	loginCmd.SetIn(input)
 
-	cmd.SetArgs([]string{"login", env.BaseURL, "--password", env.Password})
+	cmd.SetArgs([]string{"login", env.LeaderURL, "--password", env.Password})
 	err := cmd.Execute()
 
 	loginCmd.SetIn(nil)
@@ -292,7 +292,7 @@ func TestIntegration_LoginPasswordCustomSessionName(t *testing.T) {
 	loginCmd.SetIn(input)
 
 	customName := "my-custom-session"
-	cmd.SetArgs([]string{"login", env.BaseURL, env.Username, "--password", env.Password, "--name", customName})
+	cmd.SetArgs([]string{"login", env.LeaderURL, env.Username, "--password", env.Password, "--name", customName})
 	err := cmd.Execute()
 
 	loginCmd.SetIn(nil)
