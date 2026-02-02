@@ -24,7 +24,6 @@ func setupProfileCommand(buf *bytes.Buffer, input *bytes.Buffer, args []string) 
 		cmd.SetIn(input)
 		// Set on all profile subcommands that might read input
 		profileAddCmd.SetIn(input)
-		profileInitCmd.SetIn(input)
 		profileDeleteCmd.SetIn(input)
 		profileClientKeysAddCmd.SetIn(input)
 		profileClientKeysListCmd.SetIn(input)
@@ -40,7 +39,6 @@ func setupProfileCommand(buf *bytes.Buffer, input *bytes.Buffer, args []string) 
 		profileCmd.SetOut(nil)
 		profileCmd.SetErr(nil)
 		profileAddCmd.SetIn(nil)
-		profileInitCmd.SetIn(nil)
 		profileDeleteCmd.SetIn(nil)
 		profileClientKeysAddCmd.SetIn(nil)
 		profileClientKeysListCmd.SetIn(nil)
@@ -48,6 +46,14 @@ func setupProfileCommand(buf *bytes.Buffer, input *bytes.Buffer, args []string) 
 		// Reset flag values to prevent state leaking between tests
 		profileClientKeysDeleteCmd.Flags().Set("tenant", "")
 		profileClientKeysDeleteCmd.Flags().Set("project", "")
+		// Reset profileAddCmd flags to prevent state leaking
+		profileAddCmd.Flags().Set("url", "")
+		profileAddCmd.Flags().Set("tenant", "")
+		profileAddCmd.Flags().Set("project", "")
+		profileAddCmd.Flags().Set("context", "")
+		profileAddCmd.Flags().Set("client-id", "")
+		profileAddCmd.Flags().Set("client-secret", "")
+		profileAddCmd.Flags().Set("client-base-url", "")
 	}
 
 	return cmd, cleanup
@@ -452,8 +458,8 @@ func TestProfileUseCmd_NonExistentProfile(t *testing.T) {
 	assert.Contains(t, err.Error(), "does not exist")
 }
 
-// TestProfileAddCmd_WithSessionReference tests adding profile with session
-func TestProfileAddCmd_WithSessionReference(t *testing.T) {
+// TestProfileAddCmd_WithAllFlags tests adding profile with all flags (non-interactive)
+func TestProfileAddCmd_WithAllFlags(t *testing.T) {
 	paths := setupTestPaths(t)
 	overridePathFunctions(t, paths)
 
@@ -462,20 +468,27 @@ func TestProfileAddCmd_WithSessionReference(t *testing.T) {
 	var buf bytes.Buffer
 	cmd, cleanup := setupProfileCommand(&buf, nil, []string{
 		"profiles", "add", "test",
-		"--session", "my-session",
+		"--url", "http://localhost:9000",
 		"--tenant", "test-tenant",
 		"--project", "test-project",
+		"--context", "PROD",
+		"--client-id", "my-client",
+		"--client-secret", "my-secret",
+		"--client-base-url", "http://worker.localhost:9000",
 	})
 	defer cleanup()
 
 	err := cmd.Execute()
 	require.NoError(t, err)
 
-	// Verify profile was created in config
 	verifyProfileInConfig(t, paths.configPath, "test", &izanami.Profile{
-		Session: "my-session",
-		Tenant:  "test-tenant",
-		Project: "test-project",
+		BaseURL:       "http://localhost:9000",
+		Tenant:        "test-tenant",
+		Project:       "test-project",
+		Context:       "PROD",
+		ClientID:      "my-client",
+		ClientSecret:  "my-secret",
+		ClientBaseURL: "http://worker.localhost:9000",
 	})
 }
 
@@ -531,8 +544,8 @@ func TestProfileAddCmd_FirstProfileAutoActivated(t *testing.T) {
 	assert.Equal(t, "first", config["active_profile"])
 }
 
-// TestProfileAddCmd_MissingSessionAndURL tests validation
-func TestProfileAddCmd_MissingSessionAndURL(t *testing.T) {
+// TestProfileAddCmd_MissingURL tests validation
+func TestProfileAddCmd_MissingURL(t *testing.T) {
 	paths := setupTestPaths(t)
 	overridePathFunctions(t, paths)
 
@@ -546,50 +559,8 @@ func TestProfileAddCmd_MissingSessionAndURL(t *testing.T) {
 	defer cleanup()
 
 	err := cmd.Execute()
-	// Note: The command actually succeeds with just --tenant because validation
-	// is checked only when no flags are provided. Testing the actual CLI behavior.
-	// In non-interactive mode with flags, the validation happens during profile creation.
-	require.NoError(t, err)
-}
-
-// TestProfileInitCmd_SandboxTemplate tests sandbox template
-func TestProfileInitCmd_SandboxTemplate(t *testing.T) {
-	paths := setupTestPaths(t)
-	overridePathFunctions(t, paths)
-
-	createTestConfig(t, paths.configPath, nil, "")
-
-	var buf bytes.Buffer
-	input := createInputBuffer("\n") // Empty input for session override prompt
-	cmd, cleanup := setupProfileCommand(&buf, input, []string{"profiles", "init", "sandbox"})
-	defer cleanup()
-
-	err := cmd.Execute()
-	require.NoError(t, err)
-
-	// Verify sandbox defaults were applied
-	verifyProfileInConfig(t, paths.configPath, "sandbox", &izanami.Profile{
-		BaseURL: "http://localhost:9000",
-		Tenant:  "sandbox-tenant",
-		Project: "test",
-		Context: "dev",
-	})
-}
-
-// TestProfileInitCmd_InvalidTemplate tests invalid template name
-func TestProfileInitCmd_InvalidTemplate(t *testing.T) {
-	paths := setupTestPaths(t)
-	overridePathFunctions(t, paths)
-
-	createTestConfig(t, paths.configPath, nil, "")
-
-	var buf bytes.Buffer
-	cmd, cleanup := setupProfileCommand(&buf, nil, []string{"profiles", "init", "invalid"})
-	defer cleanup()
-
-	err := cmd.Execute()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid template")
+	assert.Contains(t, err.Error(), "--url is required")
 }
 
 // TestProfileSetCmd_UpdateTenant tests updating tenant on active profile

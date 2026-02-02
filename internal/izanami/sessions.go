@@ -20,9 +20,9 @@ const (
 // Session represents a saved authentication session
 type Session struct {
 	URL        string    `yaml:"url"`
-	Username   string    `yaml:"username"`                // Stored for display purposes only (not sent to server for JWT auth)
-	JwtToken   string    `yaml:"jwtToken"`                // JWT token cookie value for admin authentication
-	AuthMethod string    `yaml:"auth_method,omitempty"`   // "password" or "oidc"; empty = "password" (backward compat)
+	Username   string    `yaml:"username"`              // Stored for display purposes only (not sent to server for JWT auth)
+	JwtToken   string    `yaml:"jwtToken"`              // JWT token cookie value for admin authentication
+	AuthMethod string    `yaml:"auth_method,omitempty"` // "password" or "oidc"; empty = "password" (backward compat)
 	CreatedAt  time.Time `yaml:"created_at"`
 }
 

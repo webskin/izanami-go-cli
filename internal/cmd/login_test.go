@@ -2,12 +2,14 @@ package cmd
 
 import (
 	"bytes"
+	"os"
 	"testing"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/webskin/izanami-go-cli/internal/izanami"
+	"gopkg.in/yaml.v3"
 )
 
 // setupLoginCommand sets up loginCmd with proper I/O streams for testing.
@@ -478,4 +480,170 @@ func TestLogin_ZeroArgs_NoAuthMethod_DefaultsToPassword(t *testing.T) {
 	// Should stay in password flow (connection error), not redirect to OIDC
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "login failed")
+}
+
+// TestDetermineProfileName_PrefersActiveProfile verifies that when multiple profiles
+// share the same URL, the active profile is preferred over an arbitrary match.
+func TestDetermineProfileName_PrefersActiveProfile(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	// Create two profiles with the same URL, "other" is active
+	createTestConfig(t, paths.configPath, map[string]*izanami.Profile{
+		"first":  {BaseURL: "http://localhost:9000", Tenant: "t1"},
+		"second": {BaseURL: "http://localhost:9000", Tenant: "t2"},
+	}, "second")
+
+	var buf bytes.Buffer
+	name, created, updated := determineProfileName(&buf, &buf, "http://localhost:9000", "user")
+
+	assert.Equal(t, "second", name)
+	assert.False(t, created)
+	assert.True(t, updated)
+}
+
+// TestDetermineProfileName_FallsBackToURLMatch verifies that when the active profile
+// has a different URL, login falls back to finding a profile by URL.
+func TestDetermineProfileName_FallsBackToURLMatch(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	createTestConfig(t, paths.configPath, map[string]*izanami.Profile{
+		"dev":  {BaseURL: "http://localhost:9000"},
+		"prod": {BaseURL: "https://prod.example.com"},
+	}, "dev")
+
+	var buf bytes.Buffer
+	name, created, updated := determineProfileName(&buf, &buf, "https://prod.example.com", "user")
+
+	assert.Equal(t, "prod", name)
+	assert.False(t, created)
+	assert.True(t, updated)
+}
+
+// TestDetermineProfileName_ActiveProfileViaSession verifies that the active profile
+// is matched even when its URL comes from a session reference.
+func TestDetermineProfileName_ActiveProfileViaSession(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	createTestSessions(t, paths.sessionsPath, map[string]*izanami.Session{
+		"my-session": {URL: "http://localhost:9000", Username: "user"},
+	})
+	createTestConfig(t, paths.configPath, map[string]*izanami.Profile{
+		"via-session": {Session: "my-session"},
+		"via-url":     {BaseURL: "http://localhost:9000"},
+	}, "via-session")
+
+	var buf bytes.Buffer
+	name, created, updated := determineProfileName(&buf, &buf, "http://localhost:9000", "user")
+
+	assert.Equal(t, "via-session", name)
+	assert.False(t, created)
+	assert.True(t, updated)
+}
+
+// TestSaveLoginSession_RefreshesExistingSessions verifies that logging in refreshes
+// tokens on all sessions with the same URL+username instead of deleting them.
+func TestSaveLoginSession_RefreshesExistingSessions(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	// Create two sessions for the same URL+username under different names
+	createTestSessions(t, paths.sessionsPath, map[string]*izanami.Session{
+		"profile-a-session": {URL: "http://localhost:9000", Username: "admin", JwtToken: "old-token-a"},
+		"profile-b-session": {URL: "http://localhost:9000", Username: "admin", JwtToken: "old-token-b"},
+		"other-session":     {URL: "http://other:9000", Username: "admin", JwtToken: "unrelated"},
+	})
+
+	var buf bytes.Buffer
+	cmd := &cobra.Command{Use: "test"}
+	cmd.SetErr(&buf)
+
+	err := saveLoginSession(cmd, "http://localhost:9000", "admin", "new-token", "password", "profile-a-session")
+	require.NoError(t, err)
+
+	// Reload sessions and verify
+	sessions, err := izanami.LoadSessions()
+	require.NoError(t, err)
+
+	// Both sessions should still exist
+	assert.Contains(t, sessions.Sessions, "profile-a-session")
+	assert.Contains(t, sessions.Sessions, "profile-b-session")
+	assert.Contains(t, sessions.Sessions, "other-session")
+
+	// Both same-URL sessions should have the new token
+	assert.Equal(t, "new-token", sessions.Sessions["profile-a-session"].JwtToken)
+	assert.Equal(t, "new-token", sessions.Sessions["profile-b-session"].JwtToken)
+
+	// Unrelated session should be untouched
+	assert.Equal(t, "unrelated", sessions.Sessions["other-session"].JwtToken)
+}
+
+// TestUpdateProfileWithSession_DoesNotOverrideActiveProfile verifies that
+// updateProfileWithSession does not change the active profile when one is already set.
+func TestUpdateProfileWithSession_DoesNotOverrideActiveProfile(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	createTestConfig(t, paths.configPath, map[string]*izanami.Profile{
+		"active-one": {BaseURL: "http://localhost:9000"},
+		"other":      {BaseURL: "http://other:9000"},
+	}, "active-one")
+
+	err := updateProfileWithSession("other", "other-session")
+	require.NoError(t, err)
+
+	// Active profile should still be "active-one"
+	data, err := os.ReadFile(paths.configPath)
+	require.NoError(t, err)
+	var config map[string]interface{}
+	require.NoError(t, yaml.Unmarshal(data, &config))
+	assert.Equal(t, "active-one", config["active_profile"])
+
+	// "other" profile should have the session reference
+	profilesMap := config["profiles"].(map[string]interface{})
+	otherProfile := profilesMap["other"].(map[string]interface{})
+	assert.Equal(t, "other-session", otherProfile["session"])
+}
+
+// TestUpdateProfileWithSession_SetsActiveWhenNoneSet verifies that
+// updateProfileWithSession sets the active profile when none is currently active.
+func TestUpdateProfileWithSession_SetsActiveWhenNoneSet(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	createTestConfig(t, paths.configPath, map[string]*izanami.Profile{
+		"new-profile": {BaseURL: "http://localhost:9000"},
+	}, "") // no active profile
+
+	err := updateProfileWithSession("new-profile", "new-session")
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(paths.configPath)
+	require.NoError(t, err)
+	var config map[string]interface{}
+	require.NoError(t, yaml.Unmarshal(data, &config))
+	assert.Equal(t, "new-profile", config["active_profile"])
+}
+
+// TestUpdateProfileWithSession_NewProfileBecomesActive verifies that a newly created
+// profile becomes active even when another profile is already active.
+func TestUpdateProfileWithSession_NewProfileBecomesActive(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	createTestConfig(t, paths.configPath, map[string]*izanami.Profile{
+		"existing": {BaseURL: "http://localhost:9000"},
+	}, "existing")
+
+	// "brand-new" doesn't exist yet — updateProfileWithSession will create it
+	err := updateProfileWithSession("brand-new", "brand-new-session")
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(paths.configPath)
+	require.NoError(t, err)
+	var config map[string]interface{}
+	require.NoError(t, yaml.Unmarshal(data, &config))
+	assert.Equal(t, "brand-new", config["active_profile"])
 }

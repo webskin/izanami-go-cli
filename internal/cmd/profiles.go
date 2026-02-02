@@ -74,7 +74,6 @@ Example:
 			fmt.Fprintln(cmd.OutOrStdout(), "No profiles configured")
 			fmt.Fprintln(cmd.OutOrStdout(), "\nCreate a profile with:")
 			fmt.Fprintln(cmd.OutOrStdout(), "  iz profiles add <name>")
-			fmt.Fprintln(cmd.OutOrStdout(), "  iz profiles init sandbox|build|prod")
 			return nil
 		}
 
@@ -266,41 +265,43 @@ Examples:
   iz profiles add sandbox
 
   # With flags
-  iz profiles add sandbox --session sandbox-session --tenant dev-tenant
+  iz profiles add sandbox --url http://localhost:9000 --tenant dev-tenant
 
-  # Direct URL (no session)
-  iz profiles add sandbox --url http://localhost:9000 --tenant dev-tenant`,
+  # Full non-interactive setup with client credentials
+  iz profiles add myprofile \
+    --url http://localhost:9000 \
+    --tenant test-tenant \
+    --project test-project \
+    --context PROD \
+    --client-id my-client-id \
+    --client-secret my-secret \
+    --client-base-url http://worker.localhost:9000
+`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		profileName := args[0]
 
 		// Get flag values
-		session, _ := cmd.Flags().GetString("session")
 		url, _ := cmd.Flags().GetString("url")
 		tenant, _ := cmd.Flags().GetString("tenant")
 		project, _ := cmd.Flags().GetString("project")
 		context, _ := cmd.Flags().GetString("context")
 		clientID, _ := cmd.Flags().GetString("client-id")
 		clientSecret, _ := cmd.Flags().GetString("client-secret")
+		clientBaseURL, _ := cmd.Flags().GetString("client-base-url")
 		interactive, _ := cmd.Flags().GetBool("interactive")
 
 		profile := &izanami.Profile{}
 
 		// Interactive prompts if --interactive or no flags provided
-		if interactive || (session == "" && url == "" && tenant == "" && project == "" && context == "" && clientID == "" && clientSecret == "") {
+		if interactive || (url == "" && tenant == "" && project == "" && context == "" && clientID == "" && clientSecret == "" && clientBaseURL == "") {
 			fmt.Fprintf(cmd.OutOrStdout(), "Creating profile '%s'\n\n", profileName)
 			reader := bufio.NewReader(cmd.InOrStdin())
 
-			// Session or URL
-			fmt.Fprint(cmd.OutOrStdout(), "Session name (or leave empty to specify URL): ")
-			session, _ = reader.ReadString('\n')
-			session = strings.TrimSpace(session)
-
-			if session == "" {
-				fmt.Fprint(cmd.OutOrStdout(), "Server URL: ")
-				url, _ = reader.ReadString('\n')
-				url = strings.TrimSpace(url)
-			}
+			// Server URL
+			fmt.Fprint(cmd.OutOrStdout(), "Server URL: ")
+			url, _ = reader.ReadString('\n')
+			url = strings.TrimSpace(url)
 
 			// Tenant
 			fmt.Fprint(cmd.OutOrStdout(), "Default tenant (optional): ")
@@ -332,22 +333,26 @@ Examples:
 					return fmt.Errorf("failed to read client secret: %w", err)
 				}
 				clientSecret = strings.TrimSpace(string(secretBytes))
+
+				fmt.Fprint(cmd.OutOrStdout(), "Client Base URL (optional, for separate client endpoint): ")
+				clientBaseURL, _ = reader.ReadString('\n')
+				clientBaseURL = strings.TrimSpace(clientBaseURL)
 			}
 		}
 
-		// Validate: must have either session or URL
-		if session == "" && url == "" {
-			return fmt.Errorf("either --session or --url must be specified")
+		// Validate: must have URL
+		if url == "" {
+			return fmt.Errorf("--url is required")
 		}
 
 		// Build profile
-		profile.Session = session
 		profile.BaseURL = url
 		profile.Tenant = tenant
 		profile.Project = project
 		profile.Context = context
 		profile.ClientID = clientID
 		profile.ClientSecret = clientSecret
+		profile.ClientBaseURL = clientBaseURL
 
 		// Save profile
 		if err := izanami.AddProfile(profileName, profile); err != nil {
@@ -371,101 +376,6 @@ Examples:
 			fmt.Fprintln(cmd.OutOrStdout(), "   File permissions are set to 0600 (owner read/write only).")
 			fmt.Fprintln(cmd.OutOrStdout(), "   Never commit config.yaml to version control.")
 		}
-
-		return nil
-	},
-}
-
-// profileInitCmd represents the profile init command
-var profileInitCmd = &cobra.Command{
-	Use:   "init <sandbox|build|prod> [name]",
-	Short: "Create profile from template",
-	Long: `Create a new profile using a predefined template.
-
-Available templates:
-  sandbox - Development/testing environment (localhost:9000, dev tenant)
-  build   - Build/staging environment (staging server, build tenant)
-  prod    - Production environment (production server, prod tenant)
-
-You can optionally specify a custom name for the profile.
-If no name is provided, the template name is used.
-
-Examples:
-  iz profiles init sandbox
-  iz profiles init prod my-production
-  iz profiles init build staging-env`,
-	Args:      cobra.RangeArgs(1, 2),
-	ValidArgs: []string{"sandbox", "build", "prod"},
-	RunE: func(cmd *cobra.Command, args []string) error {
-		template := args[0]
-		profileName := template
-		if len(args) > 1 {
-			profileName = args[1]
-		}
-
-		// Validate template
-		if template != "sandbox" && template != "build" && template != "prod" {
-			return fmt.Errorf("invalid template '%s'. Valid templates: sandbox, build, prod", template)
-		}
-
-		profile := &izanami.Profile{}
-
-		// Apply template defaults
-		switch template {
-		case "sandbox":
-			profile.BaseURL = "http://localhost:9000"
-			profile.Tenant = "sandbox-tenant"
-			profile.Project = "test"
-			profile.Context = "dev"
-
-		case "build":
-			// User needs to provide URL
-			fmt.Fprint(cmd.OutOrStdout(), "Build server URL: ")
-			var url string
-			fmt.Scanln(&url)
-			profile.BaseURL = strings.TrimSpace(url)
-			profile.Tenant = "build-tenant"
-			profile.Project = "integration"
-			profile.Context = "staging"
-
-		case "prod":
-			// User needs to provide URL
-			fmt.Fprint(cmd.OutOrStdout(), "Production server URL: ")
-			var url string
-			fmt.Scanln(&url)
-			profile.BaseURL = strings.TrimSpace(url)
-			profile.Tenant = "production"
-			profile.Project = "main"
-			profile.Context = "prod"
-		}
-
-		// Allow override with session
-		fmt.Fprintf(cmd.OutOrStdout(), "\nUse existing session instead of URL? (leave empty to use URL): ")
-		var session string
-		fmt.Scanln(&session)
-		if strings.TrimSpace(session) != "" {
-			profile.Session = strings.TrimSpace(session)
-			profile.BaseURL = "" // Clear URL if using session
-		}
-
-		// Save profile
-		if err := izanami.AddProfile(profileName, profile); err != nil {
-			return fmt.Errorf("failed to create profile: %w", err)
-		}
-
-		fmt.Fprintf(cmd.OutOrStdout(), "\n✓ Profile '%s' created from template '%s'\n", profileName, template)
-
-		// Check if this is the first profile
-		profiles, _, err := izanami.ListProfiles()
-		if err == nil && len(profiles) == 1 {
-			fmt.Fprintln(cmd.OutOrStdout(), "✓ Set as active profile (first profile created)")
-		}
-
-		fmt.Fprintln(cmd.OutOrStdout(), "\nProfile details:")
-		printProfile(cmd.OutOrStdout(), profile, false)
-
-		fmt.Fprintf(cmd.OutOrStdout(), "\nSwitch to this profile with:\n")
-		fmt.Fprintf(cmd.OutOrStdout(), "  iz profiles use %s\n", profileName)
 
 		return nil
 	},
@@ -828,13 +738,16 @@ Security:
 
 		fmt.Fprintf(cmd.OutOrStderr(), "Adding credentials to profile: %s\n\n", profileName)
 
+		reader := bufio.NewReader(cmd.InOrStdin())
+
 		// Prompt for client-id
 		fmt.Fprintf(cmd.OutOrStderr(), "Client ID: ")
 		var clientID string
-		if _, err := fmt.Scanln(&clientID); err != nil {
+		line, err := reader.ReadString('\n')
+		if err != nil && line == "" {
 			return fmt.Errorf("failed to read client ID: %w", err)
 		}
-		clientID = strings.TrimSpace(clientID)
+		clientID = strings.TrimSpace(line)
 		if clientID == "" {
 			return fmt.Errorf("client ID cannot be empty")
 		}
@@ -860,9 +773,8 @@ Security:
 					if tenantConfig.ClientID != "" {
 						fmt.Fprintf(cmd.OutOrStderr(), "\n⚠️  Profile '%s' already has credentials for tenant '%s'.\n", profileName, tenant)
 						fmt.Fprintf(cmd.OutOrStderr(), "Overwrite existing credentials? (y/N): ")
-						var response string
-						fmt.Scanln(&response)
-						if strings.ToLower(strings.TrimSpace(response)) != "y" {
+						line, _ = reader.ReadString('\n')
+						if strings.ToLower(strings.TrimSpace(line)) != "y" {
 							fmt.Fprintln(cmd.OutOrStderr(), "Aborted.")
 							return nil
 						}
@@ -874,9 +786,8 @@ Security:
 							if projConfig, projExists := tenantConfig.Projects[project]; projExists && projConfig.ClientID != "" {
 								fmt.Fprintf(cmd.OutOrStderr(), "\n⚠️  Profile '%s' already has credentials for '%s/%s'.\n", profileName, tenant, project)
 								fmt.Fprintf(cmd.OutOrStderr(), "Overwrite existing credentials? (y/N): ")
-								var response string
-								fmt.Scanln(&response)
-								if strings.ToLower(strings.TrimSpace(response)) != "y" {
+								line, _ = reader.ReadString('\n')
+								if strings.ToLower(strings.TrimSpace(line)) != "y" {
 									fmt.Fprintln(cmd.OutOrStderr(), "Aborted.")
 									return nil
 								}
@@ -1091,7 +1002,6 @@ func init() {
 	profileCmd.AddCommand(profileShowCmd)
 	profileCmd.AddCommand(profileUseCmd)
 	profileCmd.AddCommand(profileAddCmd)
-	profileCmd.AddCommand(profileInitCmd)
 	profileCmd.AddCommand(profileSetCmd)
 	profileCmd.AddCommand(profileUnsetCmd)
 	profileCmd.AddCommand(profileDeleteCmd)
@@ -1103,6 +1013,9 @@ func init() {
 	profileClientKeysCmd.AddCommand(profileClientKeysDeleteCmd)
 
 	// Dynamic completion for profile keys (same keys for set/unset)
+	profileUseCmd.ValidArgsFunction = completeProfileNames
+	profileShowCmd.ValidArgsFunction = completeProfileNames
+	profileDeleteCmd.ValidArgsFunction = completeProfileNames
 	profileSetCmd.ValidArgsFunction = completeProfileKeys
 	profileUnsetCmd.ValidArgsFunction = completeProfileKeys
 
@@ -1110,13 +1023,13 @@ func init() {
 	profileDeleteCmd.Flags().BoolVarP(&profileDeleteForce, "force", "f", false, "Skip confirmation prompt")
 
 	// Flags for profile add
-	profileAddCmd.Flags().String("session", "", "Reference to existing session")
-	profileAddCmd.Flags().String("url", "", "Server URL (alternative to --session)")
+	profileAddCmd.Flags().String("url", "", "Server URL")
 	profileAddCmd.Flags().String("tenant", "", "Default tenant")
 	profileAddCmd.Flags().String("project", "", "Default project")
 	profileAddCmd.Flags().String("context", "", "Default context")
 	profileAddCmd.Flags().String("client-id", "", "Client ID for feature checks")
 	profileAddCmd.Flags().String("client-secret", "", "Client secret for feature checks")
+	profileAddCmd.Flags().String("client-base-url", "", "Base URL for client operations (features/events)")
 	profileAddCmd.Flags().BoolP("interactive", "i", false, "Force interactive mode")
 
 	// Flags for profile show

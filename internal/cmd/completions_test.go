@@ -901,3 +901,104 @@ func TestCompleteProfileKeys(t *testing.T) {
 		})
 	}
 }
+
+func TestCompleteProfileNames(t *testing.T) {
+	tests := []struct {
+		name          string
+		profiles      map[string]*izanami.Profile
+		args          []string
+		toComplete    string
+		wantNames     []string
+		wantDirective cobra.ShellCompDirective
+	}{
+		{
+			name: "returns all profile names when empty",
+			profiles: map[string]*izanami.Profile{
+				"sandbox": {BaseURL: "http://localhost:9000"},
+				"prod":    {BaseURL: "https://prod.example.com"},
+			},
+			args:          []string{},
+			toComplete:    "",
+			wantNames:     []string{"sandbox", "prod"},
+			wantDirective: cobra.ShellCompDirectiveNoFileComp,
+		},
+		{
+			name: "filters by prefix",
+			profiles: map[string]*izanami.Profile{
+				"sandbox": {BaseURL: "http://localhost:9000"},
+				"staging": {BaseURL: "http://staging.example.com"},
+				"prod":    {BaseURL: "https://prod.example.com"},
+			},
+			args:          []string{},
+			toComplete:    "s",
+			wantNames:     []string{"sandbox", "staging"},
+			wantDirective: cobra.ShellCompDirectiveNoFileComp,
+		},
+		{
+			name:          "no completions when arg already provided",
+			profiles:      map[string]*izanami.Profile{"sandbox": {}},
+			args:          []string{"sandbox"},
+			toComplete:    "",
+			wantNames:     nil,
+			wantDirective: cobra.ShellCompDirectiveNoFileComp,
+		},
+		{
+			name: "no matches for invalid prefix",
+			profiles: map[string]*izanami.Profile{
+				"sandbox": {},
+			},
+			args:          []string{},
+			toComplete:    "zzz",
+			wantNames:     nil,
+			wantDirective: cobra.ShellCompDirectiveNoFileComp,
+		},
+		{
+			name:          "no profiles configured",
+			profiles:      nil,
+			args:          []string{},
+			toComplete:    "",
+			wantNames:     nil,
+			wantDirective: cobra.ShellCompDirectiveNoFileComp,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			paths := setupTestPaths(t)
+			overridePathFunctions(t, paths)
+
+			createTestConfig(t, paths.configPath, tt.profiles, "")
+
+			got, directive := completeProfileNames(nil, tt.args, tt.toComplete)
+
+			if directive != tt.wantDirective {
+				t.Errorf("completeProfileNames() directive = %v, want %v", directive, tt.wantDirective)
+			}
+
+			if tt.wantNames == nil {
+				if len(got) != 0 {
+					t.Errorf("completeProfileNames() returned %d results, want 0", len(got))
+				}
+				return
+			}
+
+			if len(got) != len(tt.wantNames) {
+				t.Errorf("completeProfileNames() returned %d results, want %d: %v", len(got), len(tt.wantNames), got)
+				return
+			}
+
+			for _, want := range tt.wantNames {
+				found := false
+				for _, g := range got {
+					if g == want {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("completeProfileNames() missing %q, got %v", want, got)
+				}
+			}
+		})
+	}
+}

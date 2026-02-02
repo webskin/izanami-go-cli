@@ -39,7 +39,7 @@ var loginCmd = &cobra.Command{
 
 The command will prompt for your password securely, authenticate with
 Izanami, and save the JWT token for future use. The session is automatically
-linked to a profile, and the profile becomes active.
+linked to the active profile (or creates a new profile if none exists).
 
 OIDC Authentication:
   Use --oidc flag to authenticate via your organization's identity provider.
@@ -362,22 +362,42 @@ func determineProfileName(r io.Reader, w io.Writer, baseURL, username string) (s
 		profileName = promptForProfileName(r, w, suggestedName)
 		wasCreated = true
 	} else {
-		// Check if URL matches existing profile
-		existingProfileName, _, err := izanami.FindProfileByBaseURL(baseURL)
-		if err != nil {
-			fmt.Fprintf(w, "\n   Warning: could not check for existing profiles: %v\n", err)
-			return extractSessionName(baseURL, username), false, false
+		// Prefer the active profile if its URL matches
+		activeProfileName, _ := izanami.GetActiveProfileName()
+		if activeProfileName != "" {
+			if activeProfile, ok := profiles[activeProfileName]; ok {
+				activeURL := activeProfile.BaseURL
+				if activeURL == "" && activeProfile.Session != "" {
+					if sessions, err := izanami.LoadSessions(); err == nil {
+						if s, err := sessions.GetSession(activeProfile.Session); err == nil {
+							activeURL = s.URL
+						}
+					}
+				}
+				if izanami.NormalizeURL(activeURL) == izanami.NormalizeURL(baseURL) {
+					profileName = activeProfileName
+					wasUpdated = true
+				}
+			}
 		}
 
-		if existingProfileName != "" {
-			// Found existing profile with same URL - use it
-			profileName = existingProfileName
-			wasUpdated = true
-		} else {
-			// New URL - prompt for profile name
-			suggestedName := extractSessionName(baseURL, username)
-			profileName = promptForProfileName(r, w, suggestedName)
-			wasCreated = true
+		if profileName == "" {
+			// Active profile didn't match - check other profiles by URL
+			existingProfileName, _, err := izanami.FindProfileByBaseURL(baseURL)
+			if err != nil {
+				fmt.Fprintf(w, "\n   Warning: could not check for existing profiles: %v\n", err)
+				return extractSessionName(baseURL, username), false, false
+			}
+
+			if existingProfileName != "" {
+				profileName = existingProfileName
+				wasUpdated = true
+			} else {
+				// New URL - prompt for profile name
+				suggestedName := extractSessionName(baseURL, username)
+				profileName = promptForProfileName(r, w, suggestedName)
+				wasCreated = true
+			}
 		}
 	}
 
@@ -388,6 +408,7 @@ func determineProfileName(r io.Reader, w io.Writer, baseURL, username string) (s
 // Note: Username is stored in sessions, not profiles. Profile only references the session.
 func updateProfileWithSession(profileName, sessionName string) error {
 	// Try to load existing profile
+	profileCreated := false
 	existingProfile, err := izanami.GetProfile(profileName)
 	if err != nil {
 		// Profile doesn't exist - create new one
@@ -399,6 +420,7 @@ func updateProfileWithSession(profileName, sessionName string) error {
 		if err := izanami.AddProfile(profileName, profile); err != nil {
 			return fmt.Errorf("failed to save profile: %w", err)
 		}
+		profileCreated = true
 	} else {
 		// Profile exists - update session reference
 		existingProfile.Session = sessionName
@@ -408,9 +430,12 @@ func updateProfileWithSession(profileName, sessionName string) error {
 		}
 	}
 
-	// Set as active profile
-	if err := izanami.SetActiveProfile(profileName); err != nil {
-		return fmt.Errorf("failed to set active profile: %w", err)
+	// Set as active profile if this is a new profile or no profile is active
+	activeProfile, _ := izanami.GetActiveProfileName()
+	if profileCreated || activeProfile == "" {
+		if err := izanami.SetActiveProfile(profileName); err != nil {
+			return fmt.Errorf("failed to set active profile: %w", err)
+		}
 	}
 
 	return nil
@@ -436,17 +461,15 @@ func saveLoginSession(cmd *cobra.Command, baseURL, username, token, authMethod, 
 		CreatedAt:  time.Now(),
 	}
 
-	// Check if session with same URL+username exists and overwrite
+	// Update existing sessions with same URL+username (refresh their tokens)
 	for name, existing := range sessions.Sessions {
-		if existing.URL == baseURL && existing.Username == username {
-			if name != sessionName {
-				if verbose {
-					fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Found existing session with same URL+username: %s\n", name)
-				}
-				delete(sessions.Sessions, name)
-				fmt.Fprintf(cmd.OutOrStderr(), "   Replacing existing session: %s\n", name)
+		if existing.URL == baseURL && existing.Username == username && name != sessionName {
+			existing.JwtToken = token
+			existing.AuthMethod = authMethod
+			existing.CreatedAt = session.CreatedAt
+			if verbose {
+				fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Refreshed existing session: %s\n", name)
 			}
-			break
 		}
 	}
 

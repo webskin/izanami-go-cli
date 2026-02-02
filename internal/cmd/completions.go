@@ -347,6 +347,26 @@ func completeConfigKeys(cmd *cobra.Command, args []string, toComplete string) ([
 	), cobra.ShellCompDirectiveNoFileComp
 }
 
+// completeProfileNames provides completion for profile names from the config file.
+func completeProfileNames(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	if len(args) != 0 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	profiles, _, err := izanami.ListProfiles()
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	var completions []string
+	for name := range profiles {
+		if toComplete == "" || strings.HasPrefix(name, toComplete) {
+			completions = append(completions, name)
+		}
+	}
+	return completions, cobra.ShellCompDirectiveNoFileComp
+}
+
 // completeProfileKeys provides completion for profile setting keys.
 // These are static keys that don't require API calls.
 func completeProfileKeys(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {

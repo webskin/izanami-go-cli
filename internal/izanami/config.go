@@ -1268,8 +1268,8 @@ func ListProfiles() (map[string]*Profile, string, error) {
 	return config.Profiles, config.ActiveProfile, nil
 }
 
-// normalizeURL removes protocol and trailing slashes for URL comparison
-func normalizeURL(url string) string {
+// NormalizeURL removes protocol and trailing slashes for URL comparison
+func NormalizeURL(url string) string {
 	url = strings.TrimPrefix(url, "http://")
 	url = strings.TrimPrefix(url, "https://")
 	url = strings.TrimRight(url, "/")
@@ -1285,7 +1285,7 @@ func FindProfileByBaseURL(baseURL string) (string, *Profile, error) {
 	}
 
 	// Normalize the search URL
-	normalizedSearchURL := normalizeURL(baseURL)
+	normalizedSearchURL := NormalizeURL(baseURL)
 
 	// Search through all profiles
 	for name, profile := range profiles {
@@ -1302,7 +1302,7 @@ func FindProfileByBaseURL(baseURL string) (string, *Profile, error) {
 		}
 
 		// Compare normalized URLs
-		if normalizeURL(profileURL) == normalizedSearchURL {
+		if NormalizeURL(profileURL) == normalizedSearchURL {
 			return name, profile, nil
 		}
 	}
