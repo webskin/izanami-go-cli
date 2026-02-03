@@ -78,58 +78,12 @@ func enableFeatureCheckSecureDebugMode(httpClient *resty.Client, client *Feature
 
 // logFeatureCheckRequest logs HTTP request details with sensitive data redaction for FeatureCheckClient
 func logFeatureCheckRequest(resp *resty.Response, sensitiveHeaders map[string]bool, client *FeatureCheckClient) {
-	req := resp.Request.RawRequest
-
-	fmt.Fprintf(os.Stderr, "==============================================================================\n")
-	fmt.Fprintf(os.Stderr, "~~~ REQUEST ~~~\n")
-	url := req.URL.Path
-	if req.URL.RawQuery != "" {
-		url += "?" + req.URL.RawQuery
-	}
-	fmt.Fprintf(os.Stderr, "%s  %s  %s\n", req.Method, url, req.Proto)
-	fmt.Fprintf(os.Stderr, "HOST   : %s\n", req.Host)
-	fmt.Fprintf(os.Stderr, "HEADERS:\n")
-	for key, values := range req.Header {
-		keyLower := strings.ToLower(key)
-		if sensitiveHeaders[keyLower] {
-			fmt.Fprintf(os.Stderr, "\t%s: [REDACTED]\n", key)
-		} else {
-			for _, value := range values {
-				fmt.Fprintf(os.Stderr, "\t%s: %s\n", key, value)
-			}
-		}
-	}
-	fmt.Fprintf(os.Stderr, "BODY   :\n")
-	logBody(os.Stderr, resp.Request.Body)
-	fmt.Fprintf(os.Stderr, "------------------------------------------------------------------------------\n")
+	logRequestToStderr(resp, sensitiveHeaders)
 }
 
 // logFeatureCheckResponse logs HTTP response details with sensitive data redaction
 func logFeatureCheckResponse(resp *resty.Response, sensitiveHeaders map[string]bool) {
-	fmt.Fprintf(os.Stderr, "~~~ RESPONSE ~~~\n")
-	fmt.Fprintf(os.Stderr, "STATUS       : %s\n", resp.Status())
-	fmt.Fprintf(os.Stderr, "PROTO        : %s\n", resp.Proto())
-	fmt.Fprintf(os.Stderr, "RECEIVED AT  : %v\n", time.Now().Format(time.RFC3339Nano))
-	fmt.Fprintf(os.Stderr, "TIME DURATION: %v\n", resp.Time())
-	fmt.Fprintf(os.Stderr, "HEADERS      :\n")
-	for key, values := range resp.Header() {
-		keyLower := strings.ToLower(key)
-		if sensitiveHeaders[keyLower] {
-			fmt.Fprintf(os.Stderr, "\t%s: [REDACTED]\n", key)
-		} else {
-			for _, value := range values {
-				fmt.Fprintf(os.Stderr, "\t%s: %s\n", key, value)
-			}
-		}
-	}
-	fmt.Fprintf(os.Stderr, "BODY         :\n")
-	if len(resp.Body()) > 0 {
-		body := string(resp.Body())
-		fmt.Fprintf(os.Stderr, "%s\n", truncateString(body, maxBodyLogLength))
-	} else {
-		fmt.Fprintf(os.Stderr, "***** NO CONTENT *****\n")
-	}
-	fmt.Fprintf(os.Stderr, "==============================================================================\n")
+	logResponseToStderr(resp, sensitiveHeaders)
 }
 
 // LogSSERequest logs SSE request details when verbose mode is enabled.

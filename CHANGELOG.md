@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`--quiet` / `-q` global flag**: Suppresses all stdout output (exit code only); mutually exclusive with `--verbose`
+- **`profiles add --active` flag**: Immediately sets the new profile as active on creation
+- **`profiles workers add --default` flag**: Sets the new worker as the default worker
+- **Non-interactive `client-keys add`**: New `--client-id` and `--client-secret` flags for scripted/CI usage (both profile-level and worker-level)
+- **Worker-level ClientKeys**: Workers now support hierarchical `ClientKeys` maps (tenant → project credentials), matching profile-level behavior
+- **Config reset backup**: `config reset` now creates a timestamped backup before deleting
+- **`profiles list` Workers column**: Shows worker names with default annotation
+- **`worker-url` and `worker-name` in `config list`** output
+- New tests for quiet flag, active flag, default worker flag, and `copyConfig` deep-copy
+
+### Changed
+- **Credential model**: Removed flat `ClientID`/`ClientSecret` fields from `Profile` and `WorkerConfig`; use `ClientKeys` map exclusively
+- **Environment variables**: `IZ_BASE_URL` → `IZ_LEADER_URL`, `IZ_CLIENT_BASE_URL` → `IZ_WORKER_URL`
+- **Config key**: `base-url` → `leader-url` in YAML config files
+- **Worker resolution** now runs once at root level (`PersistentPreRunE`); per-command re-resolution only when `--worker` flag is explicitly set
+- **`profiles add`** no longer prompts for client credentials inline; suggests `iz profiles client-keys add` instead
+- **`profiles show`** displays "N tenant(s) configured" for client keys and lists worker names
+- **`client-keys` commands** moved from `profiles.go` to dedicated `client_keys.go`
+- **`performLogin()`** now accepts and passes through `--insecure`, `--verbose`, and `--timeout` flags
+
+### Fixed
+- `--insecure` flag had no effect on health checks
+- `performLogin()` ignored `--insecure`, `--verbose`, and `--timeout` settings
+- Worker resolution ran unconditionally even without workers, producing spurious errors
+
+### Refactored
+- **Credential resolution**: `ResolveClientCredentials` method now delegates to standalone `ResolveClientCredentialsFromKeys`, eliminating duplicate logic
+- **Test helpers**: Removed redundant `createTestConfigWithWorkers`; `createTestConfig` handles all profile fields including workers
+- **HTTP logging**: Extracted `logRequestToStderr`/`logResponseToStderr` shared functions; admin and feature-check loggers both delegate to them
+- **`copyConfig()`** expanded to deep-copy all fields including `ClientKeys`, `OutputFormat`, `Color`, `Username`, `AuthMethod`
+
 ## [0.1.0] - 2025-11-14
 
 ### Added

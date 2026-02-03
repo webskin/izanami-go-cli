@@ -182,7 +182,7 @@ iz
 2. **Configure:**
    ```bash
    # Option 1: Environment variables
-   export IZ_BASE_URL="https://izanami.example.com"
+   export IZ_LEADER_URL="https://izanami.example.com"
    export IZ_CLIENT_ID="your-client-id"
    export IZ_CLIENT_SECRET="your-client-secret"
 

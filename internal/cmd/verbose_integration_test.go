@@ -100,7 +100,7 @@ func TestIntegration_VerboseConfig_ProfileSource(t *testing.T) {
 	logEffectiveConfig(cmd, testCfg)
 
 	output := buf.String()
-	// After login, base-url comes from the session (referenced by the profile)
+	// After login, leader-url comes from the session (referenced by the profile)
 	assert.Contains(t, output, "leader-url=", "should show leader-url")
 	assert.Contains(t, output, "timeout=", "should show timeout")
 	t.Logf("Verbose output (after login):\n%s", output)
@@ -174,7 +174,7 @@ func TestIntegration_VerboseConfig_FlagSource(t *testing.T) {
 	t.Logf("Verbose output (flag):\n%s", output)
 }
 
-// TestIntegration_VerboseConfig_SessionSource tests that base-url coming from
+// TestIntegration_VerboseConfig_SessionSource tests that leader-url coming from
 // a session (via profile) is reported with source "session".
 func TestIntegration_VerboseConfig_SessionSource(t *testing.T) {
 	env := setupIntegrationTest(t)
@@ -201,7 +201,7 @@ func TestIntegration_VerboseConfig_SessionSource(t *testing.T) {
 	logEffectiveConfig(cmd, testCfg)
 
 	output := buf.String()
-	// After login, base-url should come from "session" (profile references session)
+	// After login, leader-url should come from "session" (profile references session)
 	assert.Contains(t, output, "leader-url="+env.LeaderURL, "should show leader-url from session")
 	t.Logf("Verbose output (session):\n%s", output)
 }
@@ -239,12 +239,16 @@ func TestIntegration_VerboseConfig_InsecureSkipped(t *testing.T) {
 func TestIntegration_VerboseConfig_SensitiveRedacted(t *testing.T) {
 	env := setupIntegrationTest(t)
 
-	// Create config with profile containing client-secret
+	// Create config with profile containing client keys
 	profiles := map[string]*izanami.Profile{
 		"test": {
-			LeaderURL:    env.LeaderURL,
-			ClientID:     "test-client-id",
-			ClientSecret: "super-secret-key-12345",
+			LeaderURL: env.LeaderURL,
+			ClientKeys: map[string]izanami.TenantClientKeysConfig{
+				"*": {
+					ClientID:     "test-client-id",
+					ClientSecret: "super-secret-key-12345",
+				},
+			},
 		},
 	}
 	createConfigTestFile(t, env.ConfigPath, profiles, "test")
@@ -319,7 +323,7 @@ func TestIntegration_VerboseConfig_MultipleSourcesEndToEnd(t *testing.T) {
 	output := buf.String()
 
 	// Profile-sourced fields
-	assert.Contains(t, output, "leader-url="+env.LeaderURL+" (source: profile)", "base-url should come from profile")
+	assert.Contains(t, output, "leader-url="+env.LeaderURL+" (source: profile)", "leader-url should come from profile")
 	assert.Contains(t, output, "tenant=sandbox-tenant (source: profile)", "tenant should come from profile")
 	assert.Contains(t, output, "project=sandbox-project (source: profile)", "project should come from profile")
 

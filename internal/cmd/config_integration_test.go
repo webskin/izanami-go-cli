@@ -623,7 +623,7 @@ func TestIntegration_ConfigList(t *testing.T) {
 	assert.Contains(t, output, "timeout", "Should show timeout key")
 	assert.Contains(t, output, "output-format", "Should show output-format key")
 	// Should NOT show profile-specific keys in global section
-	assert.NotContains(t, output, "base-url\t", "Should NOT show base-url in global section")
+	assert.NotContains(t, output, "leader-url\t", "Should NOT show leader-url in global section")
 	// Without a profile, should show no active profile message
 	assert.Contains(t, output, "No active profile set", "Should show no active profile message")
 
@@ -994,7 +994,7 @@ func TestIntegration_ConfigListAfterLogin(t *testing.T) {
 	// Should show Active Profile section with profile name
 	assert.Contains(t, output, "=== Active Profile:", "Should have Active Profile header")
 	// Should show profile-specific config values
-	assert.Contains(t, output, "leader-url", "Should show base-url key in profile section")
+	assert.Contains(t, output, "leader-url", "Should show leader-url key in profile section")
 	assert.Contains(t, output, "client-keys", "Should show client-keys key in profile section")
 	assert.Contains(t, output, "tenant", "Should show tenant key in profile section")
 	// Should show helpful footer

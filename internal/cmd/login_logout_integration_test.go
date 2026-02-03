@@ -26,7 +26,7 @@ func TestIntegration_LoginWithInvalidCredentials(t *testing.T) {
 	env := setupIntegrationTest(t)
 
 	// Test with invalid password (use performLogin directly for invalid creds)
-	_, err := performLogin(env.LeaderURL, "invalid_user", "invalid_password")
+	_, err := performLogin(env.LeaderURL, "invalid_user", "invalid_password", false, false, 30)
 	require.Error(t, err, "Login should fail with invalid credentials")
 
 	t.Logf("Login correctly failed with error: %v", err)

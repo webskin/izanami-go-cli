@@ -88,19 +88,22 @@ Examples:
 			projects = append(projects, cfg.Project)
 		}
 
-		// Resolve worker using profile data
-		workers, defaultWorker := resolveWorkerFromProfile(activeProfile)
-		rw, err := izanami.ResolveWorker(checkWorker, workers, defaultWorker, func(format string, a ...interface{}) {
-			fmt.Fprintf(cmd.OutOrStderr(), format, a...)
-		})
-		if err != nil {
-			return err
+		// Re-resolve worker only if per-command --worker flag was explicitly set
+		var workerClientKeys map[string]izanami.TenantClientKeysConfig
+		if checkWorker != "" {
+			workers, defaultWorker := resolveWorkerFromProfile(activeProfile)
+			rw, err := izanami.ResolveWorker(checkWorker, workers, defaultWorker, func(format string, a ...interface{}) {
+				fmt.Fprintf(cmd.OutOrStderr(), format, a...)
+			})
+			if err != nil {
+				return err
+			}
+			cfg.WorkerURL = rw.URL
+			cfg.WorkerName = rw.Name
+			workerClientKeys = rw.ClientKeys
 		}
-		cfg.WorkerURL = rw.URL
-		cfg.WorkerName = rw.Name
-		cfg.WorkerSource = rw.Source
 
-		resolveClientCredentials(cmd, cfg, checkClientID, checkClientSecret, rw.ClientID, rw.ClientSecret, projects)
+		resolveClientCredentials(cmd, cfg, checkClientID, checkClientSecret, workerClientKeys, projects)
 
 		ctx := context.Background()
 		featureIDOrName := args[0]
@@ -281,19 +284,22 @@ Examples:
 			projects = append(projects, cfg.Project)
 		}
 
-		// Resolve worker using profile data
-		workers, defaultWorker := resolveWorkerFromProfile(activeProfile)
-		rw, err := izanami.ResolveWorker(checkWorker, workers, defaultWorker, func(format string, a ...interface{}) {
-			fmt.Fprintf(cmd.OutOrStderr(), format, a...)
-		})
-		if err != nil {
-			return err
+		// Re-resolve worker only if per-command --worker flag was explicitly set
+		var workerClientKeys map[string]izanami.TenantClientKeysConfig
+		if checkWorker != "" {
+			workers, defaultWorker := resolveWorkerFromProfile(activeProfile)
+			rw, err := izanami.ResolveWorker(checkWorker, workers, defaultWorker, func(format string, a ...interface{}) {
+				fmt.Fprintf(cmd.OutOrStderr(), format, a...)
+			})
+			if err != nil {
+				return err
+			}
+			cfg.WorkerURL = rw.URL
+			cfg.WorkerName = rw.Name
+			workerClientKeys = rw.ClientKeys
 		}
-		cfg.WorkerURL = rw.URL
-		cfg.WorkerName = rw.Name
-		cfg.WorkerSource = rw.Source
 
-		resolveClientCredentials(cmd, cfg, checkClientID, checkClientSecret, rw.ClientID, rw.ClientSecret, projects)
+		resolveClientCredentials(cmd, cfg, checkClientID, checkClientSecret, workerClientKeys, projects)
 
 		// Validate that at least one filter is provided
 		if len(checkFeatures) == 0 && len(checkProjects) == 0 {
@@ -588,22 +594,12 @@ func resolveTagNames(ctx context.Context, client *izanami.AdminClient, tenant st
 	return resolved, nil
 }
 
-// resolveWorkerFromProfile extracts workers and defaultWorker from the active profile.
-// Returns nil map and empty string if profile is nil.
-func resolveWorkerFromProfile(profile *izanami.Profile) (map[string]*izanami.WorkerConfig, string) {
-	if profile == nil {
-		return nil, ""
-	}
-	return profile.Workers, profile.DefaultWorker
-}
-
 // resolveClientCredentials resolves client credentials with precedence:
 // 1. Command-specific flags (--client-id/--client-secret)
-// 2. Per-worker credentials (from ResolvedWorker)
-// 3. Environment variables (IZ_CLIENT_ID/IZ_CLIENT_SECRET) - already in cfg via MergeWithFlags
-// 4. Config file (client-keys section) - fallback if both are empty
-// 5. Profile-level client-id/client-secret - already in cfg via MergeWithProfile
-func resolveClientCredentials(cmd *cobra.Command, cfg *izanami.ResolvedConfig, flagClientID, flagClientSecret, workerClientID, workerClientSecret string, projects []string) {
+// 2. Environment variables (IZ_CLIENT_ID/IZ_CLIENT_SECRET) - already in cfg via MergeWithFlags
+// 3. Worker's ClientKeys hierarchy (tenant/project lookup)
+// 4. Profile's ClientKeys hierarchy (tenant/project lookup via cfg.ResolveClientCredentials)
+func resolveClientCredentials(cmd *cobra.Command, cfg *izanami.ResolvedConfig, flagClientID, flagClientSecret string, workerClientKeys map[string]izanami.TenantClientKeysConfig, projects []string) {
 	// Priority 1: command-specific flags
 	if flagClientID != "" {
 		cfg.ClientID = flagClientID
@@ -612,29 +608,37 @@ func resolveClientCredentials(cmd *cobra.Command, cfg *izanami.ResolvedConfig, f
 		cfg.ClientSecret = flagClientSecret
 	}
 
-	// Priority 2: per-worker credentials (only if flags didn't set them)
-	if cfg.ClientID == "" && workerClientID != "" {
-		cfg.ClientID = workerClientID
-	}
-	if cfg.ClientSecret == "" && workerClientSecret != "" {
-		cfg.ClientSecret = workerClientSecret
+	// Priority 2: env vars are already in cfg via MergeWithFlags.
+	// Early return if credentials are already set (flags or env).
+	if cfg.ClientID != "" && cfg.ClientSecret != "" {
+		return
 	}
 
-	// Priorities 3-5 are already in cfg (env via MergeWithFlags, profile via MergeWithProfile).
-	// If still empty, try client-keys fallback.
-	if cfg.ClientID == "" && cfg.ClientSecret == "" {
-		tenant := cfg.Tenant
+	tenant := cfg.Tenant
 
-		clientID, clientSecret := cfg.ResolveClientCredentials(tenant, projects)
+	// Priority 3: worker's ClientKeys
+	if workerClientKeys != nil {
+		clientID, clientSecret := izanami.ResolveClientCredentialsFromKeys(workerClientKeys, tenant, projects)
 		if clientID != "" && clientSecret != "" {
 			cfg.ClientID = clientID
 			cfg.ClientSecret = clientSecret
 			if cfg.Verbose {
-				if len(projects) > 0 {
-					fmt.Fprintf(cmd.OutOrStderr(), "Using client credentials from config (tenant: %s, projects: %v)\n", tenant, projects)
-				} else {
-					fmt.Fprintf(cmd.OutOrStderr(), "Using client credentials from config (tenant: %s)\n", tenant)
-				}
+				fmt.Fprintf(cmd.OutOrStderr(), "Using client credentials from worker client-keys (tenant: %s)\n", tenant)
+			}
+			return
+		}
+	}
+
+	// Priority 4: profile's ClientKeys (already merged into cfg.ClientKeys via MergeWithProfile)
+	clientID, clientSecret := cfg.ResolveClientCredentials(tenant, projects)
+	if clientID != "" && clientSecret != "" {
+		cfg.ClientID = clientID
+		cfg.ClientSecret = clientSecret
+		if cfg.Verbose {
+			if len(projects) > 0 {
+				fmt.Fprintf(cmd.OutOrStderr(), "Using client credentials from config (tenant: %s, projects: %v)\n", tenant, projects)
+			} else {
+				fmt.Fprintf(cmd.OutOrStderr(), "Using client credentials from config (tenant: %s)\n", tenant)
 			}
 		}
 	}

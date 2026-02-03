@@ -100,17 +100,22 @@ Press Ctrl+C to stop watching.`,
 		if cfg.Project != "" {
 			projects = append(projects, cfg.Project)
 		}
-		workers, defaultWorker := resolveWorkerFromProfile(activeProfile)
-		rw, err := izanami.ResolveWorker(eventsWorker, workers, defaultWorker, func(format string, a ...interface{}) {
-			fmt.Fprintf(cmd.OutOrStderr(), format, a...)
-		})
-		if err != nil {
-			return err
+
+		// Re-resolve worker only if per-command --worker flag was explicitly set
+		var workerClientKeys map[string]izanami.TenantClientKeysConfig
+		if eventsWorker != "" {
+			workers, defaultWorker := resolveWorkerFromProfile(activeProfile)
+			rw, err := izanami.ResolveWorker(eventsWorker, workers, defaultWorker, func(format string, a ...interface{}) {
+				fmt.Fprintf(cmd.OutOrStderr(), format, a...)
+			})
+			if err != nil {
+				return err
+			}
+			cfg.WorkerURL = rw.URL
+			cfg.WorkerName = rw.Name
+			workerClientKeys = rw.ClientKeys
 		}
-		cfg.WorkerURL = rw.URL
-		cfg.WorkerName = rw.Name
-		cfg.WorkerSource = rw.Source
-		resolveClientCredentials(cmd, cfg, eventsClientID, eventsClientSecret, rw.ClientID, rw.ClientSecret, projects)
+		resolveClientCredentials(cmd, cfg, eventsClientID, eventsClientSecret, workerClientKeys, projects)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()

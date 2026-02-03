@@ -175,13 +175,13 @@ alias izhelp='make help'
 # ============================================================================
 
 # Set common environment variables
-alias izenv-local='export IZ_BASE_URL=http://localhost:9000 IZ_TENANT=test-tenant IZ_PROJECT=test-project'
-alias izenv-prod='echo "Set IZ_BASE_URL, IZ_TENANT, IZ_PROJECT, IZ_USERNAME, IZ_TOKEN manually"'
+alias izenv-local='export IZ_LEADER_URL=http://localhost:9000 IZ_TENANT=test-tenant IZ_PROJECT=test-project'
+alias izenv-prod='echo "Set IZ_LEADER_URL, IZ_TENANT, IZ_PROJECT, IZ_USERNAME, IZ_TOKEN manually"'
 
 # Show current environment
 izenv() {
     echo -e "${BLUE}Current Izanami Environment:${NC}"
-    echo "IZ_BASE_URL:      ${IZ_BASE_URL:-not set}"
+    echo "IZ_LEADER_URL:      ${IZ_LEADER_URL:-not set}"
     echo "IZ_TENANT:        ${IZ_TENANT:-not set}"
     echo "IZ_PROJECT:       ${IZ_PROJECT:-not set}"
     echo "IZ_USERNAME:      ${IZ_USERNAME:-not set}"
@@ -226,7 +226,7 @@ izwatch() {
 
 # Quick feature test against local server
 iztest-local() {
-    export IZ_BASE_URL=http://localhost:9000
+    export IZ_LEADER_URL=http://localhost:9000
     export IZ_TENANT=test-tenant
     export IZ_PROJECT=test-project
     make build && ./build/iz "$@"

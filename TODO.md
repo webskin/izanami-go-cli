@@ -150,7 +150,7 @@ Once implemented, test with:
 ```bash
 export IZ_USERNAME=RESERVED_ADMIN_USER
 export IZ_TOKEN=6374d239-ce82-45fa-b3d4-9b6bb349ea75_cyUBBnNsdDYVRZWcyyjRvqOTwuE0YKckuhEacCbtJfu78uGVy26CRhuRKN0uokKF
-export IZ_BASE_URL=http://localhost:9000
+export IZ_LEADER_URL=http://localhost:9000
 
 ./build/iz admin tenants list --verbose
 ```

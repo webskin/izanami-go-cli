@@ -3,7 +3,6 @@ package cmd
 import (
 	"bytes"
 	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -12,69 +11,6 @@ import (
 	"github.com/webskin/izanami-go-cli/internal/izanami"
 	"gopkg.in/yaml.v3"
 )
-
-// createTestConfigWithWorkers creates a config file that includes worker data.
-// The standard createTestConfig helper in profiles_test.go doesn't serialize workers,
-// so we use this extended version for worker tests.
-func createTestConfigWithWorkers(t *testing.T, configPath string, profiles map[string]*izanami.Profile, activeProfile string) {
-	t.Helper()
-
-	dir := filepath.Dir(configPath)
-	err := os.MkdirAll(dir, 0700)
-	require.NoError(t, err)
-
-	config := map[string]interface{}{
-		"timeout":       30,
-		"verbose":       false,
-		"output-format": "table",
-		"color":         "auto",
-	}
-
-	if activeProfile != "" {
-		config["active_profile"] = activeProfile
-	}
-
-	if len(profiles) > 0 {
-		profilesMap := make(map[string]interface{})
-		for name, profile := range profiles {
-			profileMap := make(map[string]interface{})
-			if profile.Session != "" {
-				profileMap["session"] = profile.Session
-			}
-			if profile.LeaderURL != "" {
-				profileMap["leader-url"] = profile.LeaderURL
-			}
-			if profile.Tenant != "" {
-				profileMap["tenant"] = profile.Tenant
-			}
-			if profile.Project != "" {
-				profileMap["project"] = profile.Project
-			}
-			if profile.Context != "" {
-				profileMap["context"] = profile.Context
-			}
-			if profile.ClientID != "" {
-				profileMap["client-id"] = profile.ClientID
-			}
-			if profile.ClientSecret != "" {
-				profileMap["client-secret"] = profile.ClientSecret
-			}
-			if profile.DefaultWorker != "" {
-				profileMap["default-worker"] = profile.DefaultWorker
-			}
-			if profile.Workers != nil && len(profile.Workers) > 0 {
-				profileMap["workers"] = profile.Workers
-			}
-			profilesMap[name] = profileMap
-		}
-		config["profiles"] = profilesMap
-	}
-
-	data, err := yaml.Marshal(config)
-	require.NoError(t, err)
-	err = os.WriteFile(configPath, data, 0600)
-	require.NoError(t, err)
-}
 
 // setupWorkerCommand creates a command tree with proper I/O for worker subcommands.
 func setupWorkerCommand(buf *bytes.Buffer, input *bytes.Buffer, args []string) (*cobra.Command, func()) {
@@ -129,6 +65,7 @@ func setupWorkerCommand(buf *bytes.Buffer, input *bytes.Buffer, args []string) (
 		workerAddForce = false
 		workerDeleteForce = false
 		profileWorkersAddCmd.Flags().Set("url", "")
+		profileWorkersAddCmd.Flags().Set("default", "false")
 		profileWorkersAddCmd.Flags().Set("client-id", "")
 		profileWorkersAddCmd.Flags().Set("client-secret", "")
 		profileWorkersShowCmd.Flags().Set("show-secrets", "false")
@@ -171,7 +108,7 @@ func TestWorkersAddCmd_URLOnly(t *testing.T) {
 	profiles := map[string]*izanami.Profile{
 		"test": {LeaderURL: "http://localhost:9000"},
 	}
-	createTestConfigWithWorkers(t, paths.configPath, profiles, "test")
+	createTestConfig(t, paths.configPath, profiles, "test")
 
 	var buf bytes.Buffer
 	cmd, cleanup := setupWorkerCommand(&buf, nil, []string{
@@ -196,21 +133,19 @@ func TestWorkersAddCmd_URLOnly(t *testing.T) {
 	assert.Equal(t, "eu-west", defaultWorker)
 }
 
-func TestWorkersAddCmd_WithCredentials(t *testing.T) {
+func TestWorkersAddCmd_ShowsClientKeysHint(t *testing.T) {
 	paths := setupTestPaths(t)
 	overridePathFunctions(t, paths)
 
 	profiles := map[string]*izanami.Profile{
 		"test": {LeaderURL: "http://localhost:9000"},
 	}
-	createTestConfigWithWorkers(t, paths.configPath, profiles, "test")
+	createTestConfig(t, paths.configPath, profiles, "test")
 
 	var buf bytes.Buffer
 	cmd, cleanup := setupWorkerCommand(&buf, nil, []string{
 		"profiles", "workers", "add", "us-east",
 		"--url", "http://worker-us.example.com",
-		"--client-id", "us-id",
-		"--client-secret", "us-secret",
 	})
 	defer cleanup()
 
@@ -222,8 +157,10 @@ func TestWorkersAddCmd_WithCredentials(t *testing.T) {
 	worker, ok := workers["us-east"].(map[string]interface{})
 	require.True(t, ok)
 	assert.Equal(t, "http://worker-us.example.com", worker["url"])
-	assert.Equal(t, "us-id", worker["client-id"])
-	assert.Equal(t, "us-secret", worker["client-secret"])
+
+	// Hint about adding client credentials should be shown
+	output := buf.String()
+	assert.Contains(t, output, "client-keys add")
 }
 
 func TestWorkersAddCmd_FirstWorkerAutoDefault(t *testing.T) {
@@ -233,7 +170,7 @@ func TestWorkersAddCmd_FirstWorkerAutoDefault(t *testing.T) {
 	profiles := map[string]*izanami.Profile{
 		"test": {LeaderURL: "http://localhost:9000"},
 	}
-	createTestConfigWithWorkers(t, paths.configPath, profiles, "test")
+	createTestConfig(t, paths.configPath, profiles, "test")
 
 	var buf bytes.Buffer
 	cmd, cleanup := setupWorkerCommand(&buf, nil, []string{
@@ -265,7 +202,7 @@ func TestWorkersAddCmd_SecondWorkerNotAutoDefault(t *testing.T) {
 			},
 		},
 	}
-	createTestConfigWithWorkers(t, paths.configPath, profiles, "test")
+	createTestConfig(t, paths.configPath, profiles, "test")
 
 	var buf bytes.Buffer
 	cmd, cleanup := setupWorkerCommand(&buf, nil, []string{
@@ -297,7 +234,7 @@ func TestWorkersAddCmd_DuplicateNameErrors(t *testing.T) {
 			DefaultWorker: "eu-west",
 		},
 	}
-	createTestConfigWithWorkers(t, paths.configPath, profiles, "test")
+	createTestConfig(t, paths.configPath, profiles, "test")
 
 	var buf bytes.Buffer
 	cmd, cleanup := setupWorkerCommand(&buf, nil, []string{
@@ -324,7 +261,7 @@ func TestWorkersAddCmd_DuplicateWithForce(t *testing.T) {
 			DefaultWorker: "eu-west",
 		},
 	}
-	createTestConfigWithWorkers(t, paths.configPath, profiles, "test")
+	createTestConfig(t, paths.configPath, profiles, "test")
 
 	var buf bytes.Buffer
 	cmd, cleanup := setupWorkerCommand(&buf, nil, []string{
@@ -349,7 +286,7 @@ func TestWorkersAddCmd_MissingURL(t *testing.T) {
 	profiles := map[string]*izanami.Profile{
 		"test": {LeaderURL: "http://localhost:9000"},
 	}
-	createTestConfigWithWorkers(t, paths.configPath, profiles, "test")
+	createTestConfig(t, paths.configPath, profiles, "test")
 
 	var buf bytes.Buffer
 	cmd, cleanup := setupWorkerCommand(&buf, nil, []string{
@@ -366,7 +303,7 @@ func TestWorkersAddCmd_NoActiveProfile(t *testing.T) {
 	paths := setupTestPaths(t)
 	overridePathFunctions(t, paths)
 
-	createTestConfigWithWorkers(t, paths.configPath, nil, "")
+	createTestConfig(t, paths.configPath, nil, "")
 
 	var buf bytes.Buffer
 	cmd, cleanup := setupWorkerCommand(&buf, nil, []string{
@@ -398,7 +335,7 @@ func TestWorkersDeleteCmd_ExistingWorker(t *testing.T) {
 			DefaultWorker: "eu-west",
 		},
 	}
-	createTestConfigWithWorkers(t, paths.configPath, profiles, "test")
+	createTestConfig(t, paths.configPath, profiles, "test")
 
 	var buf bytes.Buffer
 	cmd, cleanup := setupWorkerCommand(&buf, nil, []string{
@@ -431,7 +368,7 @@ func TestWorkersDeleteCmd_NonExistentWorker(t *testing.T) {
 			DefaultWorker: "eu-west",
 		},
 	}
-	createTestConfigWithWorkers(t, paths.configPath, profiles, "test")
+	createTestConfig(t, paths.configPath, profiles, "test")
 
 	var buf bytes.Buffer
 	cmd, cleanup := setupWorkerCommand(&buf, nil, []string{
@@ -457,7 +394,7 @@ func TestWorkersDeleteCmd_DefaultWorkerWithForce(t *testing.T) {
 			DefaultWorker: "eu-west",
 		},
 	}
-	createTestConfigWithWorkers(t, paths.configPath, profiles, "test")
+	createTestConfig(t, paths.configPath, profiles, "test")
 
 	var buf bytes.Buffer
 	cmd, cleanup := setupWorkerCommand(&buf, nil, []string{
@@ -489,7 +426,7 @@ func TestWorkersDeleteCmd_DefaultWorkerWithoutForce_Cancel(t *testing.T) {
 			DefaultWorker: "eu-west",
 		},
 	}
-	createTestConfigWithWorkers(t, paths.configPath, profiles, "test")
+	createTestConfig(t, paths.configPath, profiles, "test")
 
 	input := bytes.NewBufferString("n\n")
 	var buf bytes.Buffer
@@ -522,7 +459,7 @@ func TestWorkersListCmd_NoWorkers(t *testing.T) {
 	profiles := map[string]*izanami.Profile{
 		"test": {LeaderURL: "http://localhost:9000"},
 	}
-	createTestConfigWithWorkers(t, paths.configPath, profiles, "test")
+	createTestConfig(t, paths.configPath, profiles, "test")
 
 	var buf bytes.Buffer
 	cmd, cleanup := setupWorkerCommand(&buf, nil, []string{
@@ -546,13 +483,18 @@ func TestWorkersListCmd_MultipleWorkers(t *testing.T) {
 		"test": {
 			LeaderURL: "http://localhost:9000",
 			Workers: map[string]*izanami.WorkerConfig{
-				"eu-west": {URL: "http://worker-eu.example.com", ClientID: "eu-id"},
+				"eu-west": {
+					URL: "http://worker-eu.example.com",
+					ClientKeys: map[string]izanami.TenantClientKeysConfig{
+						"*": {ClientID: "eu-id"},
+					},
+				},
 				"us-east": {URL: "http://worker-us.example.com"},
 			},
 			DefaultWorker: "eu-west",
 		},
 	}
-	createTestConfigWithWorkers(t, paths.configPath, profiles, "test")
+	createTestConfig(t, paths.configPath, profiles, "test")
 
 	var buf bytes.Buffer
 	cmd, cleanup := setupWorkerCommand(&buf, nil, []string{
@@ -568,7 +510,7 @@ func TestWorkersListCmd_MultipleWorkers(t *testing.T) {
 	assert.Contains(t, output, "us-east")
 	assert.Contains(t, output, "http://worker-eu.example.com")
 	assert.Contains(t, output, "http://worker-us.example.com")
-	assert.Contains(t, output, "eu-id")
+	assert.Contains(t, output, "1 tenant(s) configured")
 	assert.Contains(t, output, "Default worker: eu-west")
 }
 
@@ -587,7 +529,7 @@ func TestWorkersListCmd_SortedAlphabetically(t *testing.T) {
 			DefaultWorker: "alpha",
 		},
 	}
-	createTestConfigWithWorkers(t, paths.configPath, profiles, "test")
+	createTestConfig(t, paths.configPath, profiles, "test")
 
 	var buf bytes.Buffer
 	cmd, cleanup := setupWorkerCommand(&buf, nil, []string{
@@ -616,13 +558,18 @@ func TestWorkersListCmd_ShowsClientIDOrDash(t *testing.T) {
 		"test": {
 			LeaderURL: "http://localhost:9000",
 			Workers: map[string]*izanami.WorkerConfig{
-				"with-creds":    {URL: "http://a.example.com", ClientID: "my-id"},
+				"with-creds": {
+					URL: "http://a.example.com",
+					ClientKeys: map[string]izanami.TenantClientKeysConfig{
+						"*": {ClientID: "my-id"},
+					},
+				},
 				"without-creds": {URL: "http://b.example.com"},
 			},
 			DefaultWorker: "with-creds",
 		},
 	}
-	createTestConfigWithWorkers(t, paths.configPath, profiles, "test")
+	createTestConfig(t, paths.configPath, profiles, "test")
 
 	var buf bytes.Buffer
 	cmd, cleanup := setupWorkerCommand(&buf, nil, []string{
@@ -634,8 +581,8 @@ func TestWorkersListCmd_ShowsClientIDOrDash(t *testing.T) {
 	require.NoError(t, err)
 
 	output := buf.String()
-	assert.Contains(t, output, "my-id")
-	// The '-' placeholder for missing client-id
+	assert.Contains(t, output, "1 tenant(s) configured")
+	// The '-' placeholder for missing client-keys
 	// Verify it's present somewhere in the table (could be in other columns too)
 	assert.Contains(t, output, "-")
 }
@@ -653,7 +600,7 @@ func TestWorkersListCmd_NoDefaultWorker(t *testing.T) {
 			// No DefaultWorker set
 		},
 	}
-	createTestConfigWithWorkers(t, paths.configPath, profiles, "test")
+	createTestConfig(t, paths.configPath, profiles, "test")
 
 	var buf bytes.Buffer
 	cmd, cleanup := setupWorkerCommand(&buf, nil, []string{
@@ -687,7 +634,7 @@ func TestWorkersUseCmd_ExistingWorker(t *testing.T) {
 			DefaultWorker: "eu-west",
 		},
 	}
-	createTestConfigWithWorkers(t, paths.configPath, profiles, "test")
+	createTestConfig(t, paths.configPath, profiles, "test")
 
 	var buf bytes.Buffer
 	cmd, cleanup := setupWorkerCommand(&buf, nil, []string{
@@ -718,7 +665,7 @@ func TestWorkersUseCmd_NonExistentWorker(t *testing.T) {
 			DefaultWorker: "eu-west",
 		},
 	}
-	createTestConfigWithWorkers(t, paths.configPath, profiles, "test")
+	createTestConfig(t, paths.configPath, profiles, "test")
 
 	var buf bytes.Buffer
 	cmd, cleanup := setupWorkerCommand(&buf, nil, []string{
@@ -744,15 +691,19 @@ func TestWorkersShowCmd_ShowDetails(t *testing.T) {
 			LeaderURL: "http://localhost:9000",
 			Workers: map[string]*izanami.WorkerConfig{
 				"eu-west": {
-					URL:          "http://worker-eu.example.com",
-					ClientID:     "eu-client-id",
-					ClientSecret: "eu-secret",
+					URL: "http://worker-eu.example.com",
+					ClientKeys: map[string]izanami.TenantClientKeysConfig{
+						"*": {
+							ClientID:     "eu-client-id",
+							ClientSecret: "eu-secret",
+						},
+					},
 				},
 			},
 			DefaultWorker: "eu-west",
 		},
 	}
-	createTestConfigWithWorkers(t, paths.configPath, profiles, "test")
+	createTestConfig(t, paths.configPath, profiles, "test")
 
 	var buf bytes.Buffer
 	cmd, cleanup := setupWorkerCommand(&buf, nil, []string{
@@ -782,15 +733,19 @@ func TestWorkersShowCmd_WithShowSecrets(t *testing.T) {
 			LeaderURL: "http://localhost:9000",
 			Workers: map[string]*izanami.WorkerConfig{
 				"eu-west": {
-					URL:          "http://worker-eu.example.com",
-					ClientID:     "eu-client-id",
-					ClientSecret: "eu-secret-value",
+					URL: "http://worker-eu.example.com",
+					ClientKeys: map[string]izanami.TenantClientKeysConfig{
+						"*": {
+							ClientID:     "eu-client-id",
+							ClientSecret: "eu-secret-value",
+						},
+					},
 				},
 			},
 			DefaultWorker: "eu-west",
 		},
 	}
-	createTestConfigWithWorkers(t, paths.configPath, profiles, "test")
+	createTestConfig(t, paths.configPath, profiles, "test")
 
 	var buf bytes.Buffer
 	cmd, cleanup := setupWorkerCommand(&buf, nil, []string{
@@ -820,7 +775,7 @@ func TestWorkersShowCmd_NonExistentWorker(t *testing.T) {
 			DefaultWorker: "eu-west",
 		},
 	}
-	createTestConfigWithWorkers(t, paths.configPath, profiles, "test")
+	createTestConfig(t, paths.configPath, profiles, "test")
 
 	var buf bytes.Buffer
 	cmd, cleanup := setupWorkerCommand(&buf, nil, []string{
@@ -848,7 +803,7 @@ func TestWorkersShowCmd_NonDefaultWorker(t *testing.T) {
 			DefaultWorker: "eu-west",
 		},
 	}
-	createTestConfigWithWorkers(t, paths.configPath, profiles, "test")
+	createTestConfig(t, paths.configPath, profiles, "test")
 
 	var buf bytes.Buffer
 	cmd, cleanup := setupWorkerCommand(&buf, nil, []string{
@@ -875,7 +830,7 @@ func TestWorkersCurrentCmd_StandaloneMode(t *testing.T) {
 	profiles := map[string]*izanami.Profile{
 		"test": {LeaderURL: "http://localhost:9000"},
 	}
-	createTestConfigWithWorkers(t, paths.configPath, profiles, "test")
+	createTestConfig(t, paths.configPath, profiles, "test")
 
 	// Save and restore global flags
 	origProfileName := profileName
@@ -914,7 +869,7 @@ func TestWorkersCurrentCmd_DefaultWorker(t *testing.T) {
 			DefaultWorker: "eu-west",
 		},
 	}
-	createTestConfigWithWorkers(t, paths.configPath, profiles, "test")
+	createTestConfig(t, paths.configPath, profiles, "test")
 
 	origProfileName := profileName
 	origLeaderURL := leaderURL
@@ -947,17 +902,21 @@ func TestWorkersCurrentCmd_PerWorkerCredentials(t *testing.T) {
 	profiles := map[string]*izanami.Profile{
 		"test": {
 			LeaderURL: "http://localhost:9000",
-			ClientID:  "profile-id",
+			ClientKeys: map[string]izanami.TenantClientKeysConfig{
+				"*": {ClientID: "profile-id"},
+			},
 			Workers: map[string]*izanami.WorkerConfig{
 				"eu-west": {
-					URL:      "http://worker-eu.example.com",
-					ClientID: "worker-id",
+					URL: "http://worker-eu.example.com",
+					ClientKeys: map[string]izanami.TenantClientKeysConfig{
+						"*": {ClientID: "worker-id"},
+					},
 				},
 			},
 			DefaultWorker: "eu-west",
 		},
 	}
-	createTestConfigWithWorkers(t, paths.configPath, profiles, "test")
+	createTestConfig(t, paths.configPath, profiles, "test")
 
 	origProfileName := profileName
 	origLeaderURL := leaderURL
@@ -988,7 +947,9 @@ func TestWorkersCurrentCmd_ProfileLevelCredentials(t *testing.T) {
 	profiles := map[string]*izanami.Profile{
 		"test": {
 			LeaderURL: "http://localhost:9000",
-			ClientID:  "profile-id",
+			ClientKeys: map[string]izanami.TenantClientKeysConfig{
+				"*": {ClientID: "profile-id"},
+			},
 			Workers: map[string]*izanami.WorkerConfig{
 				"eu-west": {
 					URL: "http://worker-eu.example.com",
@@ -998,7 +959,7 @@ func TestWorkersCurrentCmd_ProfileLevelCredentials(t *testing.T) {
 			DefaultWorker: "eu-west",
 		},
 	}
-	createTestConfigWithWorkers(t, paths.configPath, profiles, "test")
+	createTestConfig(t, paths.configPath, profiles, "test")
 
 	origProfileName := profileName
 	origLeaderURL := leaderURL
@@ -1035,7 +996,7 @@ func TestWorkersCurrentCmd_NoCredentials(t *testing.T) {
 			DefaultWorker: "eu-west",
 		},
 	}
-	createTestConfigWithWorkers(t, paths.configPath, profiles, "test")
+	createTestConfig(t, paths.configPath, profiles, "test")
 
 	origProfileName := profileName
 	origLeaderURL := leaderURL
@@ -1067,7 +1028,7 @@ func TestWorkersListCmd_NoActiveProfile(t *testing.T) {
 	paths := setupTestPaths(t)
 	overridePathFunctions(t, paths)
 
-	createTestConfigWithWorkers(t, paths.configPath, nil, "")
+	createTestConfig(t, paths.configPath, nil, "")
 
 	var buf bytes.Buffer
 	cmd, cleanup := setupWorkerCommand(&buf, nil, []string{
@@ -1084,7 +1045,7 @@ func TestWorkersShowCmd_NoActiveProfile(t *testing.T) {
 	paths := setupTestPaths(t)
 	overridePathFunctions(t, paths)
 
-	createTestConfigWithWorkers(t, paths.configPath, nil, "")
+	createTestConfig(t, paths.configPath, nil, "")
 
 	var buf bytes.Buffer
 	cmd, cleanup := setupWorkerCommand(&buf, nil, []string{
@@ -1104,7 +1065,7 @@ func TestWorkersShowCmd_NoWorkersConfigured(t *testing.T) {
 	profiles := map[string]*izanami.Profile{
 		"test": {LeaderURL: "http://localhost:9000"},
 	}
-	createTestConfigWithWorkers(t, paths.configPath, profiles, "test")
+	createTestConfig(t, paths.configPath, profiles, "test")
 
 	var buf bytes.Buffer
 	cmd, cleanup := setupWorkerCommand(&buf, nil, []string{
@@ -1115,4 +1076,104 @@ func TestWorkersShowCmd_NoWorkersConfigured(t *testing.T) {
 	err := cmd.Execute()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no workers configured")
+}
+
+// ========================================================================
+// workers add --default flag
+// ========================================================================
+
+func TestWorkersAddCmd_WithDefaultFlag(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	profiles := map[string]*izanami.Profile{
+		"test": {
+			LeaderURL:     "http://localhost:9000",
+			DefaultWorker: "existing",
+			Workers: map[string]*izanami.WorkerConfig{
+				"existing": {URL: "http://existing.example.com"},
+			},
+		},
+	}
+	createTestConfig(t, paths.configPath, profiles, "test")
+
+	var buf bytes.Buffer
+	cmd, cleanup := setupWorkerCommand(&buf, nil, []string{
+		"profiles", "workers", "add", "new-worker",
+		"--url", "http://new.example.com",
+		"--default",
+	})
+	defer cleanup()
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	output := buf.String()
+	assert.Contains(t, output, "Set as default worker")
+
+	_, defaultWorker := readConfigWorkers(t, paths.configPath, "test")
+	assert.Equal(t, "new-worker", defaultWorker)
+}
+
+func TestWorkersAddCmd_DefaultFlagOnFirstWorker(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	profiles := map[string]*izanami.Profile{
+		"test": {LeaderURL: "http://localhost:9000"},
+	}
+	createTestConfig(t, paths.configPath, profiles, "test")
+
+	var buf bytes.Buffer
+	cmd, cleanup := setupWorkerCommand(&buf, nil, []string{
+		"profiles", "workers", "add", "first-w",
+		"--url", "http://first.example.com",
+		"--default",
+	})
+	defer cleanup()
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	output := buf.String()
+	assert.Contains(t, output, "Set as default worker")
+
+	_, defaultWorker := readConfigWorkers(t, paths.configPath, "test")
+	assert.Equal(t, "first-w", defaultWorker)
+}
+
+func TestWorkersAddCmd_DefaultWithForce(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	profiles := map[string]*izanami.Profile{
+		"test": {
+			LeaderURL:     "http://localhost:9000",
+			DefaultWorker: "eu-west",
+			Workers: map[string]*izanami.WorkerConfig{
+				"eu-west": {URL: "http://old.example.com"},
+			},
+		},
+	}
+	createTestConfig(t, paths.configPath, profiles, "test")
+
+	var buf bytes.Buffer
+	cmd, cleanup := setupWorkerCommand(&buf, nil, []string{
+		"profiles", "workers", "add", "eu-west",
+		"--url", "http://new.example.com",
+		"--force",
+		"--default",
+	})
+	defer cleanup()
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	output := buf.String()
+	assert.Contains(t, output, "Set as default worker")
+
+	workers, defaultWorker := readConfigWorkers(t, paths.configPath, "test")
+	assert.Equal(t, "eu-west", defaultWorker)
+	worker := workers["eu-west"].(map[string]interface{})
+	assert.Equal(t, "http://new.example.com", worker["url"])
 }

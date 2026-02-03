@@ -81,12 +81,6 @@ func createConfigTestFile(t *testing.T, configPath string, profiles map[string]*
 			if profile.Context != "" {
 				profileMap["context"] = profile.Context
 			}
-			if profile.ClientID != "" {
-				profileMap["client-id"] = profile.ClientID
-			}
-			if profile.ClientSecret != "" {
-				profileMap["client-secret"] = profile.ClientSecret
-			}
 			if profile.PersonalAccessToken != "" {
 				profileMap["personal-access-token"] = profile.PersonalAccessToken
 			}
@@ -290,7 +284,7 @@ func TestConfigListCmd_ShowSecrets(t *testing.T) {
 	t.Logf("Config list (show secrets) output:\n%s", output)
 }
 
-// TestConfigListCmd_LeaderURLFromSession tests that base-url is resolved from session
+// TestConfigListCmd_LeaderURLFromSession tests that leader-url is resolved from session
 func TestConfigListCmd_LeaderURLFromSession(t *testing.T) {
 	paths := setupTestPaths(t)
 	overridePathFunctions(t, paths)
@@ -304,7 +298,7 @@ func TestConfigListCmd_LeaderURLFromSession(t *testing.T) {
 	}
 	createTestSessions(t, paths.sessionsPath, sessions)
 
-	// Create profile that references session but has no base-url
+	// Create profile that references session but has no leader-url
 	profiles := map[string]*izanami.Profile{
 		"test": {
 			Session: "my-session",
@@ -323,44 +317,11 @@ func TestConfigListCmd_LeaderURLFromSession(t *testing.T) {
 	output := buf.String()
 
 	// Should show URL from session and source as "session"
-	assert.Contains(t, output, "http://session-url.example.com", "Should show base-url from session")
-	assert.Contains(t, output, "session", "Should show 'session' as source for base-url")
+	assert.Contains(t, output, "http://session-url.example.com", "Should show leader-url from session")
+	assert.Contains(t, output, "session", "Should show 'session' as source for leader-url")
 	assert.Contains(t, output, "my-session", "Should show session name")
 
-	t.Logf("Config list (base-url from session) output:\n%s", output)
-}
-
-// TestConfigListCmd_NoClientIdClientSecret tests that client-id and client-secret are not shown
-func TestConfigListCmd_NoClientIdClientSecret(t *testing.T) {
-	paths := setupTestPaths(t)
-	overridePathFunctions(t, paths)
-
-	// Create config with client-id and client-secret (these are legacy fields)
-	profiles := map[string]*izanami.Profile{
-		"test": {
-			LeaderURL:    "http://localhost:9000",
-			ClientID:     "legacy-client-id",
-			ClientSecret: "legacy-client-secret",
-		},
-	}
-	createConfigTestFile(t, paths.configPath, profiles, "test")
-
-	var buf bytes.Buffer
-	cmd, cleanup := setupConfigCommand(&buf, nil, []string{"config", "list"})
-	defer cleanup()
-
-	err := cmd.Execute()
-	require.NoError(t, err)
-
-	output := buf.String()
-
-	// client-id and client-secret should NOT be shown in config list
-	// (they are legacy fields, client-keys is preferred)
-	assert.NotContains(t, output, "client-id\t", "Should NOT show client-id row")
-	assert.NotContains(t, output, "legacy-client-id", "Should NOT show client-id value")
-	assert.NotContains(t, output, "client-secret\t", "Should NOT show client-secret row")
-
-	t.Logf("Config list (no client-id/client-secret) output:\n%s", output)
+	t.Logf("Config list (leader-url from session) output:\n%s", output)
 }
 
 // TestFormatClientKeysCount tests the formatClientKeysCount helper function

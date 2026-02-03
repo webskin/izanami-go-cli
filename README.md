@@ -151,10 +151,10 @@ verbose: false
 All config file options can be set via environment variables:
 
 ```bash
-export IZ_BASE_URL="https://izanami.example.com"
+export IZ_LEADER_URL="https://izanami.example.com"
 export IZ_CLIENT_ID="your-client-id"
 export IZ_CLIENT_SECRET="your-client-secret"
-export IZ_CLIENT_BASE_URL="https://client.izanami.example.com"  # Optional: separate URL for client operations
+export IZ_WORKER_URL="https://client.izanami.example.com"  # Optional: separate URL for client operations
 export IZ_USERNAME="your-username"
 export IZ_TOKEN="your-personal-access-token"
 export IZ_JWT_TOKEN="your-jwt-token"  # From login session
@@ -187,7 +187,7 @@ iz profiles show prod
 # Update profile settings
 iz profiles set tenant my-default-tenant
 iz profiles set project my-default-project
-iz profiles set client-base-url https://client.example.com
+iz profiles set default-worker eu-west
 
 # Remove a profile setting
 iz profiles unset tenant
@@ -876,7 +876,7 @@ iz completion powershell > iz.ps1
 set -e
 
 # Configuration via environment variables
-export IZ_BASE_URL="https://izanami.example.com"
+export IZ_LEADER_URL="https://izanami.example.com"
 export IZ_USERNAME="ci-user"
 export IZ_TOKEN="$CI_TOKEN"
 export IZ_TENANT="production"

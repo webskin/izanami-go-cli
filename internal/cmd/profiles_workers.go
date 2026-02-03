@@ -41,41 +41,58 @@ var profileWorkersAddCmd = &cobra.Command{
 
 The first worker added to a profile automatically becomes the default worker.
 
+To add client credentials for a worker, use:
+  iz profiles workers client-keys add --tenant <tenant> --worker <name>
+
 Examples:
   iz profiles workers add eu-west --url https://worker-eu.example.com
-  iz profiles workers add us-east --url https://worker-us.example.com --client-id us-id --client-secret us-secret
-  iz profiles workers add local --url http://localhost:9001 --force`,
+  iz profiles workers add local --url http://localhost:9001 --force
+
+  # Add and set as default worker
+  iz profiles workers add eu-west --url https://worker-eu.example.com --default`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]
 		url, _ := cmd.Flags().GetString("url")
-		clientID, _ := cmd.Flags().GetString("client-id")
-		clientSecret, _ := cmd.Flags().GetString("client-secret")
+		setDefault, _ := cmd.Flags().GetBool("default")
 
 		if url == "" {
 			return fmt.Errorf("--url is required")
 		}
 
 		worker := &izanami.WorkerConfig{
-			URL:          url,
-			ClientID:     clientID,
-			ClientSecret: clientSecret,
+			URL: url,
 		}
 
 		if err := izanami.AddWorker(name, worker, workerAddForce); err != nil {
 			return err
 		}
 
-		// Get profile name for display
+		// Set as default if requested and not already default
+		// (AddWorker auto-defaults the first worker; check actual state)
 		profileName, _ := izanami.GetActiveProfileName()
+		if setDefault {
+			profile, err := izanami.GetProfile(profileName)
+			if err == nil && profile.DefaultWorker != name {
+				if err := izanami.SetDefaultWorker(name); err != nil {
+					return fmt.Errorf("worker added but failed to set as default: %w", err)
+				}
+			}
+		}
+
+		// Re-read to get final state for output
+		profile, err := izanami.GetProfile(profileName)
+		isDefault := err == nil && profile.DefaultWorker == name
+
 		fmt.Fprintf(cmd.OutOrStdout(), "Added worker '%s' to profile '%s'\n", name, profileName)
 		fmt.Fprintf(cmd.OutOrStdout(), "  URL: %s\n", url)
 
-		// Check if this became the default
-		profile, err := izanami.GetProfile(profileName)
-		if err == nil && profile.DefaultWorker == name {
-			fmt.Fprintf(cmd.OutOrStdout(), "  Set as default worker (first worker added)\n")
+		if isDefault {
+			fmt.Fprintf(cmd.OutOrStdout(), "  Set as default worker\n")
 		}
+
+		fmt.Fprintf(cmd.OutOrStdout(), "\nTo add client credentials for this worker:\n")
+		fmt.Fprintf(cmd.OutOrStdout(), "  iz profiles workers client-keys add --tenant <tenant> --worker %s\n", name)
 
 		return nil
 	},
@@ -149,7 +166,7 @@ Example:
 		}
 
 		table := tablewriter.NewWriter(cmd.OutOrStdout())
-		table.SetHeader([]string{"", "NAME", "URL", "CLIENT-ID"})
+		table.SetHeader([]string{"", "NAME", "URL", "CLIENT-KEYS"})
 		table.SetBorder(false)
 		table.SetColumnSeparator("")
 		table.SetHeaderLine(false)
@@ -169,12 +186,12 @@ Example:
 				marker = "*"
 			}
 
-			clientID := "-"
-			if worker.ClientID != "" {
-				clientID = worker.ClientID
+			clientKeysDisplay := formatClientKeysCount(worker.ClientKeys)
+			if clientKeysDisplay == "" {
+				clientKeysDisplay = "-"
 			}
 
-			table.Append([]string{marker, name, worker.URL, clientID})
+			table.Append([]string{marker, name, worker.URL, clientKeysDisplay})
 		}
 
 		table.Render()
@@ -246,7 +263,6 @@ Example:
 		}
 		resolved.WorkerURL = rw.URL
 		resolved.WorkerName = rw.Name
-		resolved.WorkerSource = rw.Source
 
 		workerURL := resolved.GetWorkerURL()
 		if workerURL == "" {
@@ -264,10 +280,12 @@ Example:
 		}
 
 		// Show credential source
-		if rw.ClientID != "" {
-			fmt.Fprintln(cmd.OutOrStdout(), "Credentials: per-worker")
+		if len(rw.ClientKeys) > 0 {
+			fmt.Fprintf(cmd.OutOrStdout(), "Credentials: per-worker (%s)\n", formatClientKeysCount(rw.ClientKeys))
+		} else if len(resolved.ClientKeys) > 0 {
+			fmt.Fprintf(cmd.OutOrStdout(), "Credentials: profile-level (%s)\n", formatClientKeysCount(resolved.ClientKeys))
 		} else if resolved.ClientID != "" {
-			fmt.Fprintln(cmd.OutOrStdout(), "Credentials: profile-level")
+			fmt.Fprintln(cmd.OutOrStdout(), "Credentials: env/flags")
 		} else {
 			fmt.Fprintln(cmd.OutOrStdout(), "Credentials: not configured")
 		}
@@ -321,15 +339,9 @@ Example:
 		}
 		fmt.Fprintln(cmd.OutOrStdout())
 		fmt.Fprintf(cmd.OutOrStdout(), "  URL:           %s\n", worker.URL)
-		if worker.ClientID != "" {
-			fmt.Fprintf(cmd.OutOrStdout(), "  Client ID:     %s\n", worker.ClientID)
-		}
-		if worker.ClientSecret != "" {
-			if showSecrets {
-				fmt.Fprintf(cmd.OutOrStdout(), "  Client Secret: %s\n", worker.ClientSecret)
-			} else {
-				fmt.Fprintf(cmd.OutOrStdout(), "  Client Secret: <redacted>\n")
-			}
+		if len(worker.ClientKeys) > 0 {
+			fmt.Fprintf(cmd.OutOrStdout(), "  Client Keys:   %s\n", formatClientKeysCount(worker.ClientKeys))
+			printClientKeysSummary(cmd.OutOrStdout(), worker.ClientKeys, showSecrets)
 		}
 
 		return nil
@@ -349,9 +361,8 @@ func init() {
 
 	// Flags for workers add
 	profileWorkersAddCmd.Flags().String("url", "", "Worker URL (required)")
-	profileWorkersAddCmd.Flags().String("client-id", "", "Per-worker client ID (optional override)")
-	profileWorkersAddCmd.Flags().String("client-secret", "", "Per-worker client secret (optional override)")
 	profileWorkersAddCmd.Flags().BoolVar(&workerAddForce, "force", false, "Overwrite existing worker")
+	profileWorkersAddCmd.Flags().Bool("default", false, "Set as the default worker after creation")
 	profileWorkersAddCmd.MarkFlagRequired("url")
 
 	// Flags for workers delete

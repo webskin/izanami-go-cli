@@ -29,7 +29,7 @@ var featuresCmd = &cobra.Command{
 
 **Viper** is used in `internal/izanami/config.go` for:
 - Loading configuration from YAML files (`~/.config/iz/config.yaml`)
-- Environment variable binding (`IZ_BASE_URL`, `IZ_TENANT`, etc.)
+- Environment variable binding (`IZ_LEADER_URL`, `IZ_TENANT`, etc.)
 - Configuration merging (flags > env vars > config file)
 
 ---

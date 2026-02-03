@@ -39,9 +39,8 @@ const (
 
 // WorkerConfig holds configuration for a named worker instance
 type WorkerConfig struct {
-	URL          string `yaml:"url" mapstructure:"url"`
-	ClientID     string `yaml:"client-id,omitempty" mapstructure:"client-id"`         // Optional per-worker override
-	ClientSecret string `yaml:"client-secret,omitempty" mapstructure:"client-secret"` // Optional per-worker override
+	URL        string                            `yaml:"url" mapstructure:"url"`
+	ClientKeys map[string]TenantClientKeysConfig `yaml:"client-keys,omitempty" mapstructure:"client-keys"`
 }
 
 // Config represents the on-disk config.yaml file structure.
@@ -82,18 +81,16 @@ type ResolvedConfig struct {
 	InsecureSkipVerify          bool
 
 	// Worker resolution (set by cmd layer after ResolveWorker)
-	WorkerURL    string
-	WorkerName   string
-	WorkerSource string // "flag", "env-name", "env-url", "default", "standalone"
+	WorkerURL  string
+	WorkerName string
 }
 
 // ResolvedWorker holds the result of worker resolution.
 type ResolvedWorker struct {
-	URL          string
-	Name         string
-	Source       string // "flag", "env-name", "env-url", "default", "standalone"
-	ClientID     string // Per-worker creds (empty if none)
-	ClientSecret string
+	URL        string
+	Name       string
+	Source     string // "flag", "env-name", "env-url", "default", "standalone"
+	ClientKeys map[string]TenantClientKeysConfig
 }
 
 // NewResolvedConfig creates a ResolvedConfig from an on-disk Config,
@@ -123,14 +120,12 @@ type ProjectClientKeysConfig struct {
 // Profile holds configuration for a specific environment (e.g., local, sandbox, build, prod)
 type Profile struct {
 	Session                     string                            `yaml:"session,omitempty" mapstructure:"session"`                                               // Reference to session name in ~/.izsessions
-	LeaderURL                   string                            `yaml:"leader-url,omitempty" mapstructure:"leader-url"`                                         // Admin API URL (was base-url)
+	LeaderURL                   string                            `yaml:"leader-url,omitempty" mapstructure:"leader-url"`                                         // Admin API URL
 	PersonalAccessTokenUsername string                            `yaml:"personal-access-token-username,omitempty" mapstructure:"personal-access-token-username"` // Username for PAT authentication (required with personal-access-token)
 	PersonalAccessToken         string                            `yaml:"personal-access-token,omitempty" mapstructure:"personal-access-token"`                   // Personal Access Token (long-lived)
 	Tenant                      string                            `yaml:"tenant,omitempty" mapstructure:"tenant"`                                                 // Default tenant for this profile
 	Project                     string                            `yaml:"project,omitempty" mapstructure:"project"`                                               // Default project for this profile
 	Context                     string                            `yaml:"context,omitempty" mapstructure:"context"`                                               // Default context for this profile
-	ClientID                    string                            `yaml:"client-id,omitempty" mapstructure:"client-id"`                                           // Client ID for feature/event API
-	ClientSecret                string                            `yaml:"client-secret,omitempty" mapstructure:"client-secret"`                                   // Client secret for feature/event API
 	ClientKeys                  map[string]TenantClientKeysConfig `yaml:"client-keys,omitempty" mapstructure:"client-keys"`                                       // Profile-specific hierarchical client keys
 	InsecureSkipVerify          bool                              `yaml:"insecure-skip-verify,omitempty" mapstructure:"insecure-skip-verify"`                     // Skip TLS certificate verification
 	DefaultWorker               string                            `yaml:"default-worker,omitempty" mapstructure:"default-worker"`                                 // Default worker name
@@ -431,8 +426,6 @@ var GlobalConfigKeys = map[string]bool{
 // These should be set via 'iz profiles set' or 'iz profiles add'
 var ProfileConfigKeys = map[string]bool{
 	ConfigKeyLeaderURL:                   true,
-	ConfigKeyClientID:                    true,
-	ConfigKeyClientSecret:                true,
 	ConfigKeyPersonalAccessTokenUsername: true,
 	ConfigKeyJwtToken:                    true,
 	ConfigKeyPersonalAccessToken:         true,
@@ -446,8 +439,6 @@ var ProfileConfigKeys = map[string]bool{
 // ValidConfigKeys defines all valid configuration keys (for reading/listing)
 var ValidConfigKeys = map[string]bool{
 	ConfigKeyLeaderURL:                   true,
-	ConfigKeyClientID:                    true,
-	ConfigKeyClientSecret:                true,
 	ConfigKeyPersonalAccessTokenUsername: true,
 	ConfigKeyJwtToken:                    true,
 	ConfigKeyPersonalAccessToken:         true,
@@ -465,7 +456,6 @@ var ValidConfigKeys = map[string]bool{
 
 // SensitiveKeys defines which keys contain sensitive information
 var SensitiveKeys = map[string]bool{
-	ConfigKeyClientSecret:        true,
 	ConfigKeyJwtToken:            true,
 	ConfigKeyPersonalAccessToken: true,
 	ConfigKeyClientKeys:          true, // Contains client secrets
@@ -761,11 +751,18 @@ func ValidateConfigFile() []ValidationError {
 // Returns empty strings if no credentials are found for the given tenant/projects.
 // Also returns the client base URL if configured at the tenant level.
 func (c *ResolvedConfig) ResolveClientCredentials(tenant string, projects []string) (clientID, clientSecret string) {
-	if c.ClientKeys == nil || tenant == "" {
+	return ResolveClientCredentialsFromKeys(c.ClientKeys, tenant, projects)
+}
+
+// ResolveClientCredentialsFromKeys looks up client credentials from an arbitrary ClientKeys map.
+// Same logic as ResolvedConfig.ResolveClientCredentials but operates on a standalone map.
+// Used to resolve worker-level keys before falling back to profile-level.
+func ResolveClientCredentialsFromKeys(clientKeys map[string]TenantClientKeysConfig, tenant string, projects []string) (clientID, clientSecret string) {
+	if clientKeys == nil || tenant == "" {
 		return "", ""
 	}
 
-	tenantConfig, ok := c.ClientKeys[tenant]
+	tenantConfig, ok := clientKeys[tenant]
 	if !ok {
 		return "", ""
 	}
@@ -774,7 +771,6 @@ func (c *ResolvedConfig) ResolveClientCredentials(tenant string, projects []stri
 	if len(projects) > 0 && tenantConfig.Projects != nil {
 		for _, project := range projects {
 			if projectConfig, exists := tenantConfig.Projects[project]; exists {
-				// Only use project credentials if both ID and secret are present
 				if projectConfig.ClientID != "" && projectConfig.ClientSecret != "" {
 					return projectConfig.ClientID, projectConfig.ClientSecret
 				}
@@ -845,11 +841,10 @@ func ResolveWorker(workerFlag string, workers map[string]*WorkerConfig, defaultW
 			}
 		} else {
 			return &ResolvedWorker{
-				URL:          worker.URL,
-				Name:         defaultWorker,
-				Source:       "default",
-				ClientID:     worker.ClientID,
-				ClientSecret: worker.ClientSecret,
+				URL:        worker.URL,
+				Name:       defaultWorker,
+				Source:     "default",
+				ClientKeys: worker.ClientKeys,
 			}, nil
 		}
 	}
@@ -874,11 +869,10 @@ func resolveNamedWorker(name, source string, workers map[string]*WorkerConfig) (
 	}
 
 	return &ResolvedWorker{
-		URL:          worker.URL,
-		Name:         name,
-		Source:       source,
-		ClientID:     worker.ClientID,
-		ClientSecret: worker.ClientSecret,
+		URL:        worker.URL,
+		Name:       name,
+		Source:     source,
+		ClientKeys: worker.ClientKeys,
 	}, nil
 }
 
@@ -1055,12 +1049,6 @@ func (c *ResolvedConfig) MergeWithProfile(profile *Profile) {
 	}
 	if profile.Context != "" && c.Context == "" {
 		c.Context = profile.Context
-	}
-	if profile.ClientID != "" && c.ClientID == "" {
-		c.ClientID = profile.ClientID
-	}
-	if profile.ClientSecret != "" && c.ClientSecret == "" {
-		c.ClientSecret = profile.ClientSecret
 	}
 	// InsecureSkipVerify: profile value takes precedence if not already set via flag
 	if profile.InsecureSkipVerify && !c.InsecureSkipVerify {
@@ -1247,12 +1235,6 @@ func AddProfile(name string, profile *Profile) error {
 	}
 	if profile.Context != "" {
 		profileMap["context"] = profile.Context
-	}
-	if profile.ClientID != "" {
-		profileMap["client-id"] = profile.ClientID
-	}
-	if profile.ClientSecret != "" {
-		profileMap["client-secret"] = profile.ClientSecret
 	}
 	if profile.ClientKeys != nil && len(profile.ClientKeys) > 0 {
 		profileMap["client-keys"] = profile.ClientKeys
@@ -1560,5 +1542,168 @@ func SetDefaultWorker(name string) error {
 	}
 
 	profile.DefaultWorker = name
+	return AddProfile(profileName, profile)
+}
+
+// AddWorkerClientKeys adds or updates client credentials on a named worker in the active profile.
+// If workerName is empty, uses the profile's default worker.
+func AddWorkerClientKeys(workerName, tenant string, projects []string, clientID, clientSecret string) error {
+	if tenant == "" {
+		return fmt.Errorf("tenant is required")
+	}
+	if clientID == "" || clientSecret == "" {
+		return fmt.Errorf("both client-id and client-secret are required")
+	}
+
+	profileName, err := GetActiveProfileName()
+	if err != nil {
+		return err
+	}
+	if profileName == "" {
+		return fmt.Errorf("no active profile. Use 'iz profiles use <name>' to select a profile first")
+	}
+
+	profile, err := GetProfile(profileName)
+	if err != nil {
+		return fmt.Errorf("failed to load active profile: %w", err)
+	}
+
+	// Resolve worker name
+	if workerName == "" {
+		workerName = profile.DefaultWorker
+	}
+	if workerName == "" {
+		return fmt.Errorf("no worker specified and no default-worker set. Use --worker <name> or set a default worker")
+	}
+
+	if profile.Workers == nil {
+		return fmt.Errorf(errors.MsgWorkerNotFound, workerName, profileName)
+	}
+	worker, exists := profile.Workers[workerName]
+	if !exists {
+		return fmt.Errorf(errors.MsgWorkerNotFound, workerName, profileName)
+	}
+
+	// Initialize ClientKeys map if nil
+	if worker.ClientKeys == nil {
+		worker.ClientKeys = make(map[string]TenantClientKeysConfig)
+	}
+
+	tenantConfig := worker.ClientKeys[tenant]
+
+	if len(projects) == 0 {
+		tenantConfig.ClientID = clientID
+		tenantConfig.ClientSecret = clientSecret
+	} else {
+		if tenantConfig.Projects == nil {
+			tenantConfig.Projects = make(map[string]ProjectClientKeysConfig)
+		}
+		for _, project := range projects {
+			tenantConfig.Projects[project] = ProjectClientKeysConfig{
+				ClientID:     clientID,
+				ClientSecret: clientSecret,
+			}
+		}
+	}
+
+	worker.ClientKeys[tenant] = tenantConfig
+	return AddProfile(profileName, profile)
+}
+
+// ListWorkerClientKeys returns the ClientKeys map for a named worker in the active profile.
+// If workerName is empty, uses the profile's default worker.
+func ListWorkerClientKeys(workerName string) (map[string]TenantClientKeysConfig, string, error) {
+	profileName, err := GetActiveProfileName()
+	if err != nil {
+		return nil, "", err
+	}
+	if profileName == "" {
+		return nil, "", fmt.Errorf("no active profile. Use 'iz profiles use <name>' first")
+	}
+
+	profile, err := GetProfile(profileName)
+	if err != nil {
+		return nil, "", err
+	}
+
+	if workerName == "" {
+		workerName = profile.DefaultWorker
+	}
+	if workerName == "" {
+		return nil, "", fmt.Errorf("no worker specified and no default-worker set. Use --worker <name> or set a default worker")
+	}
+
+	if profile.Workers == nil {
+		return nil, workerName, fmt.Errorf(errors.MsgWorkerNotFound, workerName, profileName)
+	}
+	worker, exists := profile.Workers[workerName]
+	if !exists {
+		return nil, workerName, fmt.Errorf(errors.MsgWorkerNotFound, workerName, profileName)
+	}
+
+	return worker.ClientKeys, workerName, nil
+}
+
+// DeleteWorkerClientKeys deletes client credentials from a named worker in the active profile.
+// If workerName is empty, uses the profile's default worker.
+func DeleteWorkerClientKeys(workerName, tenant, project string) error {
+	profileName, err := GetActiveProfileName()
+	if err != nil {
+		return err
+	}
+	if profileName == "" {
+		return fmt.Errorf("no active profile. Use 'iz profiles use <name>' first")
+	}
+
+	profile, err := GetProfile(profileName)
+	if err != nil {
+		return err
+	}
+
+	if workerName == "" {
+		workerName = profile.DefaultWorker
+	}
+	if workerName == "" {
+		return fmt.Errorf("no worker specified and no default-worker set. Use --worker <name> or set a default worker")
+	}
+
+	if profile.Workers == nil {
+		return fmt.Errorf(errors.MsgWorkerNotFound, workerName, profileName)
+	}
+	worker, exists := profile.Workers[workerName]
+	if !exists {
+		return fmt.Errorf(errors.MsgWorkerNotFound, workerName, profileName)
+	}
+
+	if worker.ClientKeys == nil {
+		return fmt.Errorf("no client keys configured for worker '%s'", workerName)
+	}
+
+	cfg, tenantExists := worker.ClientKeys[tenant]
+	if !tenantExists {
+		return fmt.Errorf("tenant '%s' not found in worker '%s'", tenant, workerName)
+	}
+
+	if project == "" {
+		cfg.ClientID = ""
+		cfg.ClientSecret = ""
+		worker.ClientKeys[tenant] = cfg
+	} else {
+		if cfg.Projects == nil {
+			return fmt.Errorf("project '%s' not found in tenant '%s' for worker '%s'", project, tenant, workerName)
+		}
+		if _, projExists := cfg.Projects[project]; !projExists {
+			return fmt.Errorf("project '%s' not found in tenant '%s' for worker '%s'", project, tenant, workerName)
+		}
+		delete(cfg.Projects, project)
+		worker.ClientKeys[tenant] = cfg
+	}
+
+	// Clean up: remove tenant entry if empty
+	cfg = worker.ClientKeys[tenant]
+	if cfg.ClientID == "" && len(cfg.Projects) == 0 {
+		delete(worker.ClientKeys, tenant)
+	}
+
 	return AddProfile(profileName, profile)
 }

@@ -30,9 +30,10 @@ Exit codes:
 
 		// Create a minimal client just for health check (no auth required)
 		tempCfg := &izanami.ResolvedConfig{
-			LeaderURL: cfg.LeaderURL,
-			Timeout:   cfg.Timeout,
-			Verbose:   cfg.Verbose,
+			LeaderURL:          cfg.LeaderURL,
+			Timeout:            cfg.Timeout,
+			Verbose:            cfg.Verbose,
+			InsecureSkipVerify: cfg.InsecureSkipVerify,
 		}
 
 		client, err := izanami.NewAdminClientNoAuth(tempCfg)

@@ -415,17 +415,22 @@ func TestResolveWorker_DefaultWorkerMissingFallsBack(t *testing.T) {
 func TestResolveWorker_PerWorkerCredentialsSet(t *testing.T) {
 	workers := map[string]*WorkerConfig{
 		"eu-west": {
-			URL:          "http://worker-eu.example.com",
-			ClientID:     "worker-id",
-			ClientSecret: "worker-secret",
+			URL: "http://worker-eu.example.com",
+			ClientKeys: map[string]TenantClientKeysConfig{
+				"my-tenant": {
+					ClientID:     "worker-id",
+					ClientSecret: "worker-secret",
+				},
+			},
 		},
 	}
 
 	resolved, err := ResolveWorker("", workers, "eu-west", func(format string, a ...interface{}) {})
 	require.NoError(t, err)
 
-	assert.Equal(t, "worker-id", resolved.ClientID)
-	assert.Equal(t, "worker-secret", resolved.ClientSecret)
+	require.Contains(t, resolved.ClientKeys, "my-tenant")
+	assert.Equal(t, "worker-id", resolved.ClientKeys["my-tenant"].ClientID)
+	assert.Equal(t, "worker-secret", resolved.ClientKeys["my-tenant"].ClientSecret)
 	assert.Equal(t, "http://worker-eu.example.com", resolved.URL)
 	assert.Equal(t, "default", resolved.Source)
 }

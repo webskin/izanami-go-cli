@@ -201,7 +201,11 @@ The missing value is resolved from the active session.`,
 			fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Sending POST request to %s/api/admin/login\n", loginBaseURL)
 		}
 
-		token, err := performLogin(loginBaseURL, username, password)
+		loginTimeout := timeout
+		if loginTimeout == 0 {
+			loginTimeout = 30
+		}
+		token, err := performLogin(loginBaseURL, username, password, insecureSkipVerify, verbose, loginTimeout)
 		if err != nil {
 			if verbose {
 				fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Login failed: %v\n", err)
@@ -275,10 +279,12 @@ func resolveLoginDefaults(cmd *cobra.Command) (resolvedURL, urlSource, resolvedU
 }
 
 // performLogin performs the actual login to Izanami
-func performLogin(baseURL, username, password string) (string, error) {
+func performLogin(baseURL, username, password string, insecure bool, verboseMode bool, timeoutSec int) (string, error) {
 	config := &izanami.ResolvedConfig{
-		LeaderURL: baseURL,
-		Timeout:   30,
+		LeaderURL:          baseURL,
+		Timeout:            timeoutSec,
+		Verbose:            verboseMode,
+		InsecureSkipVerify: insecure,
 	}
 
 	client, err := izanami.NewAdminClientNoAuth(config)

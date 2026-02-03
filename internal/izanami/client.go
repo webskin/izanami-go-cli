@@ -66,7 +66,7 @@ func NewAdminClientNoAuth(config *ResolvedConfig) (*AdminClient, error) {
 
 // copyConfig makes a defensive copy of the config to prevent external mutations
 func copyConfig(config *ResolvedConfig) *ResolvedConfig {
-	return &ResolvedConfig{
+	cp := &ResolvedConfig{
 		LeaderURL:                   config.LeaderURL,
 		ClientID:                    config.ClientID,
 		ClientSecret:                config.ClientSecret,
@@ -78,11 +78,21 @@ func copyConfig(config *ResolvedConfig) *ResolvedConfig {
 		Context:                     config.Context,
 		Timeout:                     config.Timeout,
 		Verbose:                     config.Verbose,
+		OutputFormat:                config.OutputFormat,
+		Color:                       config.Color,
+		Username:                    config.Username,
+		AuthMethod:                  config.AuthMethod,
 		InsecureSkipVerify:          config.InsecureSkipVerify,
 		WorkerURL:                   config.WorkerURL,
 		WorkerName:                  config.WorkerName,
-		WorkerSource:                config.WorkerSource,
 	}
+	if config.ClientKeys != nil {
+		cp.ClientKeys = make(map[string]TenantClientKeysConfig, len(config.ClientKeys))
+		for k, v := range config.ClientKeys {
+			cp.ClientKeys[k] = v
+		}
+	}
+	return cp
 }
 
 // newHTTPClient creates a configured resty HTTP client.
@@ -251,29 +261,7 @@ func logAdminRequest(resp *resty.Response, sensitiveHeaders map[string]bool, izC
 			"host":   req.Host,
 		})
 	} else {
-		fmt.Fprintf(os.Stderr, "==============================================================================\n")
-		fmt.Fprintf(os.Stderr, "~~~ REQUEST ~~~\n")
-		// Log full URL including query parameters
-		url := req.URL.Path
-		if req.URL.RawQuery != "" {
-			url += "?" + req.URL.RawQuery
-		}
-		fmt.Fprintf(os.Stderr, "%s  %s  %s\n", req.Method, url, req.Proto)
-		fmt.Fprintf(os.Stderr, "HOST   : %s\n", req.Host)
-		fmt.Fprintf(os.Stderr, "HEADERS:\n")
-		for key, values := range req.Header {
-			keyLower := strings.ToLower(key)
-			if sensitiveHeaders[keyLower] {
-				fmt.Fprintf(os.Stderr, "\t%s: [REDACTED]\n", key)
-			} else {
-				for _, value := range values {
-					fmt.Fprintf(os.Stderr, "\t%s: %s\n", key, value)
-				}
-			}
-		}
-		fmt.Fprintf(os.Stderr, "BODY   :\n")
-		logBody(os.Stderr, resp.Request.Body)
-		fmt.Fprintf(os.Stderr, "------------------------------------------------------------------------------\n")
+		logRequestToStderr(resp, sensitiveHeaders)
 	}
 }
 
@@ -290,31 +278,66 @@ func logAdminResponse(resp *resty.Response, sensitiveHeaders map[string]bool, iz
 		}
 		izClient.structuredLogger("info", "HTTP Response", fields)
 	} else {
-		fmt.Fprintf(os.Stderr, "~~~ RESPONSE ~~~\n")
-		fmt.Fprintf(os.Stderr, "STATUS       : %s\n", resp.Status())
-		fmt.Fprintf(os.Stderr, "PROTO        : %s\n", resp.Proto())
-		fmt.Fprintf(os.Stderr, "RECEIVED AT  : %v\n", time.Now().Format(time.RFC3339Nano))
-		fmt.Fprintf(os.Stderr, "TIME DURATION: %v\n", resp.Time())
-		fmt.Fprintf(os.Stderr, "HEADERS      :\n")
-		for key, values := range resp.Header() {
-			keyLower := strings.ToLower(key)
-			if sensitiveHeaders[keyLower] {
-				fmt.Fprintf(os.Stderr, "\t%s: [REDACTED]\n", key)
-			} else {
-				for _, value := range values {
-					fmt.Fprintf(os.Stderr, "\t%s: %s\n", key, value)
-				}
+		logResponseToStderr(resp, sensitiveHeaders)
+	}
+}
+
+// logRequestToStderr writes HTTP request details to stderr with sensitive header redaction.
+// Used by both AdminClient and FeatureCheckClient verbose logging.
+func logRequestToStderr(resp *resty.Response, sensitiveHeaders map[string]bool) {
+	req := resp.Request.RawRequest
+
+	fmt.Fprintf(os.Stderr, "==============================================================================\n")
+	fmt.Fprintf(os.Stderr, "~~~ REQUEST ~~~\n")
+	url := req.URL.Path
+	if req.URL.RawQuery != "" {
+		url += "?" + req.URL.RawQuery
+	}
+	fmt.Fprintf(os.Stderr, "%s  %s  %s\n", req.Method, url, req.Proto)
+	fmt.Fprintf(os.Stderr, "HOST   : %s\n", req.Host)
+	fmt.Fprintf(os.Stderr, "HEADERS:\n")
+	for key, values := range req.Header {
+		keyLower := strings.ToLower(key)
+		if sensitiveHeaders[keyLower] {
+			fmt.Fprintf(os.Stderr, "\t%s: [REDACTED]\n", key)
+		} else {
+			for _, value := range values {
+				fmt.Fprintf(os.Stderr, "\t%s: %s\n", key, value)
 			}
 		}
-		fmt.Fprintf(os.Stderr, "BODY         :\n")
-		if len(resp.Body()) > 0 {
-			body := string(resp.Body())
-			fmt.Fprintf(os.Stderr, "%s\n", truncateString(body, maxBodyLogLength))
-		} else {
-			fmt.Fprintf(os.Stderr, "***** NO CONTENT *****\n")
-		}
-		fmt.Fprintf(os.Stderr, "==============================================================================\n")
 	}
+	fmt.Fprintf(os.Stderr, "BODY   :\n")
+	logBody(os.Stderr, resp.Request.Body)
+	fmt.Fprintf(os.Stderr, "------------------------------------------------------------------------------\n")
+}
+
+// logResponseToStderr writes HTTP response details to stderr with sensitive header redaction.
+// Used by both AdminClient and FeatureCheckClient verbose logging.
+func logResponseToStderr(resp *resty.Response, sensitiveHeaders map[string]bool) {
+	fmt.Fprintf(os.Stderr, "~~~ RESPONSE ~~~\n")
+	fmt.Fprintf(os.Stderr, "STATUS       : %s\n", resp.Status())
+	fmt.Fprintf(os.Stderr, "PROTO        : %s\n", resp.Proto())
+	fmt.Fprintf(os.Stderr, "RECEIVED AT  : %v\n", time.Now().Format(time.RFC3339Nano))
+	fmt.Fprintf(os.Stderr, "TIME DURATION: %v\n", resp.Time())
+	fmt.Fprintf(os.Stderr, "HEADERS      :\n")
+	for key, values := range resp.Header() {
+		keyLower := strings.ToLower(key)
+		if sensitiveHeaders[keyLower] {
+			fmt.Fprintf(os.Stderr, "\t%s: [REDACTED]\n", key)
+		} else {
+			for _, value := range values {
+				fmt.Fprintf(os.Stderr, "\t%s: %s\n", key, value)
+			}
+		}
+	}
+	fmt.Fprintf(os.Stderr, "BODY         :\n")
+	if len(resp.Body()) > 0 {
+		body := string(resp.Body())
+		fmt.Fprintf(os.Stderr, "%s\n", truncateString(body, maxBodyLogLength))
+	} else {
+		fmt.Fprintf(os.Stderr, "***** NO CONTENT *****\n")
+	}
+	fmt.Fprintf(os.Stderr, "==============================================================================\n")
 }
 
 // sensitiveHeadersMap returns the map of sensitive headers that should be redacted

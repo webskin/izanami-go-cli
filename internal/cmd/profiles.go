@@ -6,12 +6,10 @@ import (
 	"io"
 	"sort"
 	"strings"
-	"syscall"
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
 	"github.com/webskin/izanami-go-cli/internal/izanami"
-	"golang.org/x/term"
 )
 
 // profileSettableKeys defines keys that can be set via 'iz profiles set'
@@ -24,8 +22,6 @@ var profileSettableKeys = map[string]string{
 	"session":                        "Session name to reference (clears leader-url)",
 	"personal-access-token":          "Personal access token",
 	"personal-access-token-username": "Username for PAT authentication",
-	"client-id":                      "Client ID for feature/event API",
-	"client-secret":                  "Client secret for feature/event API",
 	"default-worker":                 "Default worker name for feature checks",
 }
 
@@ -79,7 +75,7 @@ Example:
 
 		// Create table
 		table := tablewriter.NewWriter(cmd.OutOrStdout())
-		table.SetHeader([]string{"", "Name", "Session", "URL", "Tenant", "Project"})
+		table.SetHeader([]string{"", "Name", "Session", "URL", "Tenant", "Project", "Workers"})
 		table.SetBorder(false)
 		table.SetColumnSeparator("")
 		table.SetHeaderLine(false)
@@ -138,7 +134,25 @@ Example:
 				project = "-"
 			}
 
-			table.Append([]string{activeMarker, name, session, url, tenant, project})
+			workers := "-"
+			if len(profile.Workers) > 0 {
+				workerNames := make([]string, 0, len(profile.Workers))
+				for wn := range profile.Workers {
+					workerNames = append(workerNames, wn)
+				}
+				sort.Strings(workerNames)
+				if len(workerNames) > 1 && profile.DefaultWorker != "" {
+					for i, wn := range workerNames {
+						if wn == profile.DefaultWorker {
+							workerNames[i] = wn + " (default)"
+							break
+						}
+					}
+				}
+				workers = strings.Join(workerNames, ", ")
+			}
+
+			table.Append([]string{activeMarker, name, session, url, tenant, project, workers})
 		}
 
 		table.Render()
@@ -267,14 +281,18 @@ Examples:
   # With flags
   iz profiles add sandbox --url http://localhost:9000 --tenant dev-tenant
 
-  # Full non-interactive setup with client credentials
+  # Full non-interactive setup
   iz profiles add myprofile \
     --url http://localhost:9000 \
     --tenant test-tenant \
     --project test-project \
-    --context PROD \
-    --client-id my-client-id \
-    --client-secret my-secret
+    --context PROD
+
+  # Create and immediately activate
+  iz profiles add prod --url https://prod.example.com --active
+
+  # Then add client credentials for feature checks
+  iz profiles client-keys add --tenant test-tenant
 `,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -285,14 +303,13 @@ Examples:
 		tenant, _ := cmd.Flags().GetString("tenant")
 		project, _ := cmd.Flags().GetString("project")
 		context, _ := cmd.Flags().GetString("context")
-		clientID, _ := cmd.Flags().GetString("client-id")
-		clientSecret, _ := cmd.Flags().GetString("client-secret")
 		interactive, _ := cmd.Flags().GetBool("interactive")
+		active, _ := cmd.Flags().GetBool("active")
 
 		profile := &izanami.Profile{}
 
 		// Interactive prompts if --interactive or no flags provided
-		if interactive || (url == "" && tenant == "" && project == "" && context == "" && clientID == "" && clientSecret == "") {
+		if interactive || (url == "" && tenant == "" && project == "" && context == "") {
 			fmt.Fprintf(cmd.OutOrStdout(), "Creating profile '%s'\n\n", profileName)
 			reader := bufio.NewReader(cmd.InOrStdin())
 
@@ -315,23 +332,6 @@ Examples:
 			fmt.Fprint(cmd.OutOrStdout(), "Default context (optional): ")
 			context, _ = reader.ReadString('\n')
 			context = strings.TrimSpace(context)
-
-			// Client credentials
-			fmt.Fprint(cmd.OutOrStdout(), "\nConfigure client credentials for feature checks? (y/N): ")
-			addCreds, _ := reader.ReadString('\n')
-			if strings.ToLower(strings.TrimSpace(addCreds)) == "y" {
-				fmt.Fprint(cmd.OutOrStdout(), "Client ID: ")
-				clientID, _ = reader.ReadString('\n')
-				clientID = strings.TrimSpace(clientID)
-
-				fmt.Fprint(cmd.OutOrStdout(), "Client Secret: ")
-				secretBytes, err := term.ReadPassword(int(syscall.Stdin))
-				fmt.Fprintln(cmd.OutOrStdout())
-				if err != nil {
-					return fmt.Errorf("failed to read client secret: %w", err)
-				}
-				clientSecret = strings.TrimSpace(string(secretBytes))
-			}
 		}
 
 		// Validate: must have URL
@@ -344,33 +344,40 @@ Examples:
 		profile.Tenant = tenant
 		profile.Project = project
 		profile.Context = context
-		profile.ClientID = clientID
-		profile.ClientSecret = clientSecret
 
 		// Save profile
 		if err := izanami.AddProfile(profileName, profile); err != nil {
 			return fmt.Errorf("failed to add profile: %w", err)
 		}
 
+		// Activate if requested (and not already active from auto-activate)
+		if active {
+			currentActive, _ := izanami.GetActiveProfileName()
+			if currentActive != profileName {
+				if err := izanami.SetActiveProfile(profileName); err != nil {
+					return fmt.Errorf("profile created but failed to set as active: %w", err)
+				}
+			}
+		}
+
+		isActive := false
+		if currentActive, _ := izanami.GetActiveProfileName(); currentActive == profileName {
+			isActive = true
+		}
+
 		fmt.Fprintf(cmd.OutOrStdout(), "\n✓ Profile '%s' created successfully\n", profileName)
 
-		// Check if this is the first/only profile
-		profiles, _, err := izanami.ListProfiles()
-		if err == nil && len(profiles) == 1 {
-			fmt.Fprintln(cmd.OutOrStdout(), "✓ Set as active profile (first profile created)")
+		if isActive {
+			fmt.Fprintf(cmd.OutOrStdout(), "✓ Set as active profile\n")
+		} else {
+			fmt.Fprintf(cmd.OutOrStdout(), "\nSwitch to this profile with:\n")
+			fmt.Fprintf(cmd.OutOrStdout(), "  iz profiles use %s\n", profileName)
 		}
 
-		fmt.Fprintf(cmd.OutOrStdout(), "\nSwitch to this profile with:\n")
-		fmt.Fprintf(cmd.OutOrStdout(), "  iz profiles use %s\n", profileName)
+		fmt.Fprintf(cmd.OutOrStdout(), "\nTo add client credentials for feature checks:\n")
+		fmt.Fprintf(cmd.OutOrStdout(), "  iz profiles client-keys add --tenant <tenant>\n")
 		fmt.Fprintf(cmd.OutOrStdout(), "\nTo add workers for split deployments:\n")
 		fmt.Fprintf(cmd.OutOrStdout(), "  iz profiles workers add <name> --url <worker-url>\n")
-
-		if clientSecret != "" {
-			fmt.Fprintln(cmd.OutOrStdout(), "\n⚠️  SECURITY WARNING:")
-			fmt.Fprintln(cmd.OutOrStdout(), "   Credentials are stored in plaintext in the config file.")
-			fmt.Fprintln(cmd.OutOrStdout(), "   File permissions are set to 0600 (owner read/write only).")
-			fmt.Fprintln(cmd.OutOrStdout(), "   Never commit config.yaml to version control.")
-		}
 
 		return nil
 	},
@@ -500,11 +507,6 @@ var profileSetCmd = &cobra.Command{
 			isSensitive = true
 		case "personal-access-token-username":
 			profile.PersonalAccessTokenUsername = value
-		case "client-id":
-			profile.ClientID = value
-		case "client-secret":
-			profile.ClientSecret = value
-			isSensitive = true
 		}
 
 		// Save updated profile
@@ -547,8 +549,6 @@ Valid keys:
   session                        Session name reference
   personal-access-token          Personal access token
   personal-access-token-username Username for PAT authentication
-  client-id                      Client ID for feature/event API
-  client-secret                  Client secret for feature/event API
   default-worker                 Default worker name
 
 Examples:
@@ -602,10 +602,6 @@ Examples:
 			profile.PersonalAccessToken = ""
 		case "personal-access-token-username":
 			profile.PersonalAccessTokenUsername = ""
-		case "client-id":
-			profile.ClientID = ""
-		case "client-secret":
-			profile.ClientSecret = ""
 		}
 
 		// Save updated profile
@@ -660,336 +656,6 @@ Example:
 	},
 }
 
-// profileClientKeysCmd represents the profiles client-keys command
-var profileClientKeysCmd = &cobra.Command{
-	Use:   "client-keys",
-	Short: "Manage client API keys in active profile",
-	Long: `Manage client API keys (client-id/client-secret) for feature evaluation.
-
-Client keys are stored in the active profile and are environment-specific.
-Each profile (local, sandbox, build, prod) can have different client keys
-for different tenants and projects.
-
-Keys can be stored:
-  - At the tenant level (for all projects in that tenant)
-  - At the project level (for specific projects only)`,
-}
-
-// profileClientKeysAddCmd represents the profiles client-keys add command
-var profileClientKeysAddCmd = &cobra.Command{
-	Use:   "add",
-	Short: "Add client credentials to active profile",
-	Long: `Add client API credentials (client-id and client-secret) to the active profile.
-
-Credentials are stored in the active profile and are environment-specific.
-Different profiles (local, sandbox, build, prod) can have different credentials.
-
-Credentials can be stored:
-  - At the tenant level (for all projects in that tenant)
-  - At the project level (for specific projects only)
-
-The 'iz features check' command will automatically use these credentials with
-the following precedence:
-  1. --client-id/--client-secret flags (highest priority)
-  2. IZ_CLIENT_ID/IZ_CLIENT_SECRET environment variables
-  3. Stored credentials from active profile (this command)
-
-Note: If you use a separate server for client operations (features/events),
-configure named workers using:
-  - iz profiles workers add <name> --url <url>
-  - iz profiles workers use <name>
-  - Flag: --worker <name> (on features check / events watch commands)
-  - Environment variable: IZ_WORKER or IZ_WORKER_URL
-
-Examples:
-  # First, switch to the profile you want to configure
-  iz profiles use sandbox
-
-  # Add tenant-wide credentials to the active profile
-  iz profiles client-keys add --tenant my-tenant
-
-  # Add project-specific credentials to the active profile
-  iz profiles client-keys add --tenant my-tenant --projects proj1,proj2
-
-Security:
-  Credentials are stored in plaintext in ~/.config/iz/config.yaml
-  File permissions are automatically set to 0600 (owner read/write only)
-  Never commit config.yaml to version control`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		tenant, _ := cmd.Flags().GetString("tenant")
-		projects, _ := cmd.Flags().GetStringSlice("projects")
-
-		// Validate tenant is provided
-		if tenant == "" {
-			return fmt.Errorf("--tenant is required")
-		}
-
-		// Get active profile name
-		profileName, err := izanami.GetActiveProfileName()
-		if err != nil {
-			return err
-		}
-		if profileName == "" {
-			return fmt.Errorf("no active profile. Use 'iz profiles use <name>' to select a profile first")
-		}
-
-		fmt.Fprintf(cmd.OutOrStderr(), "Adding credentials to profile: %s\n\n", profileName)
-
-		reader := bufio.NewReader(cmd.InOrStdin())
-
-		// Prompt for client-id
-		fmt.Fprintf(cmd.OutOrStderr(), "Client ID: ")
-		var clientID string
-		line, err := reader.ReadString('\n')
-		if err != nil && line == "" {
-			return fmt.Errorf("failed to read client ID: %w", err)
-		}
-		clientID = strings.TrimSpace(line)
-		if clientID == "" {
-			return fmt.Errorf("client ID cannot be empty")
-		}
-
-		// Prompt for client-secret (hidden)
-		fmt.Fprintf(cmd.OutOrStderr(), "Client Secret: ")
-		secretBytes, err := term.ReadPassword(int(syscall.Stdin))
-		fmt.Fprintln(cmd.OutOrStderr()) // New line after password input
-		if err != nil {
-			return fmt.Errorf("failed to read client secret: %w", err)
-		}
-		clientSecret := strings.TrimSpace(string(secretBytes))
-		if clientSecret == "" {
-			return fmt.Errorf("client secret cannot be empty")
-		}
-
-		// Check if credentials already exist in the active profile and prompt for confirmation
-		profile, err := izanami.GetProfile(profileName)
-		if err == nil && profile.ClientKeys != nil {
-			if tenantConfig, exists := profile.ClientKeys[tenant]; exists {
-				if len(projects) == 0 {
-					// Check tenant-level credentials
-					if tenantConfig.ClientID != "" {
-						fmt.Fprintf(cmd.OutOrStderr(), "\n⚠️  Profile '%s' already has credentials for tenant '%s'.\n", profileName, tenant)
-						fmt.Fprintf(cmd.OutOrStderr(), "Overwrite existing credentials? (y/N): ")
-						line, _ = reader.ReadString('\n')
-						if strings.ToLower(strings.TrimSpace(line)) != "y" {
-							fmt.Fprintln(cmd.OutOrStderr(), "Aborted.")
-							return nil
-						}
-					}
-				} else {
-					// Check project-level credentials
-					if tenantConfig.Projects != nil {
-						for _, project := range projects {
-							if projConfig, projExists := tenantConfig.Projects[project]; projExists && projConfig.ClientID != "" {
-								fmt.Fprintf(cmd.OutOrStderr(), "\n⚠️  Profile '%s' already has credentials for '%s/%s'.\n", profileName, tenant, project)
-								fmt.Fprintf(cmd.OutOrStderr(), "Overwrite existing credentials? (y/N): ")
-								line, _ = reader.ReadString('\n')
-								if strings.ToLower(strings.TrimSpace(line)) != "y" {
-									fmt.Fprintln(cmd.OutOrStderr(), "Aborted.")
-									return nil
-								}
-								break
-							}
-						}
-					}
-				}
-			}
-		}
-
-		// Save credentials
-		if err := izanami.AddClientKeys(tenant, projects, clientID, clientSecret); err != nil {
-			return fmt.Errorf("failed to save credentials: %w", err)
-		}
-
-		// Success message
-		if len(projects) == 0 {
-			fmt.Fprintf(cmd.OutOrStderr(), "\n✓ Client credentials saved to profile '%s' for tenant '%s'\n", profileName, tenant)
-		} else {
-			fmt.Fprintf(cmd.OutOrStderr(), "\n✓ Client credentials saved to profile '%s' for tenant '%s', projects: %s\n", profileName, tenant, strings.Join(projects, ", "))
-		}
-
-		fmt.Fprintln(cmd.OutOrStderr(), "\n⚠️  SECURITY WARNING:")
-		fmt.Fprintln(cmd.OutOrStderr(), "   Credentials are stored in plaintext in the config file.")
-		fmt.Fprintln(cmd.OutOrStderr(), "   File permissions are set to 0600 (owner read/write only).")
-		fmt.Fprintln(cmd.OutOrStderr(), "   Never commit config.yaml to version control.")
-
-		fmt.Fprintf(cmd.OutOrStderr(), "\nYou can now use these credentials with:\n")
-		fmt.Fprintf(cmd.OutOrStderr(), "  iz features check --tenant %s <feature-id>\n", tenant)
-
-		return nil
-	},
-}
-
-// profileClientKeysListCmd represents the profiles client-keys list command
-var profileClientKeysListCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List client credentials in active profile",
-	Long: `List all client API credentials stored in the active profile.
-
-Shows credentials organized by tenant, with project-specific overrides indented.
-Credentials are redacted by default; use --show-secrets to display them.
-
-Example:
-  iz profiles client-keys list
-  iz profiles client-keys list --show-secrets`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		showSecrets, _ := cmd.Flags().GetBool("show-secrets")
-
-		// Get active profile
-		profileName, err := izanami.GetActiveProfileName()
-		if err != nil || profileName == "" {
-			return fmt.Errorf("no active profile. Use 'iz profiles use <name>' first")
-		}
-
-		profile, err := izanami.GetProfile(profileName)
-		if err != nil {
-			return err
-		}
-
-		if len(profile.ClientKeys) == 0 {
-			fmt.Fprintln(cmd.OutOrStdout(), "No client keys configured in profile '"+profileName+"'")
-			fmt.Fprintln(cmd.OutOrStdout(), "\nTo add client keys: iz profiles client-keys add --tenant <tenant>")
-			return nil
-		}
-
-		// Build table
-		table := tablewriter.NewWriter(cmd.OutOrStdout())
-		table.SetHeader([]string{"TENANT", "SCOPE", "CLIENT-ID", "CLIENT-SECRET"})
-		table.SetBorder(false)
-		table.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
-		table.SetAlignment(tablewriter.ALIGN_LEFT)
-		table.SetCenterSeparator("")
-		table.SetColumnSeparator("")
-		table.SetRowSeparator("")
-		table.SetHeaderLine(false)
-		table.SetTablePadding("\t")
-		table.SetNoWhiteSpace(true)
-
-		// Sort tenant names for consistent output
-		tenants := make([]string, 0, len(profile.ClientKeys))
-		for t := range profile.ClientKeys {
-			tenants = append(tenants, t)
-		}
-		sort.Strings(tenants)
-
-		for _, tenant := range tenants {
-			cfg := profile.ClientKeys[tenant]
-			secret := cfg.ClientSecret
-			if !showSecrets && secret != "" {
-				secret = izanami.RedactedValue
-			}
-
-			// Tenant-level row (if tenant has credentials at tenant level)
-			if cfg.ClientID != "" {
-				table.Append([]string{tenant, "(tenant)", cfg.ClientID, secret})
-			}
-
-			// Project-level rows
-			if cfg.Projects != nil {
-				projects := make([]string, 0, len(cfg.Projects))
-				for p := range cfg.Projects {
-					projects = append(projects, p)
-				}
-				sort.Strings(projects)
-
-				for _, proj := range projects {
-					pcfg := cfg.Projects[proj]
-					psecret := pcfg.ClientSecret
-					if !showSecrets && psecret != "" {
-						psecret = izanami.RedactedValue
-					}
-					table.Append([]string{tenant, proj, pcfg.ClientID, psecret})
-				}
-			}
-		}
-
-		table.Render()
-		return nil
-	},
-}
-
-// profileClientKeysDeleteCmd represents the profiles client-keys delete command
-var profileClientKeysDeleteCmd = &cobra.Command{
-	Use:   "delete <client-id>",
-	Short: "Delete client credentials from active profile",
-	Long: `Delete client credentials from the active profile.
-
-Requires --tenant to specify the tenant. Use --project to delete
-project-level credentials, otherwise deletes tenant-level credentials.
-
-Examples:
-  # Delete tenant-level credentials
-  iz profiles client-keys delete --tenant my-tenant my-client-id
-
-  # Delete project-level credentials
-  iz profiles client-keys delete --tenant my-tenant --project proj1 proj1-client-id`,
-	Args: cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		clientID := args[0]
-		tenant, _ := cmd.Flags().GetString("tenant")
-		project, _ := cmd.Flags().GetString("project")
-
-		// Get active profile
-		profileName, err := izanami.GetActiveProfileName()
-		if err != nil || profileName == "" {
-			return fmt.Errorf("no active profile. Use 'iz profiles use <name>' first")
-		}
-
-		profile, err := izanami.GetProfile(profileName)
-		if err != nil {
-			return err
-		}
-
-		// Check tenant exists
-		cfg, exists := profile.ClientKeys[tenant]
-		if !exists {
-			return fmt.Errorf("tenant '%s' not found in profile '%s'", tenant, profileName)
-		}
-
-		if project == "" {
-			// Delete tenant-level credentials
-			if cfg.ClientID != clientID {
-				return fmt.Errorf("client-id '%s' not found at tenant level for '%s'", clientID, tenant)
-			}
-			cfg.ClientID = ""
-			cfg.ClientSecret = ""
-			profile.ClientKeys[tenant] = cfg
-		} else {
-			// Delete project-level credentials
-			if cfg.Projects == nil {
-				return fmt.Errorf("project '%s' not found in tenant '%s'", project, tenant)
-			}
-			pcfg, exists := cfg.Projects[project]
-			if !exists {
-				return fmt.Errorf("project '%s' not found in tenant '%s'", project, tenant)
-			}
-			if pcfg.ClientID != clientID {
-				return fmt.Errorf("client-id '%s' not found for project '%s/%s'", clientID, tenant, project)
-			}
-			delete(cfg.Projects, project)
-			profile.ClientKeys[tenant] = cfg
-		}
-
-		// Clean up: remove tenant entry if empty
-		cfg = profile.ClientKeys[tenant]
-		if cfg.ClientID == "" && len(cfg.Projects) == 0 {
-			delete(profile.ClientKeys, tenant)
-		}
-
-		// Save profile
-		if err := izanami.AddProfile(profileName, profile); err != nil {
-			return fmt.Errorf("failed to save profile: %w", err)
-		}
-
-		if project == "" {
-			fmt.Fprintf(cmd.OutOrStdout(), "Deleted credentials for tenant '%s' (client-id: %s)\n", tenant, clientID)
-		} else {
-			fmt.Fprintf(cmd.OutOrStdout(), "Deleted credentials for project '%s/%s' (client-id: %s)\n", tenant, project, clientID)
-		}
-		return nil
-	},
-}
-
 func init() {
 	rootCmd.AddCommand(profileCmd)
 
@@ -1024,9 +690,8 @@ func init() {
 	profileAddCmd.Flags().String("tenant", "", "Default tenant")
 	profileAddCmd.Flags().String("project", "", "Default project")
 	profileAddCmd.Flags().String("context", "", "Default context")
-	profileAddCmd.Flags().String("client-id", "", "Client ID for feature/event API")
-	profileAddCmd.Flags().String("client-secret", "", "Client secret for feature/event API")
 	profileAddCmd.Flags().BoolP("interactive", "i", false, "Force interactive mode")
+	profileAddCmd.Flags().Bool("active", false, "Set as the active profile after creation")
 
 	// Flags for profile show
 	profileShowCmd.Flags().Bool("show-secrets", false, "Show sensitive values (client secrets)")
@@ -1034,6 +699,8 @@ func init() {
 	// Flags for client-keys add
 	profileClientKeysAddCmd.Flags().String("tenant", "", "Tenant name (required)")
 	profileClientKeysAddCmd.Flags().StringSlice("projects", []string{}, "Project names (comma-separated)")
+	profileClientKeysAddCmd.Flags().String("client-id", "", "Client ID (omit for interactive prompt)")
+	profileClientKeysAddCmd.Flags().String("client-secret", "", "Client secret (omit for interactive prompt)")
 	profileClientKeysAddCmd.MarkFlagRequired("tenant")
 
 	// Flags for client-keys list
@@ -1075,20 +742,25 @@ func printProfile(w io.Writer, profile *izanami.Profile, showSecrets bool) {
 	if profile.Context != "" {
 		fmt.Fprintf(w, "  Context:        %s\n", profile.Context)
 	}
-	if profile.ClientID != "" {
-		fmt.Fprintf(w, "  Client ID:      %s\n", profile.ClientID)
-	}
-	if profile.ClientSecret != "" {
-		if showSecrets {
-			fmt.Fprintf(w, "  Client Secret:  %s\n", profile.ClientSecret)
-		} else {
-			fmt.Fprintf(w, "  Client Secret:  <redacted>\n")
-		}
-	}
-	if profile.DefaultWorker != "" {
-		fmt.Fprintf(w, "  Default Worker: %s\n", profile.DefaultWorker)
+	if len(profile.ClientKeys) > 0 {
+		fmt.Fprintf(w, "  Client Keys:    %s\n", formatClientKeysCount(profile.ClientKeys))
 	}
 	if len(profile.Workers) > 0 {
-		fmt.Fprintf(w, "  Workers:        %d configured\n", len(profile.Workers))
+		workerNames := make([]string, 0, len(profile.Workers))
+		for wn := range profile.Workers {
+			workerNames = append(workerNames, wn)
+		}
+		sort.Strings(workerNames)
+		if len(workerNames) > 1 && profile.DefaultWorker != "" {
+			for i, wn := range workerNames {
+				if wn == profile.DefaultWorker {
+					workerNames[i] = wn + " (default)"
+					break
+				}
+			}
+		}
+		fmt.Fprintf(w, "  Workers:        %s\n", strings.Join(workerNames, ", "))
+	} else if profile.DefaultWorker != "" {
+		fmt.Fprintf(w, "  Default Worker: %s\n", profile.DefaultWorker)
 	}
 }

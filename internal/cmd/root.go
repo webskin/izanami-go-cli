@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strconv"
@@ -23,6 +24,7 @@ var (
 	contextPath        string
 	timeout            int
 	verbose            bool
+	quiet              bool
 	outputFormat       string
 	compactJSON        bool
 	insecureSkipVerify bool
@@ -64,6 +66,14 @@ Examples:
 
 For more information, visit: https://github.com/MAIF/izanami`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		// --quiet and --verbose are mutually exclusive
+		if quiet && verbose {
+			return fmt.Errorf("--quiet and --verbose are mutually exclusive")
+		}
+		if quiet {
+			cmd.SetOut(io.Discard)
+		}
+
 		// Skip config loading for commands that don't need it
 		skipCommands := []string{"completion", "version", "help", "login", "logout", "sessions", "config", "profiles", "reset"}
 		for _, skip := range skipCommands {
@@ -109,6 +119,18 @@ For more information, visit: https://github.com/MAIF/izanami`,
 			InsecureSkipVerify: insecureSkipVerify,
 		})
 
+		// Resolve worker from profile default / env vars (per-command --worker flag overrides in RunE)
+		workers, defaultWorker := resolveWorkerFromProfile(activeProfile)
+		rw, err := izanami.ResolveWorker("", workers, defaultWorker, func(format string, a ...interface{}) {
+			if cfg.Verbose {
+				fmt.Fprintf(cmd.OutOrStderr(), format, a...)
+			}
+		})
+		if err == nil {
+			cfg.WorkerURL = rw.URL
+			cfg.WorkerName = rw.Name
+		}
+
 		// Configure color output based on config setting
 		configureColorOutput(cfg.Color)
 
@@ -148,6 +170,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&contextPath, "context", "", "Default context path (env: IZ_CONTEXT)")
 	rootCmd.PersistentFlags().IntVar(&timeout, "timeout", 0, "Request timeout in seconds (default: 30)")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Verbose output")
+	rootCmd.PersistentFlags().BoolVarP(&quiet, "quiet", "q", false, "Suppress all output (exit code only)")
 	rootCmd.PersistentFlags().StringVarP(&outputFormat, "output", "o", "table", "Output format: json or table")
 	rootCmd.PersistentFlags().BoolVar(&compactJSON, "compact", false, "Output compact JSON (no pretty-printing)")
 	rootCmd.PersistentFlags().BoolVarP(&insecureSkipVerify, "insecure", "k", false, "Skip TLS certificate verification (insecure)")
@@ -193,6 +216,8 @@ var configFields = []configFieldInfo{
 	{key: "tenant", flagName: "tenant", envVar: "IZ_TENANT", getValue: func(c *izanami.ResolvedConfig) string { return c.Tenant }},
 	{key: "project", flagName: "project", envVar: "IZ_PROJECT", getValue: func(c *izanami.ResolvedConfig) string { return c.Project }},
 	{key: "context", flagName: "context", envVar: "IZ_CONTEXT", getValue: func(c *izanami.ResolvedConfig) string { return c.Context }},
+	{key: "worker-url", getValue: func(c *izanami.ResolvedConfig) string { return c.WorkerURL }},
+	{key: "worker-name", getValue: func(c *izanami.ResolvedConfig) string { return c.WorkerName }},
 	{key: "timeout", flagName: "timeout", getValue: func(c *izanami.ResolvedConfig) string { return strconv.Itoa(c.Timeout) }},
 	{key: "insecure", flagName: "insecure", getValue: func(c *izanami.ResolvedConfig) string { return strconv.FormatBool(c.InsecureSkipVerify) }},
 }
@@ -292,10 +317,6 @@ func getProfileFieldValue(profile *izanami.Profile, key string) string {
 		return profile.LeaderURL
 	case "default-worker":
 		return profile.DefaultWorker
-	case "client-id":
-		return profile.ClientID
-	case "client-secret":
-		return profile.ClientSecret
 	case "tenant":
 		return profile.Tenant
 	case "project":
@@ -355,6 +376,15 @@ func logAuthenticationMode(cmd *cobra.Command, cfg *izanami.ResolvedConfig) {
 	}
 
 	fmt.Fprintf(cmd.OutOrStderr(), "[verbose] Authentication - Admin operations: %s, Feature checks: %s\n", adminAuth, clientAuth)
+}
+
+// resolveWorkerFromProfile extracts workers and defaultWorker from the active profile.
+// Returns nil map and empty string if profile is nil.
+func resolveWorkerFromProfile(profile *izanami.Profile) (map[string]*izanami.WorkerConfig, string) {
+	if profile == nil {
+		return nil, ""
+	}
+	return profile.Workers, profile.DefaultWorker
 }
 
 // getValueWithEnvFallback returns the flag value if non-empty, otherwise falls back to the environment variable

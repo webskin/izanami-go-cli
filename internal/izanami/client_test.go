@@ -392,6 +392,64 @@ func TestAPIError_Error(t *testing.T) {
 	}
 }
 
+func Test_copyConfig_preserves_all_fields(t *testing.T) {
+	original := &ResolvedConfig{
+		Timeout:                     60,
+		Verbose:                     true,
+		OutputFormat:                "json",
+		Color:                       "always",
+		LeaderURL:                   "https://example.com",
+		ClientID:                    "cid",
+		ClientSecret:                "csecret",
+		Username:                    "admin",
+		PersonalAccessTokenUsername: "pat-user",
+		JwtToken:                    "jwt-abc",
+		PersonalAccessToken:         "pat-xyz",
+		Tenant:                      "t1",
+		Project:                     "p1",
+		Context:                     "/ctx",
+		AuthMethod:                  "password",
+		InsecureSkipVerify:          true,
+		WorkerURL:                   "https://worker.example.com",
+		WorkerName:                  "w1",
+		ClientKeys: map[string]TenantClientKeysConfig{
+			"t1": {
+				ClientID:     "ck-id",
+				ClientSecret: "ck-secret",
+			},
+		},
+	}
+
+	cp := copyConfig(original)
+
+	// Verify all scalar fields are copied
+	assert.Equal(t, original.Timeout, cp.Timeout)
+	assert.Equal(t, original.Verbose, cp.Verbose)
+	assert.Equal(t, original.OutputFormat, cp.OutputFormat)
+	assert.Equal(t, original.Color, cp.Color)
+	assert.Equal(t, original.LeaderURL, cp.LeaderURL)
+	assert.Equal(t, original.ClientID, cp.ClientID)
+	assert.Equal(t, original.ClientSecret, cp.ClientSecret)
+	assert.Equal(t, original.Username, cp.Username)
+	assert.Equal(t, original.PersonalAccessTokenUsername, cp.PersonalAccessTokenUsername)
+	assert.Equal(t, original.JwtToken, cp.JwtToken)
+	assert.Equal(t, original.PersonalAccessToken, cp.PersonalAccessToken)
+	assert.Equal(t, original.Tenant, cp.Tenant)
+	assert.Equal(t, original.Project, cp.Project)
+	assert.Equal(t, original.Context, cp.Context)
+	assert.Equal(t, original.AuthMethod, cp.AuthMethod)
+	assert.Equal(t, original.InsecureSkipVerify, cp.InsecureSkipVerify)
+	assert.Equal(t, original.WorkerURL, cp.WorkerURL)
+	assert.Equal(t, original.WorkerName, cp.WorkerName)
+
+	// Verify ClientKeys is a deep copy (not the same map reference)
+	assert.Equal(t, original.ClientKeys, cp.ClientKeys)
+	require.NotNil(t, cp.ClientKeys)
+	cp.ClientKeys["t1"] = TenantClientKeysConfig{ClientID: "mutated"}
+	assert.NotEqual(t, original.ClientKeys["t1"].ClientID, cp.ClientKeys["t1"].ClientID,
+		"modifying copy should not affect original")
+}
+
 func TestAPIError_Interface(t *testing.T) {
 	// Verify APIError implements error interface
 	var err error = &APIError{

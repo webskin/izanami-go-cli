@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"testing"
 
@@ -139,7 +140,7 @@ func TestLogEffectiveConfig_EmptyFieldsSkipped(t *testing.T) {
 	logEffectiveConfig(cmd, testCfg)
 
 	output := buf.String()
-	assert.NotContains(t, output, "leader-url=", "empty base-url should be skipped")
+	assert.NotContains(t, output, "leader-url=", "empty leader-url should be skipped")
 	assert.NotContains(t, output, "tenant=", "empty tenant should be skipped")
 	assert.NotContains(t, output, "project=", "empty project should be skipped")
 	assert.NotContains(t, output, "context=", "empty context should be skipped")
@@ -227,7 +228,7 @@ func TestLogEffectiveConfig_WithProfile(t *testing.T) {
 	logEffectiveConfig(cmd, testCfg)
 
 	output := buf.String()
-	assert.Contains(t, output, "leader-url=http://sandbox.example.com (source: profile)", "base-url should come from profile")
+	assert.Contains(t, output, "leader-url=http://sandbox.example.com (source: profile)", "leader-url should come from profile")
 	assert.Contains(t, output, "tenant=sandbox-tenant (source: profile)", "tenant should come from profile")
 }
 
@@ -278,9 +279,9 @@ func TestDetermineConfigSource_Session(t *testing.T) {
 
 	field := configFieldInfo{key: "leader-url", flagName: "url", envVar: "IZ_LEADER_URL"}
 
-	// Session URL used when profile has no base-url
+	// Session URL used when profile has no leader-url
 	source := determineConfigSource(cmd, field, nil, session)
-	assert.Equal(t, "session", source, "should return 'session' when session has URL and no profile base-url")
+	assert.Equal(t, "session", source, "should return 'session' when session has URL and no profile leader-url")
 }
 
 func TestDetermineConfigSource_SessionNotUsedWhenProfileHasURL(t *testing.T) {
@@ -296,7 +297,7 @@ func TestDetermineConfigSource_SessionNotUsedWhenProfileHasURL(t *testing.T) {
 	field := configFieldInfo{key: "leader-url", flagName: "url", envVar: "IZ_LEADER_URL"}
 
 	source := determineConfigSource(cmd, field, profile, session)
-	assert.Equal(t, "profile", source, "should return 'profile' when profile has base-url (not session)")
+	assert.Equal(t, "profile", source, "should return 'profile' when profile has leader-url (not session)")
 }
 
 func TestDetermineConfigSource_Profile(t *testing.T) {
@@ -400,8 +401,6 @@ func TestGetProfileFieldValue_AllFields(t *testing.T) {
 	profile := &izanami.Profile{
 		LeaderURL:          "http://example.com",
 		DefaultWorker:      "eu-west",
-		ClientID:           "cid",
-		ClientSecret:       "csecret",
 		Tenant:             "my-tenant",
 		Project:            "my-project",
 		Context:            "prod",
@@ -414,8 +413,6 @@ func TestGetProfileFieldValue_AllFields(t *testing.T) {
 	}{
 		{"leader-url", "http://example.com"},
 		{"default-worker", "eu-west"},
-		{"client-id", "cid"},
-		{"client-secret", "csecret"},
 		{"tenant", "my-tenant"},
 		{"project", "my-project"},
 		{"context", "prod"},
@@ -561,6 +558,108 @@ func TestLogAuthenticationMode_ClientKey(t *testing.T) {
 
 	output := buf.String()
 	assert.Contains(t, output, "Feature checks: Client API Key")
+}
+
+// ============================================================================
+// --quiet flag tests
+// ============================================================================
+
+func TestQuietFlag_SuppressesOutput(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	// Create config with no profiles so "add" is the first
+	createTestConfig(t, paths.configPath, nil, "")
+
+	// Save and restore package-level flag vars
+	origQuiet := quiet
+	origVerbose := verbose
+	defer func() {
+		quiet = origQuiet
+		verbose = origVerbose
+	}()
+
+	var buf bytes.Buffer
+	cmd, cleanup := setupProfileCommand(&buf, nil, []string{
+		"profiles", "add", "newprof",
+		"--url", "http://example.com",
+	})
+	defer cleanup()
+
+	// Set --quiet on rootCmd's persistent flags; since setupProfileCommand
+	// creates a wrapper that doesn't have the flag, we set the var directly
+	// and call the quiet logic the same way PersistentPreRunE does.
+	quiet = true
+	// Simulate what PersistentPreRunE does: redirect output to discard
+	profileCmd.SetOut(io.Discard)
+	profileAddCmd.SetOut(io.Discard)
+	cmd.SetOut(io.Discard)
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	// Output buffer should be empty because output was discarded
+	assert.Empty(t, buf.String(), "quiet mode should suppress all stdout output")
+
+	// Profile should still have been created
+	verifyProfileInConfig(t, paths.configPath, "newprof", &izanami.Profile{
+		LeaderURL: "http://example.com",
+	})
+}
+
+func TestQuietFlag_MutuallyExclusiveWithVerbose(t *testing.T) {
+	// Save and restore package-level flag vars
+	origQuiet := quiet
+	origVerbose := verbose
+	defer func() {
+		quiet = origQuiet
+		verbose = origVerbose
+	}()
+
+	// Set both flags to simulate --quiet --verbose
+	quiet = true
+	verbose = true
+
+	// Invoke PersistentPreRunE directly — it should reject the combination
+	cmd := &cobra.Command{Use: "test"}
+	err := rootCmd.PersistentPreRunE(cmd, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "mutually exclusive")
+}
+
+func TestQuietFlag_ErrorsStillReturned(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	createTestConfig(t, paths.configPath, nil, "")
+
+	// Save and restore package-level flag vars
+	origQuiet := quiet
+	origVerbose := verbose
+	defer func() {
+		quiet = origQuiet
+		verbose = origVerbose
+	}()
+
+	// profiles add without --url should error even with --quiet
+	quiet = true
+
+	var outBuf, errBuf bytes.Buffer
+	cmd, cleanup := setupProfileCommand(&outBuf, nil, []string{
+		"profiles", "add", "nope",
+	})
+	defer cleanup()
+
+	// Simulate quiet: discard stdout, but stderr is separate
+	profileCmd.SetOut(io.Discard)
+	profileAddCmd.SetOut(io.Discard)
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(&errBuf)
+	profileCmd.SetErr(&errBuf)
+
+	err := cmd.Execute()
+	require.Error(t, err, "errors should still propagate with --quiet")
+	assert.Empty(t, outBuf.String(), "quiet mode should suppress stdout output")
 }
 
 // splitEnv splits "KEY=VALUE" into key and value.

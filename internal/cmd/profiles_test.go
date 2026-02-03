@@ -51,6 +51,7 @@ func setupProfileCommand(buf *bytes.Buffer, input *bytes.Buffer, args []string) 
 		profileAddCmd.Flags().Set("tenant", "")
 		profileAddCmd.Flags().Set("project", "")
 		profileAddCmd.Flags().Set("context", "")
+		profileAddCmd.Flags().Set("active", "false")
 		profileAddCmd.Flags().Set("client-id", "")
 		profileAddCmd.Flags().Set("client-secret", "")
 		profileAddCmd.Flags().Set("leader-url", "")
@@ -99,12 +100,6 @@ func createTestConfig(t *testing.T, configPath string, profiles map[string]*izan
 			if profile.Context != "" {
 				profileMap["context"] = profile.Context
 			}
-			if profile.ClientID != "" {
-				profileMap["client-id"] = profile.ClientID
-			}
-			if profile.ClientSecret != "" {
-				profileMap["client-secret"] = profile.ClientSecret
-			}
 			if profile.PersonalAccessToken != "" {
 				profileMap["personal-access-token"] = profile.PersonalAccessToken
 			}
@@ -113,6 +108,12 @@ func createTestConfig(t *testing.T, configPath string, profiles map[string]*izan
 			}
 			if profile.ClientKeys != nil && len(profile.ClientKeys) > 0 {
 				profileMap["client-keys"] = profile.ClientKeys
+			}
+			if len(profile.Workers) > 0 {
+				profileMap["workers"] = profile.Workers
+			}
+			if profile.DefaultWorker != "" {
+				profileMap["default-worker"] = profile.DefaultWorker
 			}
 			profilesMap[name] = profileMap
 		}
@@ -277,6 +278,62 @@ func TestProfileListCmd_WithSessionURLResolution(t *testing.T) {
 	assert.Contains(t, output, "http://session-url.com")
 }
 
+// TestProfileListCmd_WithWorkers tests that worker names appear in the list
+func TestProfileListCmd_WithWorkers(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	profiles := map[string]*izanami.Profile{
+		"multi": {
+			LeaderURL:     "http://localhost:9000",
+			Tenant:        "dev",
+			DefaultWorker: "eu-west",
+			Workers: map[string]*izanami.WorkerConfig{
+				"eu-west": {URL: "http://eu-west.example.com"},
+				"ap-east": {URL: "http://ap-east.example.com"},
+			},
+		},
+		"multi-no-default": {
+			LeaderURL: "http://localhost:9003",
+			Workers: map[string]*izanami.WorkerConfig{
+				"eu-west": {URL: "http://eu-west.example.com"},
+				"ap-east": {URL: "http://ap-east.example.com"},
+			},
+		},
+		"single": {
+			LeaderURL: "http://localhost:9001",
+			Workers: map[string]*izanami.WorkerConfig{
+				"us-east": {URL: "http://us-east.example.com"},
+			},
+		},
+		"none": {
+			LeaderURL: "http://localhost:9002",
+		},
+	}
+	createTestConfig(t, paths.configPath, profiles, "multi")
+
+	var buf bytes.Buffer
+	cmd, cleanup := setupProfileCommand(&buf, nil, []string{"profiles", "list"})
+	defer cleanup()
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	output := buf.String()
+	// "multi" has two workers with a default; default is annotated
+	assert.Contains(t, output, "ap-east, eu-west (default)")
+	// "multi-no-default" has two workers without a default; no annotation
+	assert.Contains(t, output, "ap-east, eu-west ")
+	// Ensure no spurious "(default)" on the no-default profile line
+	// (count occurrences — only one "(default)" should appear)
+	assert.Equal(t, 1, strings.Count(output, "(default)"), "only one worker should be annotated as default")
+	// "single" has one worker — no "(default)" annotation even if default-worker were set
+	assert.Contains(t, output, "us-east")
+	assert.NotContains(t, output, "us-east (default)")
+	// Header should include Workers column
+	assert.Contains(t, output, "WORKERS")
+}
+
 // TestProfileCurrentCmd_NoActiveProfile tests showing current when none is active
 func TestProfileCurrentCmd_NoActiveProfile(t *testing.T) {
 	paths := setupTestPaths(t)
@@ -332,6 +389,35 @@ func TestProfileCurrentCmd_ActiveProfileExists(t *testing.T) {
 	assert.Contains(t, output, "dev")
 }
 
+// TestProfileCurrentCmd_WithWorkers tests that workers are listed with default annotation
+func TestProfileCurrentCmd_WithWorkers(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	profiles := map[string]*izanami.Profile{
+		"sandbox": {
+			LeaderURL:     "http://localhost:9000",
+			DefaultWorker: "eu-west",
+			Workers: map[string]*izanami.WorkerConfig{
+				"eu-west": {URL: "http://eu-west.example.com"},
+				"ap-east": {URL: "http://ap-east.example.com"},
+			},
+		},
+	}
+	createTestConfig(t, paths.configPath, profiles, "sandbox")
+
+	var buf bytes.Buffer
+	cmd, cleanup := setupProfileCommand(&buf, nil, []string{"profiles", "current"})
+	defer cleanup()
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	output := buf.String()
+	assert.Contains(t, output, "Workers:")
+	assert.Contains(t, output, "ap-east, eu-west (default)")
+}
+
 // TestProfileShowCmd_ProfileExists tests showing a specific profile
 func TestProfileShowCmd_ProfileExists(t *testing.T) {
 	paths := setupTestPaths(t)
@@ -339,10 +425,15 @@ func TestProfileShowCmd_ProfileExists(t *testing.T) {
 
 	profiles := map[string]*izanami.Profile{
 		"test": {
-			LeaderURL:    "http://localhost:9000",
-			Tenant:       "test-tenant",
-			Project:      "test-project",
-			ClientSecret: "secret123",
+			LeaderURL: "http://localhost:9000",
+			Tenant:    "test-tenant",
+			Project:   "test-project",
+			ClientKeys: map[string]izanami.TenantClientKeysConfig{
+				"test-tenant": {
+					ClientID:     "test-client-id",
+					ClientSecret: "secret123",
+				},
+			},
 		},
 	}
 	createTestConfig(t, paths.configPath, profiles, "test")
@@ -360,7 +451,7 @@ func TestProfileShowCmd_ProfileExists(t *testing.T) {
 	assert.Contains(t, output, "http://localhost:9000")
 	assert.Contains(t, output, "test-tenant")
 	assert.Contains(t, output, "test-project")
-	assert.Contains(t, output, "<redacted>")
+	assert.Contains(t, output, "1 tenant(s) configured")
 	assert.NotContains(t, output, "secret123")
 }
 
@@ -371,8 +462,14 @@ func TestProfileShowCmd_WithShowSecretsFlag(t *testing.T) {
 
 	profiles := map[string]*izanami.Profile{
 		"test": {
-			LeaderURL:    "http://localhost:9000",
-			ClientSecret: "secret123",
+			LeaderURL: "http://localhost:9000",
+			Tenant:    "test-tenant",
+			ClientKeys: map[string]izanami.TenantClientKeysConfig{
+				"test-tenant": {
+					ClientID:     "test-client-id",
+					ClientSecret: "secret123",
+				},
+			},
 		},
 	}
 	createTestConfig(t, paths.configPath, profiles, "test")
@@ -384,10 +481,9 @@ func TestProfileShowCmd_WithShowSecretsFlag(t *testing.T) {
 	err := cmd.Execute()
 	require.NoError(t, err)
 
-	// Verify secrets are shown
+	// printProfile now shows client-keys as a count summary (not individual secrets)
 	output := buf.String()
-	assert.Contains(t, output, "secret123")
-	assert.NotContains(t, output, "<redacted>")
+	assert.Contains(t, output, "1 tenant(s) configured")
 }
 
 // TestProfileShowCmd_ProfileNotFound tests showing non-existent profile
@@ -472,8 +568,6 @@ func TestProfileAddCmd_WithAllFlags(t *testing.T) {
 		"--tenant", "test-tenant",
 		"--project", "test-project",
 		"--context", "PROD",
-		"--client-id", "my-client",
-		"--client-secret", "my-secret",
 	})
 	defer cleanup()
 
@@ -481,12 +575,10 @@ func TestProfileAddCmd_WithAllFlags(t *testing.T) {
 	require.NoError(t, err)
 
 	verifyProfileInConfig(t, paths.configPath, "test", &izanami.Profile{
-		LeaderURL:    "http://localhost:9000",
-		Tenant:       "test-tenant",
-		Project:      "test-project",
-		Context:      "PROD",
-		ClientID:     "my-client",
-		ClientSecret: "my-secret",
+		LeaderURL: "http://localhost:9000",
+		Tenant:    "test-tenant",
+		Project:   "test-project",
+		Context:   "PROD",
 	})
 }
 
@@ -774,8 +866,6 @@ func TestProfileUnsetCmd_AllKeys(t *testing.T) {
 		"session",
 		"personal-access-token",
 		"personal-access-token-username",
-		"client-id",
-		"client-secret",
 	}
 
 	for _, key := range keys {
@@ -793,8 +883,12 @@ func TestProfileUnsetCmd_AllKeys(t *testing.T) {
 					Session:                     "session",
 					PersonalAccessToken:         "token",
 					PersonalAccessTokenUsername: "user",
-					ClientID:                    "client-id",
-					ClientSecret:                "client-secret",
+					ClientKeys: map[string]izanami.TenantClientKeysConfig{
+						"tenant": {
+							ClientID:     "client-id",
+							ClientSecret: "client-secret",
+						},
+					},
 				},
 			}
 			createTestConfig(t, paths.configPath, profiles, "test")
@@ -1432,4 +1526,98 @@ func TestProfileClientKeysDeleteCmd_ProjectClientIdMismatch(t *testing.T) {
 	err := cmd.Execute()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "client-id 'wrong-client-id' not found for project 'my-tenant/proj1'")
+}
+
+// TestProfileAddCmd_WithActiveFlag tests --active switches the active profile
+func TestProfileAddCmd_WithActiveFlag(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	profiles := map[string]*izanami.Profile{
+		"existing": {LeaderURL: "http://existing.example.com"},
+	}
+	createTestConfig(t, paths.configPath, profiles, "existing")
+
+	var buf bytes.Buffer
+	cmd, cleanup := setupProfileCommand(&buf, nil, []string{
+		"profiles", "add", "new",
+		"--url", "http://new.example.com",
+		"--active",
+	})
+	defer cleanup()
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	// Verify active profile was switched
+	data, err := os.ReadFile(paths.configPath)
+	require.NoError(t, err)
+	var config map[string]interface{}
+	yaml.Unmarshal(data, &config)
+	assert.Equal(t, "new", config["active_profile"])
+
+	output := buf.String()
+	assert.Contains(t, output, "Set as active profile")
+	assert.NotContains(t, output, "Switch to this profile")
+}
+
+// TestProfileAddCmd_ActiveFlagOnFirstProfile tests --active is harmless on first profile
+func TestProfileAddCmd_ActiveFlagOnFirstProfile(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	createTestConfig(t, paths.configPath, nil, "")
+
+	var buf bytes.Buffer
+	cmd, cleanup := setupProfileCommand(&buf, nil, []string{
+		"profiles", "add", "first",
+		"--url", "http://first.example.com",
+		"--active",
+	})
+	defer cleanup()
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	// Verify active profile was set (auto-activate + --active = same result)
+	data, err := os.ReadFile(paths.configPath)
+	require.NoError(t, err)
+	var config map[string]interface{}
+	yaml.Unmarshal(data, &config)
+	assert.Equal(t, "first", config["active_profile"])
+
+	output := buf.String()
+	assert.Contains(t, output, "Set as active profile")
+}
+
+// TestProfileAddCmd_WithoutActiveFlag_SecondProfile tests second profile without --active doesn't switch
+func TestProfileAddCmd_WithoutActiveFlag_SecondProfile(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	profiles := map[string]*izanami.Profile{
+		"existing": {LeaderURL: "http://existing.example.com"},
+	}
+	createTestConfig(t, paths.configPath, profiles, "existing")
+
+	var buf bytes.Buffer
+	cmd, cleanup := setupProfileCommand(&buf, nil, []string{
+		"profiles", "add", "second",
+		"--url", "http://second.example.com",
+	})
+	defer cleanup()
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	// Verify active profile was NOT changed
+	data, err := os.ReadFile(paths.configPath)
+	require.NoError(t, err)
+	var config map[string]interface{}
+	yaml.Unmarshal(data, &config)
+	assert.Equal(t, "existing", config["active_profile"])
+
+	output := buf.String()
+	assert.Contains(t, output, "Switch to this profile")
+	assert.NotContains(t, output, "Set as active profile")
 }

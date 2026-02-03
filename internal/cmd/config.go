@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
@@ -394,14 +395,6 @@ Use --show-secrets to display sensitive values.`,
 	},
 }
 
-// formatClientKeysCount returns a summary of configured client keys
-func formatClientKeysCount(keys map[string]izanami.TenantClientKeysConfig) string {
-	if len(keys) == 0 {
-		return ""
-	}
-	return fmt.Sprintf("%d tenant(s) configured", len(keys))
-}
-
 // configPathCmd represents the config path command
 var configPathCmd = &cobra.Command{
 	Use:   "path",
@@ -550,6 +543,15 @@ Note: This does not affect environment variables or command-line flags.`,
 			fmt.Fprintln(cmd.OutOrStdout(), "Cancelled")
 			return nil
 		}
+
+		// Backup before deleting
+		configPath := izanami.GetConfigPath()
+		timestamp := time.Now().Format("20060102_150405")
+		backupPath := fmt.Sprintf("%s.backup.%s", configPath, timestamp)
+		if err := backupFile(configPath, backupPath); err != nil {
+			return fmt.Errorf("failed to backup config file: %w", err)
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "✓ Config backed up to: %s\n", backupPath)
 
 		if err := izanami.ResetConfig(); err != nil {
 			return err

@@ -281,8 +281,8 @@ func createTestConfig(t *testing.T, configPath string, profiles map[string]*izan
         profilesMap := make(map[string]interface{})
         for name, profile := range profiles {
             profileMap := make(map[string]interface{})
-            if profile.BaseURL != "" {
-                profileMap["base-url"] = profile.BaseURL
+            if profile.LeaderURL != "" {
+                profileMap["leader-url"] = profile.LeaderURL
             }
             if profile.Tenant != "" {
                 profileMap["tenant"] = profile.Tenant
