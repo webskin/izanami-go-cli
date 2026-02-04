@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -495,8 +496,9 @@ func TestDetermineProfileName_PrefersActiveProfile(t *testing.T) {
 	}, "second")
 
 	var buf bytes.Buffer
-	name, created, updated := determineProfileName(&buf, &buf, "http://localhost:9000", "user")
+	name, created, updated, err := determineProfileName(&buf, &buf, "http://localhost:9000", "user", "")
 
+	require.NoError(t, err)
 	assert.Equal(t, "second", name)
 	assert.False(t, created)
 	assert.True(t, updated)
@@ -514,8 +516,9 @@ func TestDetermineProfileName_FallsBackToURLMatch(t *testing.T) {
 	}, "dev")
 
 	var buf bytes.Buffer
-	name, created, updated := determineProfileName(&buf, &buf, "https://prod.example.com", "user")
+	name, created, updated, err := determineProfileName(&buf, &buf, "https://prod.example.com", "user", "")
 
+	require.NoError(t, err)
 	assert.Equal(t, "prod", name)
 	assert.False(t, created)
 	assert.True(t, updated)
@@ -536,8 +539,9 @@ func TestDetermineProfileName_ActiveProfileViaSession(t *testing.T) {
 	}, "via-session")
 
 	var buf bytes.Buffer
-	name, created, updated := determineProfileName(&buf, &buf, "http://localhost:9000", "user")
+	name, created, updated, err := determineProfileName(&buf, &buf, "http://localhost:9000", "user", "")
 
+	require.NoError(t, err)
 	assert.Equal(t, "via-session", name)
 	assert.False(t, created)
 	assert.True(t, updated)
@@ -580,9 +584,9 @@ func TestSaveLoginSession_RefreshesExistingSessions(t *testing.T) {
 	assert.Equal(t, "unrelated", sessions.Sessions["other-session"].JwtToken)
 }
 
-// TestUpdateProfileWithSession_DoesNotOverrideActiveProfile verifies that
-// updateProfileWithSession does not change the active profile when one is already set.
-func TestUpdateProfileWithSession_DoesNotOverrideActiveProfile(t *testing.T) {
+// TestUpdateProfileWithSession_AlwaysSwitchesActive verifies that
+// updateProfileWithSession always switches the active profile to the logged-in one.
+func TestUpdateProfileWithSession_AlwaysSwitchesActive(t *testing.T) {
 	paths := setupTestPaths(t)
 	overridePathFunctions(t, paths)
 
@@ -594,12 +598,12 @@ func TestUpdateProfileWithSession_DoesNotOverrideActiveProfile(t *testing.T) {
 	err := updateProfileWithSession("other", "other-session")
 	require.NoError(t, err)
 
-	// Active profile should still be "active-one"
+	// Active profile should now be "other" (always switches)
 	data, err := os.ReadFile(paths.configPath)
 	require.NoError(t, err)
 	var config map[string]interface{}
 	require.NoError(t, yaml.Unmarshal(data, &config))
-	assert.Equal(t, "active-one", config["active_profile"])
+	assert.Equal(t, "other", config["active_profile"])
 
 	// "other" profile should have the session reference
 	profilesMap := config["profiles"].(map[string]interface{})
@@ -646,4 +650,117 @@ func TestUpdateProfileWithSession_NewProfileBecomesActive(t *testing.T) {
 	var config map[string]interface{}
 	require.NoError(t, yaml.Unmarshal(data, &config))
 	assert.Equal(t, "brand-new", config["active_profile"])
+}
+
+// TestDetermineProfileName_FlagProfile_Valid verifies that --profile selects an
+// existing profile whose URL matches the login URL.
+func TestDetermineProfileName_FlagProfile_Valid(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	createTestConfig(t, paths.configPath, map[string]*izanami.Profile{
+		"dev":  {LeaderURL: "http://localhost:9000"},
+		"prod": {LeaderURL: "https://prod.example.com"},
+	}, "dev")
+
+	var buf bytes.Buffer
+	name, created, updated, err := determineProfileName(&buf, &buf, "https://prod.example.com", "user", "prod")
+
+	require.NoError(t, err)
+	assert.Equal(t, "prod", name)
+	assert.False(t, created)
+	assert.True(t, updated)
+}
+
+// TestDetermineProfileName_FlagProfile_NotFound verifies that --profile with a
+// non-existent profile name returns an error wrapping the original config error.
+func TestDetermineProfileName_FlagProfile_NotFound(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	createTestConfig(t, paths.configPath, map[string]*izanami.Profile{
+		"dev": {LeaderURL: "http://localhost:9000"},
+	}, "dev")
+
+	var buf bytes.Buffer
+	_, _, _, err := determineProfileName(&buf, &buf, "http://localhost:9000", "user", "nonexistent")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot use profile 'nonexistent'")
+	assert.Contains(t, err.Error(), "not found")
+}
+
+// TestDetermineProfileName_FlagProfile_URLMismatch verifies that --profile errors
+// when the profile points to a different URL than the login URL.
+func TestDetermineProfileName_FlagProfile_URLMismatch(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	createTestConfig(t, paths.configPath, map[string]*izanami.Profile{
+		"dev":  {LeaderURL: "http://localhost:9000"},
+		"prod": {LeaderURL: "https://prod.example.com"},
+	}, "dev")
+
+	var buf bytes.Buffer
+	_, _, _, err := determineProfileName(&buf, &buf, "http://other.example.com", "user", "prod")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "points to")
+}
+
+// TestDetermineProfileName_FlagProfile_ViaSession verifies that --profile works
+// when the profile's URL comes from a session reference.
+func TestDetermineProfileName_FlagProfile_ViaSession(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	createTestSessions(t, paths.sessionsPath, map[string]*izanami.Session{
+		"my-session": {URL: "http://localhost:9000", Username: "user"},
+	})
+	createTestConfig(t, paths.configPath, map[string]*izanami.Profile{
+		"via-session": {Session: "my-session"},
+	}, "via-session")
+
+	var buf bytes.Buffer
+	name, created, updated, err := determineProfileName(&buf, &buf, "http://localhost:9000", "user", "via-session")
+
+	require.NoError(t, err)
+	assert.Equal(t, "via-session", name)
+	assert.False(t, created)
+	assert.True(t, updated)
+}
+
+// TestDetermineProfileName_FlagProfile_SessionNotFound verifies that --profile
+// errors when the profile references a session that doesn't exist.
+func TestDetermineProfileName_FlagProfile_SessionNotFound(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	createTestConfig(t, paths.configPath, map[string]*izanami.Profile{
+		"broken": {Session: "missing-session"},
+	}, "broken")
+
+	var buf bytes.Buffer
+	_, _, _, err := determineProfileName(&buf, &buf, "http://localhost:9000", "user", "broken")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "session")
+	assert.Contains(t, err.Error(), "missing-session")
+}
+
+// TestDetermineProfileName_FlagProfile_CorruptConfig verifies that --profile
+// wraps the original parse error when the config file is corrupt.
+func TestDetermineProfileName_FlagProfile_CorruptConfig(t *testing.T) {
+	paths := setupTestPaths(t)
+	overridePathFunctions(t, paths)
+
+	// Create the config directory and write corrupt YAML
+	require.NoError(t, os.MkdirAll(filepath.Dir(paths.configPath), 0o700))
+	require.NoError(t, os.WriteFile(paths.configPath, []byte(":\ninvalid"), 0o600))
+
+	var buf bytes.Buffer
+	_, _, _, err := determineProfileName(&buf, &buf, "http://localhost:9000", "user", "anything")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot use profile 'anything'")
 }
