@@ -119,16 +119,30 @@ For more information, visit: https://github.com/MAIF/izanami`,
 			InsecureSkipVerify: insecureSkipVerify,
 		})
 
-		// Resolve worker from profile default / env vars (per-command --worker flag overrides in RunE)
+		// Resolve worker: only read --worker flag for commands that use workers
+		// (annotated with "uses-worker": "true"). Config commands define their own
+		// --worker flag for config management, not runtime worker selection.
+		var workerFlag string
+		usesWorker := cmd.Annotations != nil && cmd.Annotations["uses-worker"] == "true"
+		if usesWorker {
+			workerFlag, _ = cmd.Flags().GetString("worker")
+		}
 		workers, defaultWorker := resolveWorkerFromProfile(activeProfile)
-		rw, err := izanami.ResolveWorker("", workers, defaultWorker, func(format string, a ...interface{}) {
+		rw, err := izanami.ResolveWorker(workerFlag, workers, defaultWorker, func(format string, a ...interface{}) {
 			if cfg.Verbose {
 				fmt.Fprintf(cmd.OutOrStderr(), format, a...)
 			}
 		})
-		if err == nil {
+		if err != nil {
+			// Only fail if --worker was explicitly set (preserves existing error behavior)
+			if usesWorker && workerFlag != "" {
+				return err
+			}
+		} else {
 			cfg.WorkerURL = rw.URL
 			cfg.WorkerName = rw.Name
+			cfg.WorkerSource = rw.Source
+			cfg.WorkerClientKeys = rw.ClientKeys
 		}
 
 		// Configure color output based on config setting
@@ -257,7 +271,7 @@ func logEffectiveConfig(cmd *cobra.Command, cfg *izanami.ResolvedConfig) {
 			continue
 		}
 
-		source := determineConfigSource(cmd, field, profile, session)
+		source := determineConfigSource(cmd, field, cfg, profile, session)
 
 		displayValue := value
 		if field.sensitive {
@@ -270,7 +284,12 @@ func logEffectiveConfig(cmd *cobra.Command, cfg *izanami.ResolvedConfig) {
 
 // determineConfigSource checks layers in priority order to determine where
 // the effective config value came from.
-func determineConfigSource(cmd *cobra.Command, field configFieldInfo, profile *izanami.Profile, session *izanami.Session) string {
+func determineConfigSource(cmd *cobra.Command, field configFieldInfo, cfg *izanami.ResolvedConfig, profile *izanami.Profile, session *izanami.Session) string {
+	// Worker fields use the source tracked by ResolveWorker
+	if field.key == "worker-url" || field.key == "worker-name" {
+		return workerSourceToConfigSource(cfg.WorkerSource)
+	}
+
 	// 1. Flag explicitly set?
 	if field.flagName != "" && cmd.Flags().Changed(field.flagName) {
 		return "flag"
@@ -308,6 +327,21 @@ func determineConfigSource(cmd *cobra.Command, field configFieldInfo, profile *i
 
 	// 6. Fallback
 	return "default"
+}
+
+// workerSourceToConfigSource maps ResolvedWorker.Source values to the
+// standard config source labels used in verbose output.
+func workerSourceToConfigSource(workerSource string) string {
+	switch workerSource {
+	case "flag":
+		return "flag"
+	case "env-name", "env-url":
+		return "env"
+	case "default":
+		return "profile"
+	default: // "standalone" or unknown
+		return "default"
+	}
 }
 
 // getProfileFieldValue returns the profile's raw value for a given config key.

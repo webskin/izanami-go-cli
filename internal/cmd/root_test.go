@@ -243,7 +243,7 @@ func TestDetermineConfigSource_Flag(t *testing.T) {
 
 	field := configFieldInfo{key: "leader-url", flagName: "url"}
 
-	source := determineConfigSource(cmd, field, nil, nil)
+	source := determineConfigSource(cmd, field, &izanami.ResolvedConfig{}, nil, nil)
 	assert.Equal(t, "flag", source, "should return 'flag' when flag is explicitly set")
 }
 
@@ -254,7 +254,7 @@ func TestDetermineConfigSource_EnvVar(t *testing.T) {
 
 	field := configFieldInfo{key: "leader-url", flagName: "url", envVar: "IZ_LEADER_URL"}
 
-	source := determineConfigSource(cmd, field, nil, nil)
+	source := determineConfigSource(cmd, field, &izanami.ResolvedConfig{}, nil, nil)
 	assert.Equal(t, "env", source, "should return 'env' when env var is set")
 }
 
@@ -266,7 +266,7 @@ func TestDetermineConfigSource_FlagOverridesEnv(t *testing.T) {
 
 	field := configFieldInfo{key: "leader-url", flagName: "url", envVar: "IZ_LEADER_URL"}
 
-	source := determineConfigSource(cmd, field, nil, nil)
+	source := determineConfigSource(cmd, field, &izanami.ResolvedConfig{}, nil, nil)
 	assert.Equal(t, "flag", source, "flag should take priority over env var")
 }
 
@@ -280,7 +280,7 @@ func TestDetermineConfigSource_Session(t *testing.T) {
 	field := configFieldInfo{key: "leader-url", flagName: "url", envVar: "IZ_LEADER_URL"}
 
 	// Session URL used when profile has no leader-url
-	source := determineConfigSource(cmd, field, nil, session)
+	source := determineConfigSource(cmd, field, &izanami.ResolvedConfig{}, nil, session)
 	assert.Equal(t, "session", source, "should return 'session' when session has URL and no profile leader-url")
 }
 
@@ -296,7 +296,7 @@ func TestDetermineConfigSource_SessionNotUsedWhenProfileHasURL(t *testing.T) {
 
 	field := configFieldInfo{key: "leader-url", flagName: "url", envVar: "IZ_LEADER_URL"}
 
-	source := determineConfigSource(cmd, field, profile, session)
+	source := determineConfigSource(cmd, field, &izanami.ResolvedConfig{}, profile, session)
 	assert.Equal(t, "profile", source, "should return 'profile' when profile has leader-url (not session)")
 }
 
@@ -309,7 +309,7 @@ func TestDetermineConfigSource_Profile(t *testing.T) {
 
 	field := configFieldInfo{key: "tenant", flagName: "tenant", envVar: "IZ_TENANT"}
 
-	source := determineConfigSource(cmd, field, profile, nil)
+	source := determineConfigSource(cmd, field, &izanami.ResolvedConfig{}, profile, nil)
 	assert.Equal(t, "profile", source, "should return 'profile' when profile has a value")
 }
 
@@ -324,7 +324,7 @@ func TestDetermineConfigSource_ProfileInsecureFalseNotReturned(t *testing.T) {
 
 	field := configFieldInfo{key: "insecure", flagName: "insecure"}
 
-	source := determineConfigSource(cmd, field, profile, nil)
+	source := determineConfigSource(cmd, field, &izanami.ResolvedConfig{}, profile, nil)
 	assert.NotEqual(t, "profile", source, "insecure=false should not be attributed to profile")
 }
 
@@ -340,7 +340,7 @@ func TestDetermineConfigSource_GlobalConfigKey_FileSource(t *testing.T) {
 
 	field := configFieldInfo{key: "timeout", flagName: "timeout"}
 
-	source := determineConfigSource(cmd, field, nil, nil)
+	source := determineConfigSource(cmd, field, &izanami.ResolvedConfig{}, nil, nil)
 	assert.Equal(t, "file", source, "should return 'file' when timeout is set in config.yaml")
 }
 
@@ -356,7 +356,7 @@ func TestDetermineConfigSource_GlobalConfigKey_DefaultSource(t *testing.T) {
 
 	field := configFieldInfo{key: "timeout", flagName: "timeout"}
 
-	source := determineConfigSource(cmd, field, nil, nil)
+	source := determineConfigSource(cmd, field, &izanami.ResolvedConfig{}, nil, nil)
 	assert.Equal(t, "default", source, "should return 'default' when timeout uses viper default")
 }
 
@@ -378,7 +378,7 @@ func TestDetermineConfigSource_GlobalConfigKey_EnvSource(t *testing.T) {
 	// fire. The GetConfigValue fallback (step 5) should detect the env var.
 	field := configFieldInfo{key: "timeout", flagName: "timeout"}
 
-	source := determineConfigSource(cmd, field, nil, nil)
+	source := determineConfigSource(cmd, field, &izanami.ResolvedConfig{}, nil, nil)
 	assert.Equal(t, "env", source, "should return 'env' when IZ_timeout env var is set via GetConfigValue fallback")
 }
 
@@ -389,7 +389,7 @@ func TestDetermineConfigSource_FallbackDefault(t *testing.T) {
 	// should fall through to "default".
 	field := configFieldInfo{key: "leader-url", envVar: "IZ_CLIENT_BASE_URL"}
 
-	source := determineConfigSource(cmd, field, nil, nil)
+	source := determineConfigSource(cmd, field, &izanami.ResolvedConfig{}, nil, nil)
 	assert.Equal(t, "default", source, "non-global key with no other source should return 'default'")
 }
 

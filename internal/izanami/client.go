@@ -85,11 +85,18 @@ func copyConfig(config *ResolvedConfig) *ResolvedConfig {
 		InsecureSkipVerify:          config.InsecureSkipVerify,
 		WorkerURL:                   config.WorkerURL,
 		WorkerName:                  config.WorkerName,
+		WorkerSource:                config.WorkerSource,
 	}
 	if config.ClientKeys != nil {
 		cp.ClientKeys = make(map[string]TenantClientKeysConfig, len(config.ClientKeys))
 		for k, v := range config.ClientKeys {
 			cp.ClientKeys[k] = v
+		}
+	}
+	if config.WorkerClientKeys != nil {
+		cp.WorkerClientKeys = make(map[string]TenantClientKeysConfig, len(config.WorkerClientKeys))
+		for k, v := range config.WorkerClientKeys {
+			cp.WorkerClientKeys[k] = v
 		}
 	}
 	return cp

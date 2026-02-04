@@ -80,7 +80,8 @@ Examples:
 
   # Check script feature with payload
   iz features check e878a149-df86-4f28-b1db-059580304e1e --data '{"age": 25}'`,
-	Args: cobra.ExactArgs(1),
+	Args:        cobra.ExactArgs(1),
+	Annotations: map[string]string{"uses-worker": "true"},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Build projects list for credential resolution (uses global --project flag)
 		var projects []string
@@ -88,22 +89,7 @@ Examples:
 			projects = append(projects, cfg.Project)
 		}
 
-		// Re-resolve worker only if per-command --worker flag was explicitly set
-		var workerClientKeys map[string]izanami.TenantClientKeysConfig
-		if checkWorker != "" {
-			workers, defaultWorker := resolveWorkerFromProfile(activeProfile)
-			rw, err := izanami.ResolveWorker(checkWorker, workers, defaultWorker, func(format string, a ...interface{}) {
-				fmt.Fprintf(cmd.OutOrStderr(), format, a...)
-			})
-			if err != nil {
-				return err
-			}
-			cfg.WorkerURL = rw.URL
-			cfg.WorkerName = rw.Name
-			workerClientKeys = rw.ClientKeys
-		}
-
-		resolveClientCredentials(cmd, cfg, checkClientID, checkClientSecret, workerClientKeys, projects)
+		resolveClientCredentials(cmd, cfg, checkClientID, checkClientSecret, projects)
 
 		ctx := context.Background()
 		featureIDOrName := args[0]
@@ -274,6 +260,7 @@ Examples:
 
   # Check script features with payload
   iz features check-bulk --features feat1-uuid --data '{"age": 25}'`,
+	Annotations: map[string]string{"uses-worker": "true"},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Build projects list for credential resolution
 		var projects []string
@@ -284,22 +271,7 @@ Examples:
 			projects = append(projects, cfg.Project)
 		}
 
-		// Re-resolve worker only if per-command --worker flag was explicitly set
-		var workerClientKeys map[string]izanami.TenantClientKeysConfig
-		if checkWorker != "" {
-			workers, defaultWorker := resolveWorkerFromProfile(activeProfile)
-			rw, err := izanami.ResolveWorker(checkWorker, workers, defaultWorker, func(format string, a ...interface{}) {
-				fmt.Fprintf(cmd.OutOrStderr(), format, a...)
-			})
-			if err != nil {
-				return err
-			}
-			cfg.WorkerURL = rw.URL
-			cfg.WorkerName = rw.Name
-			workerClientKeys = rw.ClientKeys
-		}
-
-		resolveClientCredentials(cmd, cfg, checkClientID, checkClientSecret, workerClientKeys, projects)
+		resolveClientCredentials(cmd, cfg, checkClientID, checkClientSecret, projects)
 
 		// Validate that at least one filter is provided
 		if len(checkFeatures) == 0 && len(checkProjects) == 0 {
@@ -599,7 +571,7 @@ func resolveTagNames(ctx context.Context, client *izanami.AdminClient, tenant st
 // 2. Environment variables (IZ_CLIENT_ID/IZ_CLIENT_SECRET) - already in cfg via MergeWithFlags
 // 3. Worker's ClientKeys hierarchy (tenant/project lookup)
 // 4. Profile's ClientKeys hierarchy (tenant/project lookup via cfg.ResolveClientCredentials)
-func resolveClientCredentials(cmd *cobra.Command, cfg *izanami.ResolvedConfig, flagClientID, flagClientSecret string, workerClientKeys map[string]izanami.TenantClientKeysConfig, projects []string) {
+func resolveClientCredentials(cmd *cobra.Command, cfg *izanami.ResolvedConfig, flagClientID, flagClientSecret string, projects []string) {
 	// Priority 1: command-specific flags
 	if flagClientID != "" {
 		cfg.ClientID = flagClientID
@@ -617,8 +589,8 @@ func resolveClientCredentials(cmd *cobra.Command, cfg *izanami.ResolvedConfig, f
 	tenant := cfg.Tenant
 
 	// Priority 3: worker's ClientKeys
-	if workerClientKeys != nil {
-		clientID, clientSecret := izanami.ResolveClientCredentialsFromKeys(workerClientKeys, tenant, projects)
+	if cfg.WorkerClientKeys != nil {
+		clientID, clientSecret := izanami.ResolveClientCredentialsFromKeys(cfg.WorkerClientKeys, tenant, projects)
 		if clientID != "" && clientSecret != "" {
 			cfg.ClientID = clientID
 			cfg.ClientSecret = clientSecret

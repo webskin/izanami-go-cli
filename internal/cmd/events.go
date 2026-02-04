@@ -88,7 +88,7 @@ Examples:
 var eventsWatchCmd = &cobra.Command{
 	Use:         "watch",
 	Short:       "Watch for events in real-time",
-	Annotations: map[string]string{"route": "GET /api/v2/events"},
+	Annotations: map[string]string{"route": "GET /api/v2/events", "uses-worker": "true"},
 	Long: `Opens a persistent Server-Sent Events (SSE) connection to Izanami
 and displays events as they occur.
 
@@ -101,21 +101,7 @@ Press Ctrl+C to stop watching.`,
 			projects = append(projects, cfg.Project)
 		}
 
-		// Re-resolve worker only if per-command --worker flag was explicitly set
-		var workerClientKeys map[string]izanami.TenantClientKeysConfig
-		if eventsWorker != "" {
-			workers, defaultWorker := resolveWorkerFromProfile(activeProfile)
-			rw, err := izanami.ResolveWorker(eventsWorker, workers, defaultWorker, func(format string, a ...interface{}) {
-				fmt.Fprintf(cmd.OutOrStderr(), format, a...)
-			})
-			if err != nil {
-				return err
-			}
-			cfg.WorkerURL = rw.URL
-			cfg.WorkerName = rw.Name
-			workerClientKeys = rw.ClientKeys
-		}
-		resolveClientCredentials(cmd, cfg, eventsClientID, eventsClientSecret, workerClientKeys, projects)
+		resolveClientCredentials(cmd, cfg, eventsClientID, eventsClientSecret, projects)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
