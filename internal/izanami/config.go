@@ -81,8 +81,8 @@ type ResolvedConfig struct {
 	InsecureSkipVerify          bool
 
 	// Worker resolution (set by cmd layer after ResolveWorker)
-	WorkerURL    string
-	WorkerName   string
+	WorkerURL        string
+	WorkerName       string
 	WorkerSource     string // source from ResolveWorker: "flag", "env-name", "env-url", "default", "standalone"
 	WorkerClientKeys map[string]TenantClientKeysConfig
 }
